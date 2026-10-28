@@ -103,7 +103,9 @@ model Consent {
 
 enum Audience {
   CHILD
-  ADULT   // задел на книги для взрослых — без переделки схемы
+  TEEN
+  ADULT
+  PET
 }
 
 model Occasion {
@@ -126,6 +128,11 @@ model Story {
   tagline       String
   description   String
   audience      Audience  @default(CHILD)
+  segments      String[]  @default([]) // id сегментов из src/content/profiles.ts
+  textStyle     String?   // голос книги, id из TEXT_STYLE_IDS
+  artStyles     String[]  @default([]) // рекомендуемые стили картинок, лучший первый
+  heroKind      String    @default("child") // child | teen | adult | pet
+  occasions     String[]  @default([]) // ключи поводов из OCCASIONS, главный первый
   ageMin        Int
   ageMax        Int
   gender        String?   // null — для всех
@@ -266,7 +273,8 @@ model Book {
   draftId     String?    @db.Uuid
   storyId     String     @db.Uuid
   story       Story      @relation(fields: [storyId], references: [id])
-  styleKey    String
+  styleKey    String     // стиль картинок (ART_STYLE_IDS)
+  mood        String?    // настроение картинок (MOODS), null — по умолчанию
   dedication  String?
   params      Json       // снимок анкеты на момент генерации
   anonId      String?
