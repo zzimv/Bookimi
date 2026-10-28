@@ -190,7 +190,7 @@ export const TEXT_STYLE_IDS: { id: string; title: string; oneLine: string; audie
 ];
 
 // ---------------------------------------------------------------------------
-// Стили иллюстраций (для Qwen). Ключи первых пяти совпадают со STYLE_PROMPTS в src/lib/gen/image.ts.
+// Стили иллюстраций (для Qwen). Промпты — в src/content/art/*.ts (ключи первых пяти — исторические, не менять).
 // ---------------------------------------------------------------------------
 
 export const ART_STYLE_IDS: { id: string; title: string; oneLine: string; audiences: AudienceKey[] }[] = [

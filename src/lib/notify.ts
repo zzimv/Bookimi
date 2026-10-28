@@ -4,6 +4,7 @@
 import { db } from "./db";
 import { decrypt, signToken } from "./crypto";
 import { cfg } from "./settings";
+import { declineName } from "./declension";
 
 const site = () => `https://${process.env.DOMAIN ?? "bookimi.ru"}`;
 
@@ -77,6 +78,7 @@ export type Template =
   | "track"
   | "refund"
   | "referral_bonus"
+  | "thanks_delivered"
   | "marketing";
 
 const STATUS_RU: Record<string, string> = {
@@ -89,44 +91,103 @@ const STATUS_RU: Record<string, string> = {
   REFUNDED: "возвращён",
 };
 
-function render(t: Template, d: Record<string, string | number | undefined>) {
+const SERVICE_RU: Record<string, string> = {
+  pickup: "самовывоз",
+  cdek_pvz: "СДЭК",
+  cdek_courier: "СДЭК, курьер",
+  pochta: "Почта России",
+  yandex: "Яндекс Доставка",
+};
+
+type Data = Record<string, string | number | undefined>;
+const about = (d: Data) => (d.heroAcc ? ` про ${d.heroAcc}` : "");
+const orderLink = (d: Data) => `${site()}/zakaz/${d.orderId}`;
+
+/**
+ * Тексты сообщений. Тон: тепло и просто, без восклицательного спама. Благодарим на каждом шаге пути заказа:
+ * оформлен → оплачен → книга готова → в типографии → в пути → получена (+3 дня — спасибо, отзыв, подарок).
+ */
+export function renderTemplate(t: Template, d: Data): { s: string; b: string } {
   switch (t) {
     case "preview_ready":
       return { s: "Превью вашей книги готово", b: `Обложка и первые развороты книги «${d.title}» готовы. Посмотреть: ${site()}/kniga/${d.bookId}` };
     case "book_ready":
-      return { s: "Ваша книга готова", b: `Полная книга «${d.title}» готова: PDF, читалка${d.audio ? " и аудио" : ""} — в личном кабинете: ${site()}/kabinet` };
+      return {
+        s: `Книга «${d.title}» готова`,
+        b: `Книга готова: PDF, читалка${d.audio ? " и аудио" : ""} уже ждут в личном кабинете: ${site()}/kabinet\n\nНадеемся, чтение вслух получится тёплым. Спасибо, что вы с нами.`,
+      };
     case "order_created":
-      return { s: `Заказ ${d.code} оформлен`, b: `Сумма: ${d.total} ₽. Оплатить: ${site()}/zakaz/${d.orderId}` };
+      return { s: `Заказ ${d.code} оформлен`, b: `Спасибо, что выбрали БУКИМИ. Сумма к оплате — ${d.total} ₽. Оплатить и следить за заказом: ${orderLink(d)}` };
     case "payment_received":
-      return { s: `Оплата заказа ${d.code} получена`, b: `Спасибо! Заказ ${d.code} оплачен. Следить за ним: ${site()}/zakaz/${d.orderId}` };
+      return {
+        s: `Спасибо! Заказ ${d.code} оплачен`,
+        b:
+          `Спасибо, что выбрали нас. Мы уже рисуем книгу${about(d)} — обычно это меньше часа. ` +
+          (d.whoPrints === "bookimi" ? "Потом проверим макет, передадим его в типографию и пришлём трек-номер. " : "Как только она будет готова, пришлём ссылку. ") +
+          `Следить за заказом: ${orderLink(d)}`,
+      };
     case "transfer_waiting":
-      return { s: `Проверяем перевод по заказу ${d.code}`, b: `Мы получили отметку об оплате. Подтверждение обычно занимает до 2 часов в рабочее время.` };
+      return { s: `Спасибо! Проверяем перевод по заказу ${d.code}`, b: `Мы получили отметку об оплате. Подтверждение обычно занимает до 2 часов в рабочее время — сразу после него начнём рисовать.` };
     case "receipt":
       return { s: `Чек по заказу ${d.code}`, b: `Чек сформирован в «Мой налог»: ${d.url}` };
     case "status":
-      return { s: `Заказ ${d.code}: ${STATUS_RU[String(d.status)] ?? d.status}`, b: `Статус заказа ${d.code}: ${STATUS_RU[String(d.status)] ?? d.status}. ${site()}/zakaz/${d.orderId}` };
+      switch (String(d.status)) {
+        case "IN_PRINT":
+          return { s: `Книга у типографии — заказ ${d.code}`, b: `Передали книгу в типографию — печатаем бережно.${d.ready ? ` Будет готова к ${d.ready}.` : ""} Следить за заказом: ${orderLink(d)}` };
+        case "PACKED":
+          return { s: `Заказ ${d.code} напечатан`, b: `Книга напечатана и упакована — скоро передадим её в доставку. ${orderLink(d)}` };
+        case "SHIPPED":
+          return { s: `Заказ ${d.code} едет к вам`, b: `Передали книгу в доставку. Трек-номер пришлём, как только он появится.${d.eta ? ` Ориентировочно — ${d.eta}.` : ""} ${orderLink(d)}` };
+        case "DELIVERED":
+          return {
+            s: `Книга у вас — спасибо`,
+            b: `Заказ ${d.code} доставлен. Надеемся, книга подарила улыбку. Если с печатью что-то не так — напишите нам, перепечатаем: ${site()}/kabinet/podderzhka`,
+          };
+        default:
+          return { s: `Заказ ${d.code}: ${STATUS_RU[String(d.status)] ?? d.status}`, b: `Статус заказа ${d.code}: ${STATUS_RU[String(d.status)] ?? d.status}. ${orderLink(d)}` };
+      }
     case "track":
-      return { s: `Заказ ${d.code} в пути`, b: `Трек-номер: ${d.track} (${d.service}). Ориентировочно доставим к ${d.eta}.` };
+      return {
+        s: `Едет к вам: заказ ${d.code}`,
+        b: `Книга в пути. Трек-номер: ${d.track}${d.service ? ` (${SERVICE_RU[String(d.service)] ?? d.service})` : ""}.${d.eta ? ` Ориентировочно — ${d.eta}.` : ""} Следить за заказом: ${orderLink(d)}`,
+      };
     case "refund":
       return { s: `Возврат по заказу ${d.code}`, b: `Мы вернули ${d.amount} ₽. Чек аннулирован.` };
     case "referral_bonus":
       return { s: "Вам подарок за друга", b: `Друг оплатил заказ по вашей ссылке. Ваш промокод на −${d.pct}%: ${d.code}` };
+    case "thanks_delivered":
+      return {
+        s: "Спасибо, что выбрали БУКИМИ",
+        b:
+          `Надеемся, книга «${d.title}» уже прочитана не один раз. Нам очень важно знать, как она вам — ` +
+          `расскажите в паре слов: ${site()}/kabinet/otzyv\nОтзыв помогает другим родителям решиться, а нам — делать книги лучше.` +
+          (d.coloring ? `\n\nНебольшой подарок от нас — раскраска по иллюстрациям вашей книги: ${d.coloring}` : ""),
+      };
     case "marketing":
       return { s: String(d.subject ?? "БУКИМИ"), b: String(d.text ?? "") };
   }
 }
 
-/** Сообщение покупателю во все выбранные им каналы. */
-export async function notifyUser(userId: string, t: Template, data: Record<string, string | number | undefined>, opts: { marketing?: boolean } = {}) {
+/**
+ * Сообщение покупателю во все выбранные им каналы.
+ * opts.marketing — всё сообщение рекламное (только с согласием, с отпиской).
+ * opts.promo — рекламный «хвост» к сервисному сообщению (промокод на следующую книгу): добавляется только
+ * при согласии на рассылку и только в каналы, где покупатель её не отключил; тогда же добавляется отписка.
+ */
+export async function notifyUser(userId: string, t: Template, data: Record<string, string | number | undefined>, opts: { marketing?: boolean; promo?: string } = {}) {
   const user = await db.user.findUnique({ where: { id: userId }, include: { notifyPrefs: true } });
   if (!user || user.deletedAt) return;
   if (opts.marketing && !user.marketingOk) return;
   const n = await cfg("notifications");
-  const { s, b } = render(t, data);
-  const footer = opts.marketing ? `\n\nОтписаться: ${unsubscribeUrl(user.id)}` : "";
+  const { s, b: body } = renderTemplate(t, data);
+  const unsub = `\n\nОтписаться от рассылки: ${unsubscribeUrl(user.id)}`;
+  const footer = opts.marketing ? unsub : "";
+  // Рекламный хвост: только с согласием на рассылку и в каналах, где рассылка не отключена
+  const withPromo = (channelMarketing: boolean) => (opts.promo && user.marketingOk && channelMarketing ? `${body}\n\n${opts.promo}${opts.marketing ? "" : unsub}` : body);
   const prefs = user.notifyPrefs.filter((p) => p.isActive && (!opts.marketing || p.marketing));
   let sent = false;
   for (const p of prefs) {
+    const b = withPromo(p.marketing);
     try {
       if (p.channel === "telegram" && n.telegram) await sendTelegram(p.address, `${s}\n\n${b}${footer}`);
       else if (p.channel === "max" && n.max) await sendMax(p.address, `${s}\n\n${b}${footer}`);
@@ -138,7 +199,18 @@ export async function notifyUser(userId: string, t: Template, data: Record<strin
     }
   }
   // Канал недоступен или не выбран — email
-  if (!sent && user.email) await sendEmail(user.email, s, b + footer);
+  if (!sent && user.email) await sendEmail(user.email, s, withPromo(true) + footer);
+}
+
+/** Имя героя книги заказа в винительном падеже («про Машу») — для тёплых сообщений. Ошибки не мешают отправке. */
+export async function orderHeroAcc(orderId: string): Promise<string | undefined> {
+  try {
+    const item = await db.orderItem.findFirst({ where: { orderId, bookId: { not: null } }, select: { book: { select: { params: true } } } });
+    const h = (item?.book?.params as { hero?: { name?: string; gender?: string } } | null)?.hero;
+    return h?.name ? declineName(h.name, "вин", h.gender) : undefined;
+  } catch {
+    return undefined;
+  }
 }
 
 /** Алерт владельцу: на почту из настроек + в Telegram-чат. */

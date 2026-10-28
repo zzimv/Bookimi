@@ -26,7 +26,7 @@ export default async function Page({ params }: { params: Promise<{ slug: string 
   const { slug } = await params;
   const age = getAgePage(slug);
   if (!age) notFound();
-  const [stories, minPrice] = await Promise.all([getStories(), getMinPrice()]);
+  const [stories, minPrice] = await Promise.all([getStories({ audience: "CHILD" }), getMinPrice()]);
   const list = stories.filter((s) => s.ageMin <= age.max && s.ageMax >= age.min);
 
   return (

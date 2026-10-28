@@ -5,6 +5,8 @@ import { ownBook } from "@/lib/api";
 import { signedUrl } from "@/lib/storage";
 import { BookCabinet } from "./BookCabinet";
 import type { StoryText } from "@/lib/gen/text";
+import { OrderTimeline } from "@/app/zakaz/OrderTimeline";
+import { journeyOrder } from "@/app/zakaz/journey-data";
 
 export default async function Page({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -24,7 +26,22 @@ export default async function Page({ params }: { params: Promise<{ id: string }>
   const selfRead = await db.orderItem.findFirst({ where: { bookId: id, refKey: "audio-self", order: { paidAt: { not: null } } } });
   const audio = files.find((f) => f.kind === "audio");
   const text = b.text as unknown as StoryText;
+  // Последний живой заказ с этой книгой — показываем, как он идёт
+  const order = await db.order.findFirst({
+    where: { userId: own.user.id, items: { some: { bookId: id } }, status: { notIn: ["CANCELLED", "REFUNDED", "PENDING_PAYMENT"] } },
+    orderBy: { createdAt: "desc" },
+    include: { shipment: true, items: { select: { bookId: true } } },
+  });
+  const jo = order ? await journeyOrder(order) : null;
   return (
+    <>
+    {order && jo && (
+      <details className="panel" open={order.status !== "DELIVERED"} style={{ marginBottom: 16 }}>
+        <summary style={{ cursor: "pointer", fontWeight: 700 }}>Заказ {order.publicCode}: как идёт</summary>
+        <OrderTimeline order={jo} compact />
+        <p className="small" style={{ margin: "8px 0 0" }}><Link href={`/zakaz/${order.id}`}>Подробнее о заказе →</Link></p>
+      </details>
+    )}
     <BookCabinet
       id={id}
       title={text.title}
@@ -36,5 +53,6 @@ export default async function Page({ params }: { params: Promise<{ id: string }>
       audioUrl={audio ? await signedUrl("books", audio.storageKey) : null}
       selfRead={Boolean(selfRead)}
     />
+    </>
   );
 }

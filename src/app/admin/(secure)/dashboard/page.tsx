@@ -1,5 +1,7 @@
 import { requireAdmin } from "@/lib/admin";
-import { dashboard } from "@/lib/dashboard";
+import { dashboard, dashboardCharts, dayLabel } from "@/lib/dashboard";
+import { BarChart, ColumnChart, Funnel, Gauge, LineChart, Progress } from "@/components/charts";
+import { ORDER_STATUS } from "@/lib/labels";
 import { db } from "@/lib/db";
 import { ruDate } from "@/lib/pricing";
 
@@ -16,11 +18,21 @@ export default async function Page({ searchParams }: { searchParams: Promise<Rec
   await requireAdmin("dashboard");
   const sp = await searchParams;
   const days = Number(sp.p ?? 30) || 30;
-  const d = await dashboard({ days, source: sp.source, device: sp.device, story: sp.story, who: sp.who });
+  const filters = { days, source: sp.source, device: sp.device, story: sp.story, who: sp.who };
+  const [d, c] = await Promise.all([dashboard(filters), dashboardCharts(filters)]);
   const stories = await db.story.findMany({ where: { isActive: true }, select: { slug: true, title: true } });
   const maxF = Math.max(1, ...d.funnel.map((x) => x.n));
-  const npdPct = Math.min(100, (d.npd.income / d.npd.limit) * 100);
-  const maxCost = Math.max(1, ...d.costByDay.map(([, v]) => v));
+  const spendPanel = (
+    <section className="panel">
+      <ColumnChart
+        title="Расходы на ИИ по дням"
+        sub="30 дней"
+        unit="₽"
+        bars={c.spend.map((s) => ({ label: dayLabel(s.day), value: s.value }))}
+        limit={{ value: c.dailyLimit, label: "Суточный лимит" }}
+      />
+    </section>
+  );
   return (
     <>
       <h1 style={{ fontSize: "var(--fs-xl)" }}>Дашборд</h1>
@@ -51,16 +63,62 @@ export default async function Page({ searchParams }: { searchParams: Promise<Rec
         <div className="kpi"><small>Возвраты</small><b>{fmt(d.cur.refunds)}</b></div>
       </div>
 
-      {d.npd.regime === "npd" && (
-        <section className="panel" style={{ marginTop: 16 }}>
-          <b>Лимит НПД</b>
-          <p className="small" style={{ margin: "4px 0 8px" }}>Доход с 1 января — {fmt(d.npd.income)} из {fmt(d.npd.limit)}. {d.npd.forecast ? <>При текущем темпе лимит будет достигнут <b>{ruDate(d.npd.forecast)}</b>.</> : "В этом году лимит не будет достигнут при текущем темпе."}</p>
-          <div className={`bar ${npdPct >= 95 ? "bar--bad" : npdPct >= 80 ? "bar--warn" : ""}`}><i style={{ width: `${npdPct}%` }} /></div>
+      <div className="grid2" style={{ marginTop: 16 }}>
+        <section className="panel">
+          <LineChart
+            title="Выручка по дням, 30 дней"
+            unit="₽"
+            points={c.revenue.map((r) => ({ label: dayLabel(r.day), value: r.value }))}
+          />
         </section>
-      )}
+        {c.npd.regime === "npd" ? (
+          <section className="panel">
+            <Gauge
+              title="Лимит НПД за год"
+              value={c.npd.income}
+              max={c.npd.limit}
+              forecast={c.npd.yearEnd}
+              note={c.npd.forecastDate ? <>При текущем темпе лимит будет достигнут <b>{ruDate(c.npd.forecastDate)}</b>.</> : "При текущем темпе в этом году лимит не будет достигнут."}
+            />
+          </section>
+        ) : (
+          spendPanel
+        )}
+      </div>
 
-      <h2 style={{ fontSize: "var(--fs-lg)", marginTop: 24 }}>Воронка</h2>
-      <div className="panel funnel">
+      <div className="grid2" style={{ marginTop: 16 }}>
+        <section className="panel">
+          <Funnel title="Воронка: квиз → сказка → превью → оплата" steps={c.funnel} />
+        </section>
+        <section className="panel">
+          <BarChart title="Заказы по статусам" sub={`созданы за ${c.days} дн.`} bars={c.byStatus.map((s) => ({ label: ORDER_STATUS[s.status] ?? s.status, value: s.n }))} />
+        </section>
+      </div>
+
+      <div className="grid2" style={{ marginTop: 16 }}>
+        <section className="panel">
+          <BarChart
+            title="Продажи по источникам"
+            sub="UTM и промокоды блогеров"
+            unit="₽"
+            bars={c.sources.map((s) => ({ label: s.key, value: s.sum, note: `${s.n} зак.` }))}
+            empty="Пока нет оплат"
+          />
+        </section>
+        <section className="panel">
+          {c.audiences ? (
+            <BarChart title="Продажи по аудиториям" sub="по сюжету книги" unit="₽" bars={c.audiences.map((a) => ({ label: a.key, value: a.sum, note: `${a.n} кн.` }))} empty="Пока нет оплат" />
+          ) : (
+            <p className="small muted">Аудитории появятся после обновления базы (поле сюжета «аудитория»).</p>
+          )}
+        </section>
+      </div>
+
+      {c.npd.regime === "npd" && <div style={{ marginTop: 16 }}>{spendPanel}</div>}
+
+      <details className="panel" style={{ marginTop: 16 }}>
+        <summary style={{ cursor: "pointer", fontWeight: 700 }}>Воронка по всем шагам</summary>
+        <div className="funnel" style={{ marginTop: 10 }}>
         {d.funnel.map((f, i) => (
           <div key={f.label}>
             <span>{f.label}</span>
@@ -68,16 +126,10 @@ export default async function Page({ searchParams }: { searchParams: Promise<Rec
             <span>{f.n}{i > 0 && d.funnel[i - 1].n ? ` · ${Math.round((f.n / d.funnel[i - 1].n) * 100)}%` : ""}</span>
           </div>
         ))}
-      </div>
+        </div>
+      </details>
 
       <div className="grid2" style={{ marginTop: 16 }}>
-        <section className="panel">
-          <b>Источники</b>
-          <table className="tbl" style={{ marginTop: 8 }}>
-            <thead><tr><th>Источник</th><th>Заказы</th><th>Выручка</th></tr></thead>
-            <tbody>{d.sources.length ? d.sources.map(([s, v]) => <tr key={s}><td>{s}</td><td>{v.orders}</td><td>{fmt(v.revenue)}</td></tr>) : <tr><td colSpan={3} className="muted">Пока нет оплат</td></tr>}</tbody>
-          </table>
-        </section>
         <section className="panel">
           <b>Приведи друга</b>
           <table className="tbl" style={{ marginTop: 8 }}>
@@ -133,12 +185,8 @@ export default async function Page({ searchParams }: { searchParams: Promise<Rec
           <small className="muted">Замеров: {d.vitals.n}</small>
         </section>
         <section className="panel">
-          <b>Расходы на генерацию по дням</b>
-          <div className="funnel" style={{ marginTop: 8 }}>
-            {d.costByDay.length ? d.costByDay.slice(-14).map(([day, v]) => (
-              <div key={day}><span>{day.slice(5)}</span><div className="bar"><i style={{ width: `${(v / maxCost) * 100}%` }} /></div><span>{Math.round(v)} ₽</span></div>
-            )) : <p className="small muted">Пока нет расходов</p>}
-          </div>
+          <Progress title="Генерация сегодня" value={d.ops.spentToday} max={d.ops.dailyLimit} />
+          <p className="small muted" style={{ marginTop: 8 }}>Расход за период: {fmt(d.unit.genRub)}. По дням — на графике выше.</p>
         </section>
       </div>
     </>

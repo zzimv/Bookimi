@@ -1,27 +1,39 @@
 // ImageProvider: лист персонажа → сцены. Провайдер меняется в админке.
-//  demo      — SVG-иллюстрации без GPU (для разработки и показа)
+//  demo      — SVG-иллюстрации без GPU (art/render.ts: тема сюжета, герой по виду, доп. герои, стиль, настроение)
 //  qwen      — Qwen-Image-Edit-2511 на своём GPU в Yandex Cloud (фото не покидает РФ)
 //  kandinsky — Kandinsky 5.0 I2I Lite на том же сервере (запасной)
-import { demoSceneSvg, THEME_BY_STORY } from "./demo-art";
+// Промпт = стиль картинок (art/*.ts) + сцена + герой по виду (ребёнок/подросток/взрослый/питомец) + настроение.
+import { artStyle } from "../../content/art/index";
+import { renderDemoSpread } from "../../content/art/render";
+import { moodPrompt } from "../../content/art/mood";
+import { ART_STYLE_OWNERS, type ArtStyle, type DemoExtra, type DemoLook, type HeroKind, type Mood } from "../../content/types";
 import { authHeader, ensureGpuUp, touchGpu } from "./gpu";
 
 export interface HeroRef {
-  role: string; // main | sibling | mom ...
+  role: string; // main | sibling | mom | partner | owner ...
   description: string; // внешность из анкеты (для промпта)
   photos: Buffer[]; // подготовленные фото (может быть пусто — тогда по описанию)
   sheet?: Buffer | null;
-  demo?: { hair?: string; gender?: string; glasses?: boolean; longHair?: boolean };
+  /** Внешность для демо-рисовальщика. */
+  look?: DemoLook;
+  /** Как рисовать доп. героя в демо (если не по роли). */
+  drawKind?: DemoExtra["kind"];
 }
 
 export interface SceneJob {
-  storySlug: string;
+  plot: { slug: string; theme: string; heroKind: HeroKind };
   index: number; // 0 — обложка, 1..12 — развороты
   scene: string;
+  /** id стиля картинок (ART_STYLE_IDS). */
   style: string;
+  /** Настроение (MOODS) или null. */
+  mood: Mood | null;
   heroes: HeroRef[];
   age: number;
   gender?: string;
   preview: boolean;
+  /** Заголовок обложки (демо). */
+  title?: string;
 }
 
 export interface ImageResult {
@@ -34,7 +46,7 @@ export interface ImageResult {
 
 export interface ImageProvider {
   name: string;
-  sheet(hero: HeroRef, style: string, age: number, gender?: string): Promise<ImageResult | null>;
+  sheet(hero: HeroRef, job: Pick<SceneJob, "plot" | "style" | "age" | "gender">): Promise<ImageResult | null>;
   scene(job: SceneJob): Promise<ImageResult>;
 }
 
@@ -44,26 +56,106 @@ export class DemoImageProvider implements ImageProvider {
     return null;
   }
   async scene(job: SceneJob): Promise<ImageResult> {
-    const main = job.heroes[0];
-    const svg = demoSceneSvg({
-      theme: THEME_BY_STORY[job.storySlug] ?? "dragon",
-      index: job.index,
-      hero: main?.demo ?? {},
-      extras: job.heroes.length - 1,
+    const [main, ...rest] = job.heroes;
+    const svg = renderDemoSpread({
+      plot: job.plot,
+      spreadIndex: job.index,
+      artStyle: job.style,
+      mood: job.mood,
+      hero: { ...(main?.look ?? {}), kind: job.plot.heroKind },
+      extras: rest.map((h) => ({ role: h.role, kind: h.drawKind, look: h.look ?? {} })),
       caption: "демо-иллюстрация · подключите GPU в админке",
-      watermark: false,
+      title: job.index === 0 ? job.title : undefined,
     });
     return { data: Buffer.from(svg), contentType: "image/svg+xml", ext: "svg", gpuSeconds: 0, costKopecks: 0 };
   }
 }
 
-const IDENTITY =
-  "The child must look exactly like the child in the reference photo: same face shape, eyes and eye color, eyebrows, nose, mouth, cheeks, ears, hair color and haircut. Keep realistic child proportions. Do not beautify, do not change age, do not caricature the face.";
-const NEGATIVE =
-  "photo, photorealistic, 3d render, adult face, distorted face, extra fingers, deformed hands, text, letters, watermark, logo, signature, frame, multiple copies of the child";
+// ── Промпт для Qwen ──
+
+const OWNER_KIND: Record<string, HeroKind> = { kids: "child", teens: "teen", adults: "adult", pets: "pet" };
+
+/** Фразы «сохранения героя», которые художники вшили в промпт своих стилей (для чужой аудитории убираем). */
+const OWN_IDENTITY: Record<HeroKind, RegExp> = {
+  child: /\s*The child keeps the exact face[\s\S]*$/,
+  teen: /,?\s*the main character is a teenager[\s\S]*?consistent/,
+  adult: /,?\s*the adult faces keep the exact likeness[\s\S]*?tasteful adult proportions/,
+  pet: /;?\s*the hero is the specific pet[\s\S]*?unless the scene asks for them/,
+};
+
+/** Кто герой — для стилей чужой аудитории (свой стиль уже содержит такую фразу). */
+function identityFor(kind: HeroKind, age: number, gender: string | undefined, withPhoto: boolean): string {
+  const ref = withPhoto ? "keeps the exact face from the reference photo, instantly recognizable" : "drawn consistently on every page";
+  switch (kind) {
+    case "child":
+      return `The main hero is a ${age}-year-old ${gender === "girl" ? "girl" : "boy"} with child proportions who ${ref}.`;
+    case "teen":
+      return `The main hero is a ${age}-year-old teenage ${gender === "girl" ? "girl" : "boy"} with realistic teen proportions who ${ref}.`;
+    case "adult":
+      return `The main hero is an adult ${gender === "girl" ? "woman" : "man"} with natural adult proportions who ${ref}; when two people are shown, both are equally clear and recognizable.`;
+    case "pet":
+      return `The main hero is the specific pet ${withPhoto ? "from the reference photo" : "from the description"}: same species, breed traits, fur color and markings, natural four-legged anatomy, only lightly anthropomorphic.`;
+  }
+}
+
+/** Слова негатива, которые спорят с видом героя (стиль одной аудитории для героя другой). */
+const NEG_CONFLICTS: Record<HeroKind, string[]> = {
+  child: ["human body", "human hands", "animal standing upright like a person", "humanized clothing"],
+  teen: ["adult proportions", "adult body", "aged-up face", "human body", "human hands", "animal standing upright like a person", "humanized clothing"],
+  adult: ["adult proportions", "adult body", "aged-up face", "makeup", "human body", "human hands", "animal standing upright like a person", "humanized clothing"],
+  pet: ["multiple copies of the child", "duplicate child", "different person"],
+};
+
+/** Сцена прямо просит костюм — тогда не запрещаем одежду и костюмы (просьба art/pets.ts). */
+const COSTUME_SCENE = /costume|carnival|masquerade|fancy dress|dressed (up|as)|santa hat|party hat|festive hat|knitted (sweater|scarf)|bow tie|wearing a (scarf|sweater|hat|bow)/i;
+
+export function stylePrompt(style: ArtStyle | null, styleId: string, kind: HeroKind) {
+  if (!style) return { prompt: styleId, negative: "text, letters, watermark, logo, signature, photo, photorealistic", own: false };
+  const ownerKind = OWNER_KIND[ART_STYLE_OWNERS[style.id] ?? ""];
+  if (ownerKind === kind) return { prompt: style.prompt, negative: style.negative, own: true };
+  return { prompt: ownerKind ? style.prompt.replace(OWN_IDENTITY[ownerKind], "").trim() : style.prompt, negative: style.negative, own: false };
+}
+
+export function filterNegative(negative: string, kind: HeroKind, scene: string) {
+  const drop = new Set(NEG_CONFLICTS[kind]);
+  if (COSTUME_SCENE.test(scene)) {
+    drop.add("costumes");
+    drop.add("humanized clothing");
+    drop.add("superhero costumes");
+  }
+  return negative
+    .split(",")
+    .map((t) => t.trim())
+    .filter((t) => t && !drop.has(t.toLowerCase()))
+    .join(", ");
+}
+
+/** Полный промпт сцены для GPU: стиль + сцена + герой + доп. герои + настроение. */
+export function scenePrompt(job: SceneJob): { prompt: string; negative: string } {
+  const kind = job.plot.heroKind;
+  const main = job.heroes[0];
+  const withPhoto = Boolean(main?.photos.length);
+  const st = stylePrompt(artStyle(job.style), job.style, kind);
+  const extras = job.heroes
+    .slice(1)
+    .map((h) => `${h.role}${h.description ? `: ${h.description}` : ""}`)
+    .join("; ");
+  const refs = withPhoto ? "The first images are references of the main hero (photo and character sheet). Draw this same hero. " : "";
+  const prompt = [
+    `${refs}Scene: ${job.scene}.`,
+    st.own ? "" : identityFor(kind, job.age, job.gender, withPhoto),
+    main?.description ? `Main hero details: ${main.description}.` : "",
+    extras ? `Also in the scene: ${extras}.` : "",
+    `Style: ${st.prompt}`,
+    "Leave calm space at the edges for page cropping.",
+  ]
+    .filter(Boolean)
+    .join(" ");
+  return moodPrompt(prompt, filterNegative(st.negative, kind, job.scene), job.mood);
+}
 
 export class GpuImageProvider implements ImageProvider {
-  constructor(public name: "qwen" | "kandinsky", private hourlyRub: number, private styles: Record<string, string>) {}
+  constructor(public name: "qwen" | "kandinsky", private hourlyRub: number) {}
 
   private async call(path: string, body: object) {
     await ensureGpuUp();
@@ -87,32 +179,30 @@ export class GpuImageProvider implements ImageProvider {
     };
   }
 
-  async sheet(hero: HeroRef, style: string, age: number, gender?: string) {
+  async sheet(hero: HeroRef, job: Pick<SceneJob, "plot" | "style" | "age" | "gender">) {
     if (!hero.photos.length) return null;
-    const who = gender === "girl" ? "girl" : "boy";
+    const kind = job.plot.heroKind;
+    const st = stylePrompt(artStyle(job.style), job.style, kind);
+    const views = kind === "pet" ? "front view, three-quarter view, side view, full body standing on four legs" : "front view, three-quarter view, side profile, full body standing";
     return this.call("/v1/edit", {
       images: hero.photos.map((p) => p.toString("base64")),
-      prompt: `Character reference sheet of the child from the photo, drawn as ${this.styles[style] ?? style}. Four views on one plain light background: front view, three-quarter view, side profile, full body standing. The child is a ${age}-year-old ${who}. ${hero.description}. ${IDENTITY}`,
-      negative: NEGATIVE,
+      prompt: `Character reference sheet of the hero from the photo. Four views on one plain light background: ${views}. ${identityFor(kind, job.age, job.gender, true)} ${hero.description}. Style: ${st.prompt}`,
+      negative: filterNegative(st.negative, kind, ""),
       seed: 1,
     });
   }
 
   async scene(job: SceneJob) {
-    const main = job.heroes[0];
     const images: string[] = [];
-    let refs = "";
     for (const h of job.heroes) {
       for (const p of h.photos.slice(0, 1)) images.push(p.toString("base64"));
       if (h.sheet) images.push(h.sheet.toString("base64"));
     }
-    if (main?.photos.length) refs = "The first images are references of the main child (photo and character sheet). Draw this same child. ";
-    const who = job.gender === "girl" ? "girl" : "boy";
-    const extras = job.heroes.slice(1).map((h) => `${h.role}: ${h.description}`).join("; ");
+    const { prompt, negative } = scenePrompt(job);
     return this.call("/v1/edit", {
       images,
-      prompt: `${refs}Children's book illustration. Scene: ${job.scene}. Style: ${this.styles[job.style] ?? job.style}. The main child is a ${job.age}-year-old ${who}. ${main?.description ?? ""}. ${extras ? `Also in the scene: ${extras}.` : ""} ${main?.photos.length ? IDENTITY : ""} Leave calm space at the edges for page cropping.`,
-      negative: NEGATIVE,
+      prompt,
+      negative,
       width: job.index === 0 ? 1536 : 2048,
       height: job.index === 0 ? 1536 : 1024,
       steps: job.preview ? 30 : 40,
@@ -122,20 +212,7 @@ export class GpuImageProvider implements ImageProvider {
   }
 }
 
-export const STYLE_PROMPTS: Record<string, string> = {
-  "watercolor-air":
-    "delicate children's book illustration, thin slightly wobbly pen-and-ink outline, transparent watercolor washes, lots of untouched white paper, pale sky blue, butter yellow and soft green, naive simple shapes, quiet poetic mood",
-  "kind-classic":
-    "classic mid-century children's book illustration, confident clean black ink contour, flat soft colors with gentle shading, pale paper background, round friendly forms, expressive kind faces, subtle printed paper texture",
-  "folk-lubok":
-    "Russian folk naive painting for a children's book, matte gouache, bold flat decorative shapes, ornamental flowers and patterned borders, deep red, ochre, black, emerald and cream palette, cheerful festive mood",
-  "ink-humor":
-    "lively black ink line drawing for a children's book, expressive gesture, light cross-hatching, white background, one warm accent color, gentle humor, face drawn with careful realistic proportions",
-  "cozy-detail":
-    "richly detailed ink and watercolor children's book illustration, warm earthy palette, cozy scene full of tiny objects and small hidden creatures, soft daylight, careful fine linework",
-};
-
 export function imageProvider(name: string, hourlyRub: number): ImageProvider {
-  if (name === "qwen" || name === "kandinsky") return new GpuImageProvider(name, hourlyRub, STYLE_PROMPTS);
+  if (name === "qwen" || name === "kandinsky") return new GpuImageProvider(name, hourlyRub);
   return new DemoImageProvider();
 }

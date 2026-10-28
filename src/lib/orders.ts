@@ -6,7 +6,7 @@ import { quote, type CatalogAddon, type CatalogFormat, type QuoteInput, etaDate,
 import { SbpQrProvider, TransferProvider, YooKassaProvider, idempotencyKey, type PaymentProvider, type PaymentView } from "./payments";
 import { issueReceipt, cancelReceipts } from "./npd";
 import { newbieDiscountPct, onOrderPaid } from "./referral";
-import { notifyUser, alertOwner } from "./notify";
+import { notifyUser, alertOwner, orderHeroAcc } from "./notify";
 import { track } from "./events";
 import { shipQuote, type ShipAddress, type ShipMethod } from "./shipping";
 import { hmac } from "./crypto";
@@ -205,7 +205,7 @@ export async function markPaid(paymentId: string, opts: { receiptUrl?: string; c
   if (res.already) return res.order;
   const order = res.order;
   const receipt = await issueReceipt(order.id, { urlFromPayment: opts.receiptUrl });
-  await notifyUser(order.userId, "payment_received", { code: order.publicCode, orderId: order.id });
+  await notifyUser(order.userId, "payment_received", { code: order.publicCode, orderId: order.id, whoPrints: order.whoPrints, heroAcc: await orderHeroAcc(order.id) });
   if (receipt?.url) await notifyUser(order.userId, "receipt", { code: order.publicCode, url: receipt.url });
   await onOrderPaid(order.userId, order.id);
   await track("pay", { userId: order.userId, props: { orderId: order.id, total: order.totalRub } });
@@ -264,6 +264,7 @@ export async function setStatus(orderId: string, status: OrderStatus, operatorId
     track: track_,
     service: order.shipment?.method,
     eta: order.shipment?.etaDate ? ruDate(order.shipment.etaDate) : "",
+    ready: order.readyDate ? ruDate(order.readyDate) : "",
   });
   if (status === "DELIVERED") await track("delivered", { userId: order.userId, props: { orderId } });
 }

@@ -6,18 +6,15 @@
 // только свет, цвет, время суток и атмосфера — сюжет, композицию и лица не трогаем), demo — как applyMood
 // меняет SVG демо (src/content/art/mood.ts).
 //
-// requests (просьбы к интегратору, агенту 11 / архитектору):
-//  • types.ts → Mood: добавить `audiences?: AudienceKey[]`; пока поле есть в MoodEx ниже.
-//  • анкета: список настроений — moodsFor(audience) (романтичное — только взрослым и подросткам 14+,
-//    сонное — детям и питомцам).
+// Анкета показывает moodsFor(audience, age): романтичное — только взрослым и подросткам 14+,
+// сонное — детям и питомцам. Поля audiences/minAge — в типе Mood (types.ts).
 
 import type { AudienceKey, Mood } from "./types";
 import type { MoodDemo } from "./art/mood";
 
-export interface MoodEx extends Omit<Mood, "demo"> {
+/** Настроение с обязательным списком аудиторий и расширенным демо-блоком. */
+export interface MoodEx extends Omit<Mood, "demo" | "audiences"> {
   audiences: AudienceKey[];
-  /** Минимальный возраст героя/читателя (для подростков). */
-  minAge?: number;
   demo: MoodDemo;
 }
 

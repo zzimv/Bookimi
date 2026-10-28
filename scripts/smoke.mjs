@@ -18,9 +18,11 @@ function jar() {
     },
     async login(email) {
       await this.f("/");
-      const r = await this.f("/api/auth/request", { method: "POST", json: { target: email } });
+      // Вход: телефон обязателен (auth.phoneRequired), код — на почту
+      const phone = `+79${String(Date.now() + Math.floor(Math.random() * 1e6)).slice(-9)}`;
+      const r = await this.f("/api/auth/request", { method: "POST", json: { email, phone } });
       const { demoCode } = await r.json();
-      const v = await this.f("/api/auth/verify", { method: "POST", json: { target: email, code: demoCode, consentPd: true } });
+      const v = await this.f("/api/auth/verify", { method: "POST", json: { email, phone, code: demoCode, consentPd: true } });
       return v.status === 200;
     },
   };
@@ -74,7 +76,7 @@ ok(p2.status === 429, "второе превью за сутки → 429");
 // Перебор кодов входа
 const c = jar();
 let last = 200;
-for (let i = 0; i < 8; i++) last = (await c.f("/api/auth/request", { method: "POST", json: { target: `spam-${i}@test.local` } })).status;
+for (let i = 0; i < 8; i++) last = (await c.f("/api/auth/request", { method: "POST", json: { email: `spam-${i}@test.local`, phone: `+7900000000${i}` } })).status;
 ok(last === 429, "частые запросы кодов → 429");
 
 console.log(fails ? `\nОшибок: ${fails}` : "\nВсе проверки пройдены");

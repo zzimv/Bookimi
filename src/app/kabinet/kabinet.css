@@ -1,0 +1,30 @@
+/* Кабинет покупателя: приветствие, полка с обложками, подсказка о поводе. Токены — globals.css. */
+.cab-hello h1 { font-size: var(--fs-xl); margin-bottom: 4px; }
+.cab-hello p { margin: 0 0 20px; }
+.cab-h2 { font-size: var(--fs-lg); margin: 28px 0 12px; }
+
+.cab-hint { display: grid; grid-template-columns: auto 1fr; gap: 10px 14px; align-items: start; background: var(--gold-soft); border-radius: var(--r-ui); padding: 16px 18px; }
+.cab-hint__icon { color: #6b4a0e; width: 40px; height: 40px; border-radius: 50%; background: rgba(255, 255, 255, 0.6); display: grid; place-items: center; }
+.cab-hint b { font-family: var(--font-head); color: var(--forest-deep); }
+.cab-hint p { margin: 2px 0 0; font-size: var(--fs-sm); }
+.cab-hint .btn { grid-column: 2; justify-self: start; }
+@media (min-width: 720px) { .cab-hint { grid-template-columns: auto 1fr auto; align-items: center; } .cab-hint .btn { grid-column: auto; } }
+
+.shelf { display: grid; gap: 24px 18px; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); }
+@media (min-width: 720px) { .shelf { grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); } }
+.shelf__book { display: grid; gap: 8px; align-content: start; justify-items: start; }
+.shelf__cover { display: block; width: 100%; text-decoration: none; transition: transform .15s; }
+.shelf__cover:hover { transform: translateY(-3px) rotate(-0.6deg); }
+.shelf__blank { display: block; width: 100%; height: 100%; background:
+  radial-gradient(circle at 70% 30%, var(--gold-soft) 0 18%, transparent 19%),
+  linear-gradient(160deg, var(--sage), #cfdfd4); }
+.shelf__hero::before { content: none; }
+.shelf__line { margin: 0; color: var(--ink-soft); max-width: 36ch; }
+.shelf__add { display: grid; place-items: center; align-content: center; gap: 6px; aspect-ratio: 1; border: 2px dashed var(--line); border-radius: var(--r-book); color: var(--forest); font-weight: 700; text-decoration: none; }
+.shelf__add span { font: 800 2.2rem/1 var(--font-head); }
+.shelf__add:hover { border-color: var(--forest); background: var(--white); }
+
+.cab-ref { margin-top: 32px; }
+
+/* .cab перебивает горизонтальные поля .wrap (padding: 24px 0 80px) — на телефоне контент прилипал к краю */
+.wrap.cab { padding-left: var(--gutter); padding-right: var(--gutter); }

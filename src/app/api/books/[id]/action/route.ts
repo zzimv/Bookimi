@@ -7,6 +7,9 @@ import { cfg } from "@/lib/settings";
 import { hit } from "@/lib/limits";
 import { track } from "@/lib/events";
 import { DOC_VERSION } from "@/lib/legal";
+import { spentTodayRub } from "@/lib/limits";
+import { AnswersV2, heroAge } from "@/lib/quiz";
+import { moodsFor } from "@/content/moods";
 
 const Input = z.discriminatedUnion("action", [
   z.object({ action: z.literal("rewrite") }),
@@ -15,6 +18,8 @@ const Input = z.discriminatedUnion("action", [
   z.object({ action: z.literal("preview"), withPhoto: z.boolean(), marketing: z.boolean().optional() }),
   z.object({ action: z.literal("redraw"), index: z.number().int().min(0).max(12) }),
   z.object({ action: z.literal("retry") }),
+  // Смена настроения всех иллюстраций; "" — «как задумал художник»
+  z.object({ action: z.literal("mood"), mood: z.string().trim().max(40) }),
 ]);
 
 export async function POST(req: Request, { params }: { params: Promise<{ id: string }> }) {
@@ -57,6 +62,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     case "preview": {
       const user = await currentUser();
       if (!user) return err("Войдите по коду, чтобы мы прислали превью", 401);
+      if ((await cfg("auth")).phoneRequired && !user.phone) return err("Укажите телефон при входе — он нужен для связи по заказу", 401);
       if (book.status !== "TEXT_APPROVED" && book.status !== "FAILED") return err("Сначала подтвердите текст сказки");
       if (b.withPhoto) {
         const n = await db.photo.count({ where: { hero: { bookId: id }, deletedAt: null } });
@@ -83,6 +89,37 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       await db.book.update({ where: { id }, data: { redrawsLeft: { decrement: 1 } } });
       await enqueue(QUEUES.redraw, { bookId: id, index: b.index });
       return json({ ok: true, redrawsLeft: book.redrawsLeft - 1 });
+    }
+    case "mood": {
+      const a = AnswersV2.safeParse(book.params);
+      const audience = a.success ? a.data.audience : "CHILD";
+      const moodId = b.mood === "as-drawn" ? "" : b.mood;
+      if (moodId && !moodsFor(audience, a.success ? heroAge(a.data) : undefined).some((m) => m.id === moodId)) return err("Такого настроения нет");
+      if ((book.mood ?? "") === moodId) return json({ ok: true, unchanged: true });
+      const limits = await cfg("limits");
+      // До картинок — просто запоминаем настроение
+      if (["DRAFT", "TEXT_QUEUED", "TEXT_READY", "TEXT_APPROVED"].includes(book.status)) {
+        await db.book.update({ where: { id }, data: { mood: moodId || null } });
+        return json({ ok: true });
+      }
+      if (!book.paidFull) {
+        if (book.status !== "PREVIEW_READY") return err("Подождите, пока превью дорисуется");
+        if (book.moodChangesPreview >= limits.moodChangesPreview) return err(`До оплаты настроение можно сменить ${limits.moodChangesPreview} раза. После покупки — ещё раз бесплатно для всей книги.`, 429);
+        if ((await spentTodayRub()) >= limits.dailySpendRub) return err("Сейчас много заказов — попробуйте сменить настроение чуть позже", 429);
+        await db.book.update({ where: { id }, data: { mood: moodId || null, moodChangesPreview: { increment: 1 }, status: "PREVIEW_QUEUED", progress: 0 } });
+      } else {
+        if (book.status !== "FULL_READY") return err("Подождите, пока книга будет готова");
+        // Первая смена после оплаты — бесплатно (вся книга), дальше — одна перерисовка из лимита за смену
+        const free = book.moodChangesFull === 0;
+        if (!free && book.redrawsLeft <= 0) return err(`Бесплатные перерисовки закончились. Смена настроения — ${limits.redrawPriceRub} ₽ (через поддержку).`, 402);
+        await db.book.update({
+          where: { id },
+          data: { mood: moodId || null, moodChangesFull: { increment: 1 }, ...(free ? {} : { redrawsLeft: { decrement: 1 } }), status: "FULL_QUEUED", progress: 0 },
+        });
+      }
+      await enqueue(QUEUES.mood, { bookId: id }, { singletonKey: `mood-${id}` });
+      await track("mood_change", { anonId: anon, userId: own.user?.id, props: { bookId: id, mood: moodId || "as-drawn" } });
+      return json({ ok: true });
     }
     case "retry": {
       if (book.status !== "FAILED") return err("Повтор не нужен");

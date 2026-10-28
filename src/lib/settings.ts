@@ -42,6 +42,12 @@ export const DEFAULTS = {
     freeRedraws: 3,
     redrawPriceRub: 99,
     photoTtlDays: 7,
+    /** Сколько раз можно бесплатно сменить настроение превью до оплаты (перерисовка обложки и 2 разворотов). */
+    moodChangesPreview: 2,
+  },
+  auth: {
+    /** Телефон обязателен при входе (+7…); код приходит на почту. */
+    phoneRequired: true,
   },
   gpu: {
     mode: "on_demand" as "on_demand" | "schedule" | "always",

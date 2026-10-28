@@ -11,9 +11,8 @@
 //    с подпалом, чепрак, маска; позы «стоит»/«сидит» и мимика по номеру разворота.
 //    Для кролика, грызунов, птиц и черепах — свои простые рисунки, для прочих — милый зверёк.
 //
-// requests (просьбы к интегратору, агенту 11):
-//  • в негативе стилей есть «humanized clothing, costumes»: если сцена разворота прямо просит костюм
-//    (карнавал, Новый год), gen/image.ts может убрать эти два слова из негатива для этого разворота.
+// requests (просьбы к интегратору, агенту 11): —
+//  (выполнено: gen/image.ts filterNegative убирает «humanized clothing, costumes», если сцена просит костюм)
 
 import type { ArtStyle, ArtStyleDemo, DemoHeroDrawer, DemoHeroOpts, DemoSceneCtx, DemoTheme } from "../types";
 import { drawDeco, pick, rnd, stroke } from "./shared";

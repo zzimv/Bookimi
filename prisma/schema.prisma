@@ -275,6 +275,8 @@ model Book {
   story       Story      @relation(fields: [storyId], references: [id])
   styleKey    String     // стиль картинок (ART_STYLE_IDS)
   mood        String?    // настроение картинок (MOODS), null — по умолчанию
+  moodChangesPreview Int @default(0) // смен настроения до оплаты (превью)
+  moodChangesFull    Int @default(0) // смен настроения после оплаты (вся книга)
   dedication  String?
   params      Json       // снимок анкеты на момент генерации
   anonId      String?

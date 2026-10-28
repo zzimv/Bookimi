@@ -27,6 +27,8 @@ export async function GET(_: Request, { params }: { params: Promise<{ id: string
     text: book.text as StoryText | null,
     rewritesLeft: book.rewritesLeft,
     redrawsLeft: book.redrawsLeft,
+    mood: book.mood ?? "",
+    moodChanges: { preview: book.moodChangesPreview, full: book.moodChangesFull },
     withPhoto: book.withPhoto,
     paid: book.paidFull,
     loggedIn: Boolean(own.user),

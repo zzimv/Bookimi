@@ -64,7 +64,12 @@ async function candidates(event: TriggerEvent, delayMinutes: number): Promise<Ca
         .map((o) => ({ userId: o.userId, subjectId: `order:${o.id}`, vars: { title: titleOf(o.items[0].book!.text), link: `${site()}/kniga/${o.items[0].bookId}/kupit?pechat=1` } }));
     }
     case "delivered": {
-      const evs = await db.funnelEvent.findMany({ where: { name: "delivered", createdAt: { lte: before, gte: notOlder }, userId: { not: null } }, take: 200 });
+      const all = await db.funnelEvent.findMany({ where: { name: "delivered", createdAt: { lte: before, gte: notOlder }, userId: { not: null } }, take: 200 });
+      // Кому уже ушло «спасибо после доставки» (с просьбой об отзыве) — второй раз не просим
+      const thanked = new Set(
+        (await db.auditLog.findMany({ where: { action: "thanks.delivered", entityId: { in: all.map((e) => (e.props as { orderId?: string })?.orderId ?? "") } }, select: { entityId: true } })).map((a) => a.entityId),
+      );
+      const evs = all.filter((e) => !thanked.has((e.props as { orderId?: string })?.orderId ?? null));
       const users = await db.user.findMany({ where: { id: { in: evs.map((e) => e.userId!) } } });
       return evs.map((e) => {
         const u = users.find((x) => x.id === e.userId);
@@ -95,7 +100,67 @@ function fill(t: string, vars: Record<string, string>) {
   return t.replace(/\{(\w+)\}/g, (_, k) => vars[k] ?? "");
 }
 
+export const THANKS_PROMO_PCT = 10;
+const THANKS_DELAY_DAYS = 3;
+
+/**
+ * Через 3 дня после доставки: спасибо + просьба об отзыве + подарок.
+ * Сервисное сообщение (о заказе) — уходит всем. Подарок — раскраска по иллюстрациям книги (если её удаётся
+ * сделать). Промокод на следующую книгу — только при согласии на рассылку (одноразовый, 60 дней).
+ * Одно сообщение на заказ (журнал thanks.delivered).
+ */
+export async function sendDeliveredThanks(now = new Date()) {
+  const evs = await db.funnelEvent.findMany({
+    where: { name: "delivered", userId: { not: null }, createdAt: { lte: new Date(now.getTime() - THANKS_DELAY_DAYS * 86400_000), gte: new Date(now.getTime() - 14 * 86400_000) } },
+    take: 100,
+  });
+  for (const e of evs) {
+    const orderId = (e.props as { orderId?: string } | null)?.orderId;
+    if (!orderId) continue;
+    if (await db.auditLog.findFirst({ where: { action: "thanks.delivered", entityId: orderId } })) continue;
+    const order = await db.order.findUnique({ where: { id: orderId }, include: { user: true, items: { include: { book: { include: { files: { select: { kind: true } } } } } } } });
+    if (!order || order.status !== "DELIVERED" || !order.user || order.user.deletedAt) continue;
+    // Сначала отмечаем, потом шлём: при сбое лучше не отправить, чем отправить дважды
+    await db.auditLog.create({ data: { action: "thanks.delivered", entity: "order", entityId: orderId } });
+    const book = order.items.find((i) => i.book)?.book;
+    const title = (book?.text as { title?: string } | null)?.title ?? "ваша книга";
+
+    let coloring: string | undefined;
+    if (book) {
+      let has = book.files.some((f) => f.kind === "coloring");
+      if (!has) {
+        try {
+          const { renderColoring } = await import("./gen/pipeline");
+          await renderColoring(book.id);
+          has = true;
+        } catch (err) {
+          console.error("[thanks] раскраска:", (err as Error).message);
+        }
+      }
+      if (has) coloring = `${site()}/api/books/${book.id}/download?kind=coloring`;
+    }
+
+    let promo: string | undefined;
+    if (order.user.marketingOk) {
+      const code = `SPASIBO-${hmac(`thanks:${orderId}`).replace(/[^A-Z0-9]/gi, "").slice(0, 5).toUpperCase()}`;
+      const validTo = new Date(now.getTime() + 60 * 86400_000);
+      await db.promoCode.upsert({
+        where: { code },
+        update: {},
+        create: { code, percentOff: THANKS_PROMO_PCT, ownerId: order.userId, source: "thanks", maxUses: 1, validTo },
+      });
+      promo = `И промокод ${code} — −${THANKS_PROMO_PCT}% на следующую книгу, действует до ${validTo.toLocaleDateString("ru-RU", { day: "numeric", month: "long", timeZone: "Europe/Moscow" })}: ${site()}/sozdat`;
+    }
+    await notifyUser(order.userId, "thanks_delivered", { title, coloring, code: order.publicCode }, { promo });
+  }
+}
+
 export async function runTriggers() {
+  try {
+    await sendDeliveredThanks();
+  } catch (e) {
+    console.error("[thanks]", (e as Error).message);
+  }
   const rules = await db.triggerRule.findMany({ where: { isActive: true } });
   for (const rule of rules) {
     const list = await candidates(rule.event as TriggerEvent, rule.delayMinutes);

@@ -12,7 +12,8 @@ export type FunnelName =
   | "checkout"
   | "pay"
   | "delivered"
-  | "review";
+  | "review"
+  | "mood_change";
 
 export async function track(name: FunnelName, ctx: { anonId?: string; userId?: string | null; props?: object; source?: string; device?: string }) {
   try {

@@ -1,10 +1,13 @@
 import { FormatKind, CoverType, AddonKind } from "@prisma/client";
 import { createPrisma } from "../src/lib/prisma-client";
-import { ADDONS, FORMATS, OCCASIONS, STORIES, STYLES } from "../src/lib/catalog-defaults";
+import { ADDONS, FORMATS, OCCASIONS, plotAges } from "../src/lib/catalog-defaults";
+import { PLOTS } from "../src/content/registry";
+import { ART_STYLE_IDS } from "../src/content/profiles";
 
 const db = createPrisma();
 
 async function main() {
+  // Поводы: новые добавляются, тексты существующих (правки из админки) не перезаписываются
   for (const [i, o] of OCCASIONS.entries()) {
     await db.occasion.upsert({
       where: { slug: o.slug },
@@ -13,25 +16,31 @@ async function main() {
     });
   }
 
-  for (const [i, s] of STORIES.entries()) {
-    const occasion = s.occasionSlug ? await db.occasion.findUnique({ where: { slug: s.occasionSlug } }) : null;
+  // Сюжеты — из реестра контента (src/content). Поля движка обновляются при каждом seed;
+  // название, описание, SEO, обложка и включение — правки из админки — сохраняются.
+  const occasionIds = new Map((await db.occasion.findMany({ select: { id: true, slug: true } })).map((o) => [o.slug, o.id]));
+  for (const [i, p] of PLOTS.entries()) {
+    const [ageMin, ageMax] = plotAges(p);
+    const engine = {
+      audience: p.audience,
+      segments: p.segments,
+      textStyle: p.textStyle,
+      artStyles: p.artStyles,
+      heroKind: p.heroKind,
+      occasions: p.occasions,
+      ageMin,
+      ageMax,
+      gender: p.gender ?? null,
+      occasionId: occasionIds.get(p.occasions[0]) ?? null,
+      coverTheme: p.theme,
+      // Шаблон и план сцен — только на сервере (в публичный каталог не попадают)
+      textTemplate: p.spreads.map((s, n) => `${n + 1}. ${s.text}`).join("\n"),
+      scenePlan: [{ spread: 0, prompt: p.coverScene }, ...p.spreads.map((s, n) => ({ spread: n + 1, prompt: s.scene }))],
+    };
     await db.story.upsert({
-      where: { slug: s.slug },
-      update: {},
-      create: {
-        slug: s.slug,
-        title: s.title,
-        tagline: s.tagline,
-        description: s.description,
-        ageMin: s.ageMin,
-        ageMax: s.ageMax,
-        occasionId: occasion?.id,
-        coverTheme: s.coverTheme,
-        // Шаблон и план сцен редактируются в админке; хранятся только на сервере.
-        textTemplate: `${s.title}. ${s.description}`,
-        scenePlan: Array.from({ length: 12 }, (_, n) => ({ spread: n + 1, prompt: "" })),
-        sortOrder: i, // «Новогоднее путешествие» — первым (сезон ноябрь–декабрь)
-      },
+      where: { slug: p.slug },
+      update: engine,
+      create: { slug: p.slug, title: p.title, tagline: p.tagline, description: p.description, sortOrder: i, ...engine },
     });
   }
 
@@ -44,8 +53,8 @@ async function main() {
       title: "Сказка по вашей идее",
       tagline: "Сюжет по идее родителя",
       description: "Сюжет придумывается по идее родителя.",
-      ageMin: 2,
-      ageMax: 9,
+      ageMin: 0,
+      ageMax: 99,
       coverTheme: "dragon",
       textTemplate: "",
       scenePlan: [],
@@ -64,11 +73,12 @@ async function main() {
     }
   }
 
-  for (const [i, st] of STYLES.entries()) {
+  // Стили картинок: все 15 из профилей; промпты — в коде (src/content/art), в БД — название и включение
+  for (const [i, st] of ART_STYLE_IDS.entries()) {
     await db.illustrationStyle.upsert({
-      where: { key: st.key },
+      where: { key: st.id },
       update: {},
-      create: { key: st.key, title: st.title, description: st.description, promptSuffix: st.key, sortOrder: i, isActive: st.active },
+      create: { key: st.id, title: st.title, description: st.oneLine, promptSuffix: st.id, sortOrder: i, isActive: true },
     });
   }
 

@@ -1,0 +1,28 @@
+/* Путь заказа и благодарность. Токены — из globals.css. */
+.journey { list-style: none; margin: 8px 0 4px; padding: 0; display: grid; }
+.journey__step { position: relative; display: grid; grid-template-columns: 28px 1fr; gap: 12px; padding-bottom: 16px; color: var(--ink-soft); }
+.journey__step:last-child { padding-bottom: 0; }
+.journey__step::after { content: ""; position: absolute; left: 13px; top: 28px; bottom: 2px; width: 2px; background: var(--line); }
+.journey__step:last-child::after { display: none; }
+.journey__step.is-done::after { background: var(--forest); }
+.journey__dot { width: 28px; height: 28px; border-radius: 50%; display: grid; place-items: center; font: 800 14px/1 var(--font-body); background: var(--white); border: 2px solid var(--line); color: var(--white); z-index: 1; }
+.journey__step.is-done .journey__dot { background: var(--forest); border-color: var(--forest); }
+.journey__step.is-current .journey__dot { border-color: var(--gold); background: var(--gold-soft); box-shadow: 0 0 0 4px rgba(200, 149, 47, 0.18); }
+.journey__step.is-current .journey__dot::before { content: ""; width: 10px; height: 10px; border-radius: 50%; background: var(--gold); }
+.journey__head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 10px; min-height: 28px; padding-top: 2px; }
+.journey__step.is-done .journey__head b, .journey__step.is-current .journey__head b { color: var(--forest-deep); }
+.journey__when { font-size: var(--fs-sm); color: var(--ink-soft); }
+.journey__msg { margin: 6px 0 0; padding: 12px 14px; background: var(--sage); border-radius: 4px 12px 12px 12px; color: var(--ink); max-width: 60ch; }
+.journey--compact .journey__step { padding-bottom: 10px; }
+.journey--compact .journey__msg { padding: 8px 12px; font-size: var(--fs-sm); }
+@media (prefers-reduced-motion: no-preference) {
+  .journey__step.is-current .journey__dot { animation: journey-pulse 2.4s ease-in-out infinite; }
+}
+@keyframes journey-pulse { 50% { box-shadow: 0 0 0 7px rgba(200, 149, 47, 0.08); } }
+
+.thanks { display: grid; grid-template-columns: auto 1fr; gap: 16px; align-items: start; background: var(--gold-soft); border-radius: var(--r-ui); padding: 20px; color: var(--ink); }
+.thanks h2 { font-size: var(--fs-lg); margin-bottom: 6px; }
+.thanks p { margin: 0 0 10px; }
+.thanks__mark { color: var(--gold); width: 48px; height: 48px; }
+.thanks__next { margin: 0 0 14px; padding-left: 18px; font-size: var(--fs-sm); color: var(--ink-soft); }
+@media (max-width: 520px) { .thanks { grid-template-columns: 1fr; } .thanks__mark { width: 36px; height: 36px; } }

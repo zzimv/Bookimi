@@ -52,8 +52,8 @@ export default async function Home() {
             </p>
           </div>
           <div className="hero__books" aria-hidden="true">
-            {first && <Cover theme={first.coverTheme} title={displayTitle(first.title)} coverUrl={first.coverUrl} />}
-            {second && <Cover theme={second.coverTheme} title={displayTitle(second.title)} coverUrl={second.coverUrl} />}
+            {first && <Cover theme={first.coverTheme} title={displayTitle(first.title, first.audience)} coverUrl={first.coverUrl} colors={first.coverColors} />}
+            {second && <Cover theme={second.coverTheme} title={displayTitle(second.title, second.audience)} coverUrl={second.coverUrl} colors={second.coverColors} />}
           </div>
         </div>
       </section>

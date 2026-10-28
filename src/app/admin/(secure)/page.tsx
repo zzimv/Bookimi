@@ -2,7 +2,10 @@ import Link from "next/link";
 import { db } from "@/lib/db";
 import { requireAdmin } from "@/lib/admin";
 import { getReadiness } from "@/lib/settings";
-import { incomeThisYear } from "@/lib/npd";
+import { incomeThisYear, npdForecast } from "@/lib/npd";
+import { dailySeries, dayLabel, npdProgress } from "@/lib/dashboard";
+import { Gauge, LineChart, Progress } from "@/components/charts";
+import { ruDate } from "@/lib/pricing";
 import { cfg } from "@/lib/settings";
 import { spentTodayRub } from "@/lib/limits";
 
@@ -21,7 +24,11 @@ export default async function Page({ searchParams }: { searchParams: Promise<{ d
   const income = await incomeThisYear();
   const limits = await cfg("limits");
   const spent = await spentTodayRub();
-  const pct = Math.min(100, (income / tax.npdYearLimitRub) * 100);
+  const npd = npdProgress(income, tax.npdYearLimitRub);
+  const npdDate = npdForecast(income, tax.npdYearLimitRub);
+  const since14 = new Date(Date.now() - 14 * 86400_000);
+  const paid14 = await db.order.findMany({ where: { paidAt: { gte: since14 }, status: { notIn: ["REFUNDED", "CANCELLED"] } }, select: { paidAt: true, totalRub: true } });
+  const rev14 = dailySeries(paid14.map((o) => ({ at: o.paidAt!, value: o.totalRub })), 14);
   return (
     <>
       <h1 style={{ fontSize: "var(--fs-xl)" }}>Главная</h1>
@@ -48,14 +55,25 @@ export default async function Page({ searchParams }: { searchParams: Promise<{ d
         <Link href="/admin/podderzhka" className="kpi" style={{ textDecoration: "none", color: "inherit" }}><small>Обращения</small><b>{tickets}</b></Link>
         <Link href="/admin/otzyvy" className="kpi" style={{ textDecoration: "none", color: "inherit" }}><small>Отзывы на модерации</small><b>{reviews}</b></Link>
         <div className="kpi"><small>Оплат сегодня</small><b>{todayOrders}</b></div>
-        <div className="kpi"><small>Генерация сегодня</small><b>{spent} ₽</b><small>из {limits.dailySpendRub} ₽</small></div>
       </div>
-      {tax.regime === "npd" && (
-        <section className="panel" style={{ marginTop: 16 }}>
-          <b>Лимит НПД: {income.toLocaleString("ru-RU")} ₽ из {tax.npdYearLimitRub.toLocaleString("ru-RU")} ₽</b>
-          <div className={`bar ${pct >= 95 ? "bar--bad" : pct >= 80 ? "bar--warn" : ""}`} style={{ marginTop: 8 }}><i style={{ width: `${pct}%` }} /></div>
+      <div className="grid2" style={{ marginTop: 16 }}>
+        <section className="panel">
+          <LineChart title="Выручка, 14 дней" unit="₽" height={140} points={rev14.map((r) => ({ label: dayLabel(r.day), value: r.value }))} />
+          <p className="small" style={{ margin: "10px 0 0" }}><Link href="/admin/dashboard">Все графики →</Link></p>
         </section>
-      )}
+        <section className="panel" style={{ display: "grid", gap: 18, alignContent: "start" }}>
+          <Progress title="Генерация сегодня" value={spent} max={limits.dailySpendRub} />
+          {tax.regime === "npd" && (
+            <Gauge
+              title="Лимит НПД"
+              value={income}
+              max={tax.npdYearLimitRub}
+              forecast={npd.yearEnd}
+              note={npdDate ? <>Темп: лимит будет достигнут {ruDate(npdDate)}.</> : null}
+            />
+          )}
+        </section>
+      </div>
     </>
   );
 }

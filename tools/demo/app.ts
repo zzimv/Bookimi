@@ -2,12 +2,22 @@
 // но без сервера. Оплата понарошку, фото остаётся в браузере. Сборка: node tools/demo/build.mjs
 import { quote, etaDate, ruDate, type CatalogAddon, type CatalogFormat } from "../../src/lib/pricing";
 import { DemoTextProvider, personalize, dedicationText, type StoryText } from "../../src/lib/gen/text";
-import { planFor } from "../../src/lib/story-plans";
-import { demoSceneSvg, watermark, THEME_BY_STORY } from "../../src/lib/gen/demo-art";
-import { STORIES, STYLES, FORMATS, ADDONS, FAQ } from "../../src/lib/catalog-defaults";
+import { FORMATS, ADDONS, FAQ } from "../../src/lib/catalog-defaults";
+import { getPlots, plotBySlug } from "../../src/content/registry";
+import { renderDemoSpread, watermark } from "../../src/content/art/render";
+import { ART_STYLE_IDS } from "../../src/content/profiles";
 import { AGE_GROUPS, HAIR, HAIRSTYLE, CLOTHES, INTERESTS, OCCASION_CHIPS, EXTRA_ROLES, DEDICATIONS, Answers, type QuizAnswers } from "../../src/lib/quiz";
 import { applyGender, fillNames } from "../../src/lib/declension";
 import QRCode from "qrcode";
+
+// Каталог демо-стенда — детские сюжеты и стили из контент-движка (стенд переделывает демо-агент)
+const STORIES = getPlots({ audience: "CHILD" }).map((p) => ({ slug: p.slug, title: p.title, tagline: p.tagline, description: p.description, ageMin: p.ageMin ?? 2, ageMax: p.ageMax ?? 10 }));
+const STYLES = ART_STYLE_IDS.filter((s) => s.audiences.includes("CHILD")).map((s) => ({ key: s.id, title: s.title, description: s.oneLine, active: true }));
+function demoSceneSvg(o: { slug: string; index: number; wide?: boolean; hero: { hair?: string; gender?: string; glasses?: boolean; longHair?: boolean }; extras?: number; caption?: string }) {
+  const plot = plotBySlug(o.slug) ?? getPlots({ audience: "CHILD" })[0];
+  const roles = S.a.extras.slice(0, o.extras ?? 0).map((e) => ({ role: e.role, look: {} }));
+  return renderDemoSpread({ plot, spreadIndex: o.index % 13, wide: o.wide, artStyle: S.a.artStyle, mood: S.a.mood || null, hero: o.hero, extras: roles, caption: o.caption });
+}
 
 // ───────── состояние ─────────
 type Screen =
@@ -99,7 +109,7 @@ function art(index: number, wm: boolean, wide = index > 0) {
   const slug = S.a.story.slug || "imya-i-zvyozdnyj-drakonchik";
   const v = S.variants[index] ?? 0;
   let svg = demoSceneSvg({
-    theme: THEME_BY_STORY[slug] ?? "dragon",
+    slug,
     index: index + v * 13,
     wide,
     hero: { hair: S.a.appearance.hair, gender: S.a.hero.gender, glasses: S.a.appearance.glasses, longHair: /длинн|хвост|косич|кудр/.test(S.a.appearance.hairstyle ?? "") },
@@ -111,7 +121,7 @@ function art(index: number, wm: boolean, wide = index > 0) {
 }
 
 function storyCover(slug: string) {
-  return svgUri(demoSceneSvg({ theme: THEME_BY_STORY[slug] ?? "dragon", index: 0, hero: { hair: "русые" } }));
+  return svgUri(demoSceneSvg({ slug, index: 0, hero: { hair: "русые" } }));
 }
 
 function quoteNow() {
@@ -178,8 +188,8 @@ function quizStep() {
     default:
       return `<h1>Стиль и посвящение</h1><span class="label">Стиль иллюстраций</span>
         <div class="choice-cards">${STYLES.filter((s) => s.active).map((s, i) => `
-          <button type="button" class="choice" data-act="style" data-key="${s.key}" aria-pressed="${a.style === s.key}">
-            <img class="thumb style-${s.key}" src="${storyCover(STORIES[i].slug)}" alt=""><span><strong>${esc(s.title)}</strong><span>${esc(s.description)}</span></span>
+          <button type="button" class="choice" data-act="style" data-key="${s.key}" aria-pressed="${a.artStyle === s.key}">
+            <img class="thumb style-${s.key}" src="${storyCover(STORIES[i % STORIES.length].slug)}" alt=""><span><strong>${esc(s.title)}</strong><span>${esc(s.description)}</span></span>
           </button>`).join("")}</div>
         <span class="label" style="margin-top:16px">Посвящение на первой странице</span>
         <div class="stack">${DEDICATIONS.map((d) => { const t = say(d); return `<button type="button" class="chip chip--wide" data-act="dedication" data-key="${esc(t)}" aria-pressed="${a.dedication === t}">${esc(t)}</button>`; }).join("")}</div>
@@ -215,8 +225,7 @@ function quizError() {
 
 async function writeStory(variant: number) {
   const a = Answers.parse({ ...S.a, extras: S.a.extras.filter((e) => e.name.trim()) });
-  const story = STORIES.find((s) => s.slug === a.story.slug)!;
-  const r = await new DemoTextProvider().write(a, story.title, planFor(a.story.slug), variant);
+  const r = await new DemoTextProvider().write(a, plotBySlug(a.story.slug), variant);
   S.text = personalize(r.raw, a);
 }
 
@@ -515,15 +524,15 @@ document.addEventListener("click", async (e) => {
       else if (g === "flags") (a.appearance as Record<string, unknown>)[key] = !(a.appearance as Record<string, unknown>)[key];
       else if (g === "interests") a.interests = a.interests.includes(key) ? a.interests.filter((x) => x !== key) : a.interests.length < 3 ? [...a.interests, key] : a.interests;
       else if (g === "occasion") a.occasion = { key, custom: a.occasion.custom };
-      else if (g.startsWith("role-")) a.extras[Number(g.slice(5))].role = key;
+      else if (g.startsWith("role-")) a.extras[Number(g.slice(5))].role = key as QuizAnswers["extras"][number]["role"];
       else if (g === "method") S.co.method = key;
       save();
       return render();
     }
     case "story": a.story = { slug: key, idea: "" }; save(); return render();
-    case "style": a.style = key; save(); return render();
+    case "style": a.artStyle = key; save(); return render();
     case "dedication": a.dedication = key; save(); return render();
-    case "extra-add": a.extras.push({ role: "pet", name: "", description: "" }); return render();
+    case "extra-add": a.extras.push({ role: "pet", name: "", description: "", what: "" }); return render();
     case "extra-del": a.extras.splice(Number(key), 1); return render();
     case "q-back": S.step--; return go("quiz");
     case "q-next": {

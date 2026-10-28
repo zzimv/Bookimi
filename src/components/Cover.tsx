@@ -1,10 +1,33 @@
-import type { CoverTheme } from "@/lib/catalog-defaults";
 
 // Обложки-заглушки: собственные простые иллюстрации до загрузки настоящих
 // обложек из админки. Имя героя подставляется CSS-переменной --hero-name
-// (без гидратации карточек).
+// (без гидратации карточек). Пять старых тем нарисованы вручную; остальные темы контент-движка —
+// простая заглушка в цветах темы (colors из каталога).
 
-function Art({ theme }: { theme: CoverTheme }) {
+export type CoverColors = { sky: [string, string]; ground: string; accent: string };
+
+function Generic({ c }: { c: CoverColors }) {
+  return (
+    <svg viewBox="0 0 200 200" aria-hidden="true">
+      <defs>
+        <linearGradient id={`cv-${c.sky.join("").replace(/#/g, "")}`} x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0" stopColor={c.sky[0]} />
+          <stop offset="1" stopColor={c.sky[1]} />
+        </linearGradient>
+      </defs>
+      <rect width="200" height="200" fill={`url(#cv-${c.sky.join("").replace(/#/g, "")})`} />
+      <circle cx="150" cy="46" r="18" fill="#f6e7b8" opacity="0.9" />
+      <path d="M0 150 Q60 120 110 142 T200 132 V200 H0Z" fill={c.ground} />
+      <circle cx="96" cy="118" r="16" fill={c.accent} />
+      <path d="M78 160 q18 -40 36 0z" fill={c.accent} />
+    </svg>
+  );
+}
+
+const OWN = ["winter", "kingdom", "dragon", "ocean", "sleep"];
+
+function Art({ theme, colors }: { theme: string; colors?: CoverColors }) {
+  if (!OWN.includes(theme) && colors) return <Generic c={colors} />;
   switch (theme) {
     case "winter":
       return (
@@ -82,14 +105,14 @@ function Art({ theme }: { theme: CoverTheme }) {
   }
 }
 
-export function Cover({ theme, title, coverUrl }: { theme: CoverTheme; title: string; coverUrl?: string | null }) {
+export function Cover({ theme, title, coverUrl, colors }: { theme: string; title: string; coverUrl?: string | null; colors?: CoverColors }) {
   return (
     <div className="cover">
       {coverUrl ? (
         // eslint-disable-next-line @next/next/no-img-element
         <img src={coverUrl} alt="" loading="lazy" width={600} height={600} />
       ) : (
-        <Art theme={theme} />
+        <Art theme={theme} colors={colors} />
       )}
       <div className="cover__name" aria-hidden="true" />
       <div className="cover__title" aria-hidden="true">{title}</div>

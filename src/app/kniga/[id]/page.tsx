@@ -3,8 +3,9 @@ import { notFound } from "next/navigation";
 import { BookFlow } from "@/components/book/BookFlow";
 import { ownBook } from "@/lib/api";
 import { cfg } from "@/lib/settings";
-import { Answers } from "@/lib/quiz";
+import { AnswersV2, heroAge } from "@/lib/quiz";
 import { dedicationText } from "@/lib/gen/text";
+import { moodsFor } from "@/content/moods";
 
 export const metadata: Metadata = { title: "Ваша книга", robots: { index: false } };
 export const dynamic = "force-dynamic";
@@ -14,7 +15,9 @@ export default async function Page({ params }: { params: Promise<{ id: string }>
   const own = await ownBook(id);
   if (!own) notFound();
   const flags = await cfg("flags");
-  const a = Answers.safeParse(own.book.params);
+  const a = AnswersV2.safeParse(own.book.params);
+  const limits = await cfg("limits");
+  const moods = a.success ? moodsFor(a.data.audience, heroAge(a.data)).map((m) => ({ id: m.id, title: m.title, oneLine: m.oneLine })) : [];
   return (
     <BookFlow
       bookId={id}
@@ -22,6 +25,8 @@ export default async function Page({ params }: { params: Promise<{ id: string }>
       printEnabled={flags.printEnabled}
       extras={a.success ? a.data.extras.map((e) => ({ role: e.role, name: e.name })) : []}
       dedication={a.success ? dedicationText(a.data) : ""}
+      moods={moods}
+      moodChangesPreview={limits.moodChangesPreview}
     />
   );
 }

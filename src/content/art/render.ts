@@ -3,7 +3,7 @@
 // (рисовальщик по plot.heroKind) → фактура стиля → настроение (applyMood) → подпись → водяной знак.
 // Без фреймворков и Node API: собирается в демо-HTML (esbuild) и работает на сервере.
 
-import type { ArtStyle, DemoExtra, DemoLook, DemoSceneCtx, HeroKind, Mood, Plot } from "../types";
+import type { ArtStyle, DemoExtra, DemoLook, DemoSceneCtx, ExtraDrawKind, HeroKind, Mood, Plot } from "../types";
 import { artStyle as artStyleById, extraDrawKind, heroDrawer, themeFor } from "./index";
 import { applyMood } from "./mood";
 import { MOODS } from "../moods";
@@ -27,6 +27,27 @@ export interface DemoRenderOpts {
   wide?: boolean;
   /** Заголовок на обложке (уже с подставленным именем). */
   title?: string;
+}
+
+const GAP = 26;
+
+/** Полуширина фигуры в единицах рисовальщика (масштаб 1), с запасом на руки, хвост и платье. */
+function halfWidth(kind: HeroKind | ExtraDrawKind): number {
+  return { child: 72, teen: 74, adult: 82, pet: 150, toy: 70, custom: 90 }[kind];
+}
+
+/** Масштаб доп. героя относительно главного: пара — на равных, хозяева рядом с питомцем — чуть дальше. */
+function extraScale(kind: ExtraDrawKind, heroKind: HeroKind, role: string): number {
+  if (kind === "toy") return 0.55;
+  if (kind === "custom") return 0.65;
+  if (kind === "pet") return heroKind === "pet" ? 0.85 : 0.55;
+  if (kind === "adult") {
+    if (heroKind === "adult") return role === "partner" ? 1 : 0.95;
+    if (heroKind === "pet") return 0.88;
+    return heroKind === "teen" ? 0.95 : 0.9;
+  }
+  if (kind === "child") return heroKind === "child" ? 0.9 : 0.8;
+  return heroKind === kind ? 0.95 : 0.85; // teen
 }
 
 function resolveStyle(s: DemoRenderOpts["artStyle"]): ArtStyle["demo"] {
@@ -75,6 +96,24 @@ function textureOverlay(style: ArtStyle["demo"], W: number, H: number) {
   }
 }
 
+/** Разбивка заголовка на 1–2 строки по словам (не длиннее max символов, если можно). */
+function titleLines(t: string, max: number): string[] {
+  if (t.length <= max) return [t];
+  const words = t.split(/\s+/);
+  let best = [t];
+  let bestW = Infinity;
+  for (let i = 1; i < words.length; i++) {
+    const a = words.slice(0, i).join(" ");
+    const b = words.slice(i).join(" ");
+    const w = Math.max(a.length, b.length);
+    if (w < bestW) {
+      bestW = w;
+      best = [a, b];
+    }
+  }
+  return best;
+}
+
 export function watermark(W: number, H: number) {
   let marks = "";
   for (let y = 120; y < H; y += 220) for (let x = -200; x < W; x += 420) marks += `<text x="${x}" y="${y}" transform="rotate(-24 ${x} ${y})">БУКИМИ · ПРЕВЬЮ</text>`;
@@ -96,13 +135,31 @@ export function renderDemoSpread(o: DemoRenderOpts): string {
   const left = idx % 2 === 1;
   const hx = left ? W * 0.62 : W * 0.38;
   const heroScale = idx === 0 ? 1.5 : 1.25;
-  const extras = (o.extras ?? []).slice(0, 3).map((e, i) => {
+  const heroFeet = H * 0.6 + 190 * heroScale;
+  // Доп. герои стоят рядом, не перекрывая героя: шаг = полуширина соседа + полуширина героя + зазор,
+  // в сторону центра кадра. Если группа не влезает в кадр — сдвигаем её целиком (герой остаётся в группе).
+  const dir = left ? -1 : 1;
+  const heroHw = halfWidth(heroKind) * heroScale;
+  let edge = heroHw;
+  const placed = (o.extras ?? []).slice(0, 3).map((e, i) => {
     const kind = e.kind ?? extraDrawKind(e.role, heroKind);
-    const k = kind === "pet" || kind === "toy" ? 0.55 : kind === "custom" ? 0.65 : kind === "adult" && heroKind !== "adult" ? 0.9 : 0.75;
-    const x = hx + (i + 1) * 170 * (left ? -1 : 1);
-    return heroDrawer(kind)({ kind: kind === "toy" || kind === "custom" ? heroKind : kind, look: e.look, x, y: H * 0.66, scale: heroScale * k, style, index: idx + i + 1, flip: !left });
+    const scale = heroScale * extraScale(kind, heroKind, e.role);
+    const hw = halfWidth(kind) * scale;
+    const dx = edge + GAP + hw;
+    edge = dx + hw;
+    return { e, i, kind, scale, dx };
   });
-  const hero = heroDrawer(heroKind)({ kind: heroKind, look: o.hero, x: hx, y: H * 0.6, scale: heroScale, style, index: idx, flip: left && heroKind === "pet" });
+  const lo = dir > 0 ? hx - heroHw : hx - edge;
+  const hi = dir > 0 ? hx + edge : hx + heroHw;
+  const shift = hi > W - 12 ? W - 12 - hi : lo < 12 ? 12 - lo : 0;
+  const heroX = hx + shift;
+  const extras = placed.map(({ e, i, kind, scale, dx }) => {
+    // Люди рядом с питомцем стоят чуть дальше (выше по кадру) — питомец остаётся главным
+    const feet = heroFeet - (heroKind === "pet" && kind !== "pet" ? 34 : 10);
+    const drawKind = kind === "toy" || kind === "custom" ? heroKind : kind;
+    return heroDrawer(kind)({ kind: drawKind, look: e.look, x: heroX + dir * dx, y: feet - 190 * scale, scale, style, index: idx + i + 1, flip: !left });
+  });
+  const hero = heroDrawer(heroKind)({ kind: heroKind, look: o.hero, x: heroX, y: H * 0.6, scale: heroScale, style, index: idx, flip: left && heroKind === "pet" });
 
   // Фильтр стиля — только на фигуры: на фоне он рвёт края кадра
   const fx = style.filter && ["wobble", "posterize", "soft"].includes(style.filter) ? ` filter="url(#${style.filter})"` : "";
@@ -114,8 +171,16 @@ export function renderDemoSpread(o: DemoRenderOpts): string {
   svg = applyMood(svg, resolveMood(o.mood));
 
   let over = "";
-  if (o.title && idx === 0)
-    over += `<rect x="0" y="0" width="${W}" height="150" fill="${style.palette.paper}" opacity=".85"/><text x="${W / 2}" y="95" text-anchor="middle" font-family="sans-serif" font-size="56" font-weight="700" fill="${style.palette.ink}">${escapeXml(o.title)}</text>`;
+  if (o.title && idx === 0) {
+    // Длинное название — в две строки и мельче, чтобы не вылезало за край обложки
+    const lines = titleLines(o.title, 26);
+    const fs = Math.min(56, Math.floor((W * 0.92) / (Math.max(...lines.map((l) => l.length)) * 0.56)));
+    const band = 40 + lines.length * fs * 1.2;
+    over += `<rect x="0" y="0" width="${W}" height="${band}" fill="${style.palette.paper}" opacity=".85"/>`;
+    lines.forEach((l, i) => {
+      over += `<text x="${W / 2}" y="${Math.round(20 + fs * (1 + i * 1.2))}" text-anchor="middle" font-family="sans-serif" font-size="${fs}" font-weight="700" fill="${style.palette.ink}">${escapeXml(l)}</text>`;
+    });
+  }
   if (o.caption) over += `<text x="${W / 2}" y="${H - 34}" text-anchor="middle" font-family="sans-serif" font-size="26" fill="#fff" opacity=".8">${escapeXml(o.caption)}</text>`;
   if (o.watermark) over += watermark(W, H);
   return over ? svg.replace(/<\/svg>\s*$/, `${over}</svg>`) : svg;

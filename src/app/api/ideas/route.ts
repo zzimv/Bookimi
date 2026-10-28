@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { Answers } from "@/lib/quiz";
+import { AnswersV2 } from "@/lib/quiz";
 import { body, deviceKey, err, json, throttle } from "@/lib/api";
 import { cfg } from "@/lib/settings";
 import { textProvider } from "@/lib/gen/text";
@@ -14,10 +14,10 @@ export async function POST(req: Request) {
   if (!b) return err("Опишите идею в одном-двух предложениях");
   if (checkInputs([b.idea])) return err("Уберите недопустимые слова или ссылки");
   if (!(await hit(await deviceKey(), "ideas", 10))) return err("На сегодня идей достаточно — выберите один из вариантов", 429);
-  const a = Answers.safeParse(b.answers);
+  const a = AnswersV2.safeParse(b.answers);
   const ai = await cfg("ai");
   try {
-    const ideas = await textProvider(ai.text).ideas(b.idea, a.success ? a.data : Answers.parse({ hero: { name: "-", gender: "boy" } }));
+    const ideas = await textProvider(ai.text).ideas(b.idea, a.success ? a.data : AnswersV2.parse({ hero: { name: "-", gender: "boy" } }));
     return json({ ideas });
   } catch {
     return err("Не получилось придумать варианты. Попробуйте ещё раз.", 502);

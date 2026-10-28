@@ -7,6 +7,7 @@ export const QUEUES = {
   generatePreview: "generate-preview",
   generateFull: "generate-full",
   redraw: "redraw",
+  mood: "mood",
   audio: "audio",
   purgePhotos: "purge-photos",
   cancelUnpaid: "cancel-unpaid",

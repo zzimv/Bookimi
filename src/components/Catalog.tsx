@@ -26,7 +26,7 @@ export function CatalogFilters({ occasions }: { occasions: { slug: string; title
       const max = Number(el.dataset.ageMax);
       const okAge = !a || a.key === "all" || (min <= a.max! && max >= a.min!);
       // Сюжеты без привязки к поводу подходят к любому поводу
-      const okOcc = occ === "all" || el.dataset.occasion === occ || el.dataset.occasion === "";
+      const okOcc = occ === "all" || (el.dataset.occasions ?? "").split(" ").includes(occ) || el.dataset.occasion === "";
       el.hidden = !(okAge && okOcc);
     });
   }, [age, occ, gender]);

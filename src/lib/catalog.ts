@@ -1,23 +1,40 @@
 import { db, hasDatabase } from "./db";
-import {
-  AGE_PAGES,
-  OCCASIONS,
-  STORIES,
-  PDF_PRICE,
-  type CoverTheme,
-} from "./catalog-defaults";
+import { AGE_PAGES, OCCASIONS, PDF_PRICE, plotAges } from "./catalog-defaults";
 
-// Публичный срез каталога: без шаблонов текста и промптов (они остаются на сервере).
+export { plotAges };
+import { PLOTS } from "../content/registry";
+import { themeFor } from "../content/art/index";
+import type { AudienceKey } from "../content/profiles";
+import type { HeroKind, Plot, PlotExtras } from "../content/types";
+
+// Публичный срез каталога: без шаблонов текста, системных промптов и планов сцен (они остаются на сервере).
+// Источник — таблица Story (правится в админке); если БД пуста или недоступна — сюжеты из реестра контента.
 export interface PublicStory {
   slug: string;
   title: string;
   tagline: string;
   description: string;
+  audience: AudienceKey;
+  segments: string[];
+  heroKind: HeroKind;
+  /** Голос книги (id из TEXT_STYLE_IDS). */
+  textStyle: string | null;
+  /** Рекомендуемые стили картинок, лучший первый. */
+  artStyles: string[];
+  /** Ключи поводов, главный первый. */
+  occasions: string[];
   ageMin: number;
   ageMax: number;
+  /** Главный повод (первый из occasions) — для фильтров каталога. */
   occasionSlug: string | null;
-  coverTheme: CoverTheme;
+  /** Ключ демо-темы (DEMO_THEME_KEYS) — обложка-заглушка. */
+  coverTheme: string;
+  /** Цвета обложки-заглушки для тем без своей картинки. */
+  coverColors: { sky: [string, string]; ground: string; accent: string };
   coverUrl: string | null;
+  /** Доп. герои сюжета: роли, минимум/максимум, подсказка анкете. */
+  extras: PlotExtras;
+  interests: string[];
   seoTitle?: string | null;
   seoDescription?: string | null;
 }
@@ -31,37 +48,107 @@ export interface PublicOccasion {
   seoDescription?: string | null;
 }
 
-const fallbackStories: PublicStory[] = STORIES.map((s) => ({ ...s, coverUrl: null }));
+function colors(theme: string) {
+  const t = themeFor(theme);
+  return { sky: t.sky, ground: t.ground, accent: t.accent };
+}
 
-export async function getStories(): Promise<PublicStory[]> {
-  if (!hasDatabase) return fallbackStories;
+function fromPlot(p: Plot): PublicStory {
+  const [ageMin, ageMax] = plotAges(p);
+  return {
+    slug: p.slug,
+    title: p.title,
+    tagline: p.tagline,
+    description: p.description,
+    audience: p.audience,
+    segments: p.segments,
+    heroKind: p.heroKind,
+    textStyle: p.textStyle,
+    artStyles: p.artStyles,
+    occasions: p.occasions,
+    ageMin,
+    ageMax,
+    occasionSlug: p.occasions[0] ?? null,
+    coverTheme: p.theme,
+    coverColors: colors(p.theme),
+    coverUrl: null,
+    extras: p.extras,
+    interests: p.interests ?? [],
+  };
+}
+
+const fallbackStories: PublicStory[] = PLOTS.map(fromPlot);
+
+export interface StoryFilter {
+  audience?: AudienceKey;
+  segment?: string;
+}
+
+const applyFilter = (list: PublicStory[], f: StoryFilter) =>
+  list.filter((s) => (!f.audience || s.audience === f.audience) && (!f.segment || s.segments.includes(f.segment)));
+
+export async function getStories(f: StoryFilter = {}): Promise<PublicStory[]> {
+  if (!hasDatabase) return applyFilter(fallbackStories, f);
   try {
     const rows = await db.story.findMany({
-      where: { isActive: true, audience: "CHILD" },
+      where: { isActive: true, ...(f.audience ? { audience: f.audience } : {}) },
       orderBy: { sortOrder: "asc" },
       include: { occasion: { select: { slug: true } } },
     });
-    if (rows.length === 0) return fallbackStories;
-    return rows.map((r) => ({
-      slug: r.slug,
-      title: r.title,
-      tagline: r.tagline,
-      description: r.description,
-      ageMin: r.ageMin,
-      ageMax: r.ageMax,
-      occasionSlug: r.occasion?.slug ?? null,
-      coverTheme: r.coverTheme as CoverTheme,
-      coverUrl: r.coverUrl,
-      seoTitle: r.seoTitle,
-      seoDescription: r.seoDescription,
-    }));
+    if (rows.length === 0) return applyFilter(fallbackStories, f);
+    const bySlug = new Map(PLOTS.map((p) => [p.slug, p]));
+    return applyFilter(
+      rows.map((r) => {
+        const plot = bySlug.get(r.slug);
+        const occasions = r.occasions.length ? r.occasions : r.occasion ? [r.occasion.slug] : [];
+        return {
+          slug: r.slug,
+          title: r.title,
+          tagline: r.tagline,
+          description: r.description,
+          audience: r.audience as AudienceKey,
+          segments: r.segments,
+          heroKind: r.heroKind as HeroKind,
+          textStyle: r.textStyle,
+          artStyles: r.artStyles,
+          occasions,
+          ageMin: r.ageMin,
+          ageMax: r.ageMax,
+          occasionSlug: occasions[0] ?? null,
+          coverTheme: r.coverTheme,
+          coverColors: colors(r.coverTheme),
+          coverUrl: r.coverUrl,
+          extras: plot?.extras ?? { roles: [], min: 0, max: 3 },
+          interests: plot?.interests ?? [],
+          seoTitle: r.seoTitle,
+          seoDescription: r.seoDescription,
+        };
+      }),
+      f,
+    );
   } catch {
-    return fallbackStories;
+    return applyFilter(fallbackStories, f);
   }
 }
 
 export async function getStory(slug: string) {
   return (await getStories()).find((s) => s.slug === slug) ?? null;
+}
+
+/**
+ * Сюжеты для повода: сначала те, у кого повод в occasions (главный — выше), затем остальные
+ * той же аудитории (любой сюжет дарится на любой повод — крючки вплетаются при генерации).
+ */
+export async function getStoriesForOccasion(occasionKey: string, audience?: AudienceKey): Promise<PublicStory[]> {
+  const list = await getStories(audience ? { audience } : {});
+  const rank = (s: PublicStory) => {
+    const i = s.occasions.indexOf(occasionKey);
+    return i < 0 ? 1000 : i;
+  };
+  return list
+    .map((s, i) => ({ s, i }))
+    .sort((a, b) => rank(a.s) - rank(b.s) || a.i - b.i)
+    .map((x) => x.s);
 }
 
 export async function getOccasions(): Promise<PublicOccasion[]> {
@@ -117,12 +204,16 @@ export async function getApprovedReviews() {
   }
 }
 
-export function ageLabel(min: number, max: number) {
+export function ageLabel(min: number, max: number, audience: AudienceKey = "CHILD") {
+  if (audience === "ADULT") return "Для взрослых";
+  if (audience === "PET") return "Собакам и кошкам";
   return `Возраст ${min}–${max}`;
 }
 
-export function displayTitle(title: string) {
-  return title.replace("[Имя]", "Ваш ребёнок");
+const HERO_WORD: Record<AudienceKey, string> = { CHILD: "Ваш ребёнок", TEEN: "Ваш герой", ADULT: "Ваш герой", PET: "Ваш питомец" };
+
+export function displayTitle(title: string, audience: AudienceKey = "CHILD") {
+  return title.replace("[Имя]", HERO_WORD[audience]);
 }
 
 export const rub = (n: number) => `${n.toLocaleString("ru-RU").replace(/,/g, " ")} ₽`;

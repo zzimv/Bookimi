@@ -8,17 +8,12 @@ import { canAcceptPayments } from "@/lib/settings";
 import { PayBox } from "@/components/book/PayBox";
 import { ruDate } from "@/lib/pricing";
 import { METHOD_TITLES } from "@/lib/shipping";
+import { OrderTimeline } from "../OrderTimeline";
+import { ThanksPanel } from "../ThanksPanel";
+import { journeyOrder } from "../journey-data";
 
 export const metadata: Metadata = { title: "Заказ", robots: { index: false } };
 export const dynamic = "force-dynamic";
-
-const FLOW = [
-  ["PAID", "Оплачен"],
-  ["IN_PRINT", "В печати"],
-  ["PACKED", "Упакован"],
-  ["SHIPPED", "Передан в доставку"],
-  ["DELIVERED", "Доставлен"],
-] as const;
 
 export default async function Page({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -33,14 +28,24 @@ export default async function Page({ params }: { params: Promise<{ id: string }>
     transfer: ["Перевод по номеру телефона или карты", "Подтверждаем вручную, обычно до 2 часов в рабочее время"],
     yookassa: ["Банковской картой", "Через ЮKassa"],
   };
-  const bookId = order.items.find((i) => i.bookId)?.bookId;
   const pending = order.status === "PENDING_PAYMENT" || order.status === "AWAITING_CONFIRMATION";
-  const idx = FLOW.findIndex(([k]) => k === order.status);
+  const jo = await journeyOrder(order);
+  const bookId = jo.bookId;
+  const print = order.whoPrints === "bookimi";
+  // Благодарность — первые 3 дня после оплаты, пока заказ не уехал
+  const fresh = order.paidAt && Date.now() - order.paidAt.getTime() < 3 * 86400_000 && ["PAID", "IN_PRINT"].includes(order.status);
+  const firstOrder = fresh ? (await db.order.count({ where: { userId: order.userId, paidAt: { not: null } } })) <= 1 : false;
 
   return (
     <div className="flow">
       <p className="small muted">Заказ {order.publicCode}</p>
-      <h1>{pending ? "Оплата заказа" : order.status === "CANCELLED" ? "Заказ отменён" : order.status === "REFUNDED" ? "Деньги возвращены" : "Спасибо за заказ!"}</h1>
+      <h1>{pending ? "Оплата заказа" : order.status === "CANCELLED" ? "Заказ отменён" : order.status === "REFUNDED" ? "Деньги возвращены" : order.status === "DELIVERED" ? "Книга у вас" : "Спасибо за заказ"}</h1>
+
+      {fresh && (
+        <div style={{ marginBottom: 16 }}>
+          <ThanksPanel heroAcc={jo.heroAcc} print={print} bookId={bookId} firstOrder={firstOrder} ready={Boolean(jo.bookReadyAt)} />
+        </div>
+      )}
 
       <div className="panel">
         <table className="tbl" style={{ border: 0 }}>
@@ -64,29 +69,29 @@ export default async function Page({ params }: { params: Promise<{ id: string }>
             initialStatus={order.status}
             demo={isDemo()}
             methods={providers.map((p) => ({ key: p.name, title: NOTES[p.name][0], note: NOTES[p.name][1] }))}
+            thanks={{ heroAcc: jo.heroAcc, print, bookId }}
           />
         </div>
       )}
 
       {!pending && order.status !== "CANCELLED" && order.status !== "REFUNDED" && (
         <div className="panel" style={{ marginTop: 16 }}>
-          {order.whoPrints === "bookimi" ? (
-            <>
-              <ol className="timeline">
-                {FLOW.map(([k, label], i) => (
-                  <li key={k} className={i <= idx ? "done" : ""}>{label}</li>
-                ))}
-              </ol>
-              {order.readyDate && <p>Дата готовности: <b>{ruDate(order.readyDate)}</b>{order.shipment?.etaDate && <> · доставка ориентировочно к <b>{ruDate(order.shipment.etaDate)}</b></>}</p>}
-              {order.shipment?.trackNumber && <p>Трек-номер: <b>{order.shipment.trackNumber}</b></p>}
-            </>
-          ) : (
-            <p>Книга рисуется. PDF во всех форматах появится в личном кабинете — пришлём сообщение.</p>
+          <h2 style={{ fontSize: "var(--fs-lg)" }}>Как идёт заказ</h2>
+          <OrderTimeline order={jo} />
+          {print && order.shipment && (
+            <p className="small muted" style={{ marginTop: 12 }}>
+              Доставка: {METHOD_TITLES[order.shipment.method as keyof typeof METHOD_TITLES] ?? order.shipment.method}
+              {order.readyDate && <> · печать к {ruDate(order.readyDate)}</>}
+              {order.shipment.etaDate && <> · у вас ориентировочно {ruDate(order.shipment.etaDate)}</>}
+            </p>
           )}
           {order.receipts.filter((r) => r.status === "issued").map((r) => (
             <p key={r.id} className="small">Чек: <a href={r.url ?? "#"} target="_blank" rel="noopener">открыть</a></p>
           ))}
-          {bookId && <Link className="btn btn--primary" href={`/kabinet/kniga/${bookId}`}>Открыть книгу в кабинете</Link>}
+          <div className="row" style={{ marginTop: 12 }}>
+            {bookId && !fresh && <Link className="btn btn--primary btn--sm" href={`/kabinet/kniga/${bookId}`}>Открыть книгу в кабинете</Link>}
+            {order.status === "DELIVERED" && <Link className="btn btn--ghost btn--sm" href="/kabinet/otzyv">Рассказать, как вам книга</Link>}
+          </div>
         </div>
       )}
     </div>

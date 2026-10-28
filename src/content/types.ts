@@ -190,6 +190,10 @@ export interface Mood {
   id: string;
   title: string;
   oneLine: string;
+  /** Кому подходит (анкета показывает moodsFor(audience)); пусто — всем. */
+  audiences?: AudienceKey[];
+  /** Минимальный возраст героя-подростка (романтичное — 14+). */
+  minAge?: number;
   /** EN, добавка к промпту Qwen. */
   promptAdd: string;
   /** EN, добавка к негативу. */

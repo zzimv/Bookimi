@@ -12,7 +12,7 @@ export async function catalogData() {
   return {
     name: "БУКИМИ",
     url: base,
-    description: "Персональные детские книги по фото ребёнка: ребёнок — главный герой сказки, его лицо на иллюстрациях, имя в тексте.",
+    description: "Персональные иллюстрированные книги по фото: для детей, подростков, взрослых и о питомцах. Герой узнаваем на иллюстрациях, его имя — в тексте.",
     language: "ru",
     country: "RU",
     ageRating: "0+",
@@ -23,7 +23,7 @@ export async function catalogData() {
       "Бесплатное превью: обложка и 2 разворота за 2–5 минут",
       "Покупка PDF или печатной книги",
     ],
-    stories: stories.map((s) => ({ title: displayTitle(s.title), url: `${base}/skazki/${s.slug}`, age: `${s.ageMin}-${s.ageMax}`, summary: s.tagline })),
+    stories: stories.map((s) => ({ title: displayTitle(s.title, s.audience), url: `${base}/skazki/${s.slug}`, audience: s.audience, age: `${s.ageMin}-${s.ageMax}`, occasions: s.occasions, summary: s.tagline })),
     occasions: occasions.map((o) => ({ title: o.title, url: `${base}/povod/${o.slug}` })),
     prices: prices.map((p) => ({ product: p.title, priceRub: p.priceRub, type: p.kind === "PDF" ? "digital" : "printed", pages: 24 })),
     addons: addons.map((a) => ({ title: a.title, priceRub: a.priceRub, percentOff: a.percentOff })),

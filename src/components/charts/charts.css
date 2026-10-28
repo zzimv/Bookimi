@@ -1,0 +1,134 @@
+/* Графики админки: рукописные SVG без библиотек.
+   Цвета — токены сайта (globals.css) + шаги серий, проверенные на контраст и различимость
+   при дальтонизме (валидатор палитры: светлая и тёмная темы, контраст ≥ 3:1 к фону).
+   Тёмная тема: при :root[data-theme="dark"] или системной тёмной теме, если сайт её включил
+   (:root[data-theme="auto"]). Пока в globals.css нет тёмных токенов, графики светлые вместе с сайтом. */
+.chart {
+  --ch-surface: var(--white, #fff);
+  --ch-ink: var(--ink, #1a2b24);
+  --ch-muted: var(--ink-soft, #4d5f57);
+  --ch-grid: var(--line, #d9e2dc);
+  --ch-track: var(--sage, #e3ede6);
+  --ch-1: #25815a;        /* основная серия */
+  --ch-1-soft: rgba(37, 129, 90, 0.12);
+  --ch-2: #b9811a;        /* прогноз, второстепенная серия */
+  --ch-bad: var(--danger, #a3392b);
+  --ch-warn: #b9811a;
+  margin: 0;
+  min-width: 0;
+  color: var(--ch-ink);
+  font-size: var(--fs-sm, 0.875rem);
+}
+:root[data-theme="dark"] .chart {
+  --ch-surface: #17201c;
+  --ch-ink: #e8efe9;
+  --ch-muted: #a9b8af;
+  --ch-grid: #2c3a33;
+  --ch-track: #24302a;
+  --ch-1: #3f9c72;
+  --ch-1-soft: rgba(63, 156, 114, 0.18);
+  --ch-2: #bf8a26;
+  --ch-bad: #e0705f;
+  --ch-warn: #bf8a26;
+}
+@media (prefers-color-scheme: dark) {
+  :root[data-theme="auto"] .chart {
+    --ch-surface: #17201c;
+    --ch-ink: #e8efe9;
+    --ch-muted: #a9b8af;
+    --ch-grid: #2c3a33;
+    --ch-track: #24302a;
+    --ch-1: #3f9c72;
+    --ch-1-soft: rgba(63, 156, 114, 0.18);
+    --ch-2: #bf8a26;
+    --ch-bad: #e0705f;
+    --ch-warn: #bf8a26;
+  }
+}
+
+.chart__head { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 4px 12px; margin-bottom: 10px; }
+.chart__title { font-weight: 700; color: var(--ch-ink); }
+.chart__sub { color: var(--ch-muted); font-size: 0.8rem; }
+.chart__legend { display: flex; flex-wrap: wrap; gap: 4px 14px; color: var(--ch-muted); font-size: 0.8rem; margin-top: 8px; }
+.chart__legend i { display: inline-block; width: 14px; height: 3px; border-radius: 2px; vertical-align: middle; margin-right: 6px; background: var(--ch-1); }
+.chart__legend i.is-limit { height: 0; border-top: 2px dashed var(--ch-bad); background: none; }
+.chart__legend i.is-bad { height: 10px; width: 10px; background: var(--ch-bad); }
+.chart__legend i.is-fc { background: var(--ch-2); }
+.chart__empty { color: var(--ch-muted); padding: 24px 0; text-align: center; }
+
+/* Плоскость: SVG тянется по ширине, подписи — HTML (не масштабируются вместе с SVG) */
+.chart__plot { position: relative; margin-left: 52px; }
+.chart__plot svg { display: block; width: 100%; height: 100%; overflow: visible; }
+.chart__plot .grid { stroke: var(--ch-grid); stroke-width: 1; vector-effect: non-scaling-stroke; }
+.chart__plot .base { stroke: var(--ch-muted); stroke-width: 1; vector-effect: non-scaling-stroke; }
+.chart__plot .line { fill: none; stroke: var(--ch-1); stroke-width: 2; vector-effect: non-scaling-stroke; stroke-linejoin: round; stroke-linecap: round; }
+.chart__plot .area { fill: var(--ch-1-soft); }
+.chart__plot .col { fill: var(--ch-1); }
+.chart__plot .col.is-over { fill: var(--ch-bad); }
+.chart__plot .limit { stroke: var(--ch-bad); stroke-width: 2; stroke-dasharray: 6 4; vector-effect: non-scaling-stroke; }
+.chart__plot .hit { fill: transparent; }
+.chart__plot .hit:hover { fill: var(--ch-grid); fill-opacity: 0.35; }
+.chart__y { position: absolute; left: -52px; width: 46px; text-align: right; transform: translateY(-50%); color: var(--ch-muted); font-size: 0.72rem; line-height: 1; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.chart__x { position: relative; height: 18px; margin-left: 52px; margin-top: 4px; }
+.chart__x span { position: absolute; transform: translateX(-50%); color: var(--ch-muted); font-size: 0.72rem; white-space: nowrap; }
+.chart__x span:first-child { transform: none; }
+.chart__x span:last-child { transform: translateX(-100%); }
+.chart__dot { position: absolute; width: 10px; height: 10px; border-radius: 50%; background: var(--ch-1); box-shadow: 0 0 0 2px var(--ch-surface); transform: translate(-50%, -50%); }
+.chart__tag { position: absolute; right: 0; transform: translateY(-120%); font-size: 0.72rem; color: var(--ch-bad); font-weight: 700; background: var(--ch-surface); padding: 0 4px; border-radius: 4px; }
+.chart__last { position: absolute; transform: translate(-100%, -150%); font-size: 0.78rem; font-weight: 700; color: var(--ch-ink); white-space: nowrap; }
+
+/* Горизонтальные полосы и воронка: строки HTML, полоса — SVG */
+.hbars { display: grid; gap: 6px; }
+.hbars__row { display: grid; grid-template-columns: minmax(84px, 34%) 1fr auto; gap: 10px; align-items: center; }
+.hbars__label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--ch-ink); }
+.hbars__val { color: var(--ch-ink); font-weight: 700; font-variant-numeric: tabular-nums; white-space: nowrap; text-align: right; min-width: 3ch; }
+.hbars__val small { color: var(--ch-muted); font-weight: 600; margin-left: 6px; }
+.hbars svg { display: block; width: 100%; height: 14px; }
+.hbars .track { fill: var(--ch-track); }
+.hbars .fill { fill: var(--ch-1); }
+
+.fnl { display: grid; gap: 0; }
+.fnl__row { display: grid; grid-template-columns: minmax(96px, 30%) 1fr 64px; gap: 10px; align-items: center; }
+.fnl__row svg { display: block; width: 100%; height: 30px; }
+.fnl__row .fill { fill: var(--ch-1); }
+.fnl__label { color: var(--ch-ink); }
+.fnl__n { font-weight: 800; font-variant-numeric: tabular-nums; text-align: right; color: var(--ch-ink); }
+.fnl__conv { display: grid; grid-template-columns: minmax(96px, 30%) 1fr 64px; gap: 10px; color: var(--ch-muted); font-size: 0.75rem; line-height: 1; padding: 3px 0; }
+.fnl__conv span:nth-child(2) { text-align: center; }
+
+/* Шкала (полукруг) и прогресс */
+.gauge { display: grid; justify-items: center; gap: 2px; }
+.gauge svg { width: 100%; max-width: 280px; height: auto; }
+.gauge .track { fill: none; stroke: var(--ch-track); stroke-width: 14; }
+.gauge .val { fill: none; stroke: var(--ch-1); stroke-width: 14; stroke-linecap: butt; }
+.gauge .val.is-warn { stroke: var(--ch-warn); }
+.gauge .val.is-bad { stroke: var(--ch-bad); }
+.gauge .fc { fill: none; stroke: var(--ch-2); stroke-width: 14; stroke-dasharray: 2 3; opacity: 0.55; }
+.gauge .tick { stroke: var(--ch-ink); stroke-width: 2; }
+.gauge .tick-label { fill: var(--ch-muted); font-size: 9px; font-family: var(--font-body, system-ui); }
+.gauge__big { font: 800 var(--fs-lg, 1.5rem)/1.1 var(--font-head, system-ui); color: var(--ch-ink); margin-top: -46px; }
+.gauge__note { color: var(--ch-muted); font-size: 0.8rem; text-align: center; max-width: 34ch; }
+.gauge__state { font-weight: 700; font-size: 0.8rem; }
+.gauge__state.is-ok { color: var(--ch-1); } .gauge__state.is-warn { color: var(--ch-warn); } .gauge__state.is-bad { color: var(--ch-bad); }
+
+.meter svg { display: block; width: 100%; height: 12px; }
+.meter .track { fill: var(--ch-track); }
+.meter .fill { fill: var(--ch-1); }
+.meter .fill.is-warn { fill: var(--ch-warn); }
+.meter .fill.is-bad { fill: var(--ch-bad); }
+.meter__row { display: flex; justify-content: space-between; gap: 8px; margin-bottom: 6px; }
+.meter__row b { font-variant-numeric: tabular-nums; }
+
+/* Таблица для скринридеров (данные графика) */
+.chart-sr { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
+
+@media (max-width: 520px) {
+  .chart__plot, .chart__x { margin-left: 40px; }
+  .chart__y { left: -40px; width: 36px; }
+  .hbars__row { grid-template-columns: minmax(70px, 38%) 1fr auto; }
+  .fnl__row, .fnl__conv { grid-template-columns: minmax(80px, 34%) 1fr 48px; }
+}
+@media (forced-colors: active) {
+  .chart__plot .line, .chart__plot .limit { stroke: CanvasText; }
+  .chart__plot .col, .hbars .fill, .fnl__row .fill, .meter .fill { fill: Highlight; }
+}

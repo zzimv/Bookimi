@@ -11,6 +11,8 @@ const patterns = [
   /\d{8,10}:AA[0-9A-Za-z_-]{30,}/, // токен Telegram-бота
   /(S3_SECRET_KEY|PAYMENT_SBP_API_KEY|NPD_API_KEY|SESSION_SECRET|SMTP_PASSWORD)/,
   /textTemplate|scenePlan|promptSuffix/, // промпты и шаблоны только на сервере
+  /systemPrompt|ОБЩИЕ ПРАВИЛА \(обязательны/, // системные промпты YandexGPT (src/content/text-styles.ts)
+  /Grandfather Frost pointing at a broken wooden sleigh|occasionHooks/, // планы сюжетов (src/content/plots, registry.ts)
   /\.map$/,
 ];
 
@@ -29,7 +31,8 @@ for (const file of walk(root)) {
     continue;
   }
   if (!/\.(js|css|html|json)$/.test(file)) continue;
-  const text = readFileSync(file, "utf8");
+  // Минификатор может экранировать кириллицу (\uXXXX) — проверяем и раскрытый текст
+  const text = readFileSync(file, "utf8").replace(/\\u([0-9a-fA-F]{4})/g, (_, h) => String.fromCharCode(parseInt(h, 16)));
   for (const re of patterns) {
     if (re.test(text)) {
       console.error(`секрет/серверные данные в бандле: ${file} (${re})`);

@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { currentUser } from "@/lib/auth";
 import { SideNav } from "@/components/SideNav";
+import "./kabinet.css";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Личный кабинет", robots: { index: false } };

@@ -1,6 +1,9 @@
 import { z } from "zod";
 import { db } from "@/lib/db";
-import { Answers } from "@/lib/quiz";
+import { AnswersV2 } from "@/lib/quiz";
+import { plotBySlug } from "@/content/registry";
+import { moodsFor } from "@/content/moods";
+import { ART_STYLE_IDS } from "@/content/profiles";
 import { anonId, currentUser } from "@/lib/auth";
 import { body, deviceKey, err, json, throttle, utmCookie, verifyCaptcha } from "@/lib/api";
 import { hit } from "@/lib/limits";
@@ -17,11 +20,32 @@ export async function POST(req: Request) {
   if (t) return t;
   const b = await body(req, Input);
   if (!b) return err("Некорректный запрос");
-  const parsed = Answers.safeParse(b.answers);
+  const parsed = AnswersV2.safeParse(b.answers);
   if (!parsed.success) return err(parsed.error.issues[0]?.message ?? "Заполните обязательные шаги");
   const a = parsed.data;
+  // Сюжет должен подходить аудитории; доп. героев — не меньше, чем требует сюжет (пара, хозяева питомца…)
+  const plot = a.story.slug ? plotBySlug(a.story.slug) : null;
+  if (plot && plot.audience !== a.audience) return err("Этот сюжет для другой аудитории — выберите сюжет из списка");
+  if (plot && a.extras.length < plot.extras.min) return err(plot.extras.note ?? `Для этого сюжета нужно добавить героев: не меньше ${plot.extras.min}`);
+  if (plot && a.extras.length > plot.extras.max) a.extras = a.extras.slice(0, plot.extras.max);
+  // Стиль картинок и настроение — только из каталога; иначе — по сюжету / без настроения
+  if (!ART_STYLE_IDS.some((x) => x.id === a.artStyle)) a.artStyle = plot?.artStyles[0] ?? "watercolor-air";
+  if (a.mood && !moodsFor(a.audience, a.hero.age).some((m) => m.id === a.mood)) a.mood = "";
   if (!(await verifyCaptcha(b.captcha))) return err("Подтвердите, что вы не робот", 400);
-  const bad = checkInputs([a.hero.name, a.hero.nickname, a.dedication, a.story.idea, a.appearance.custom, ...a.extras.map((e) => `${e.name} ${e.description}`)]);
+  const bad = checkInputs([
+    a.hero.name,
+    a.hero.nickname,
+    a.dedication,
+    a.story.idea,
+    a.appearance.custom,
+    a.adult.howMet,
+    a.adult.profession,
+    ...a.adult.memories,
+    a.pet.breed,
+    a.pet.traits,
+    a.occasion.custom,
+    ...a.extras.map((e) => `${e.name} ${e.description} ${e.what}`),
+  ]);
   if (bad) return err("Пожалуйста, уберите из анкеты недопустимые слова или ссылки");
   if (!a.story.slug && !a.story.idea) return err("Выберите сюжет или опишите свою идею");
 
@@ -38,7 +62,8 @@ export async function POST(req: Request) {
       userId: user?.id,
       anonId: anon,
       storyId: story.id,
-      styleKey: a.style,
+      styleKey: a.artStyle,
+      mood: a.mood || null,
       dedication: a.dedication,
       params: a as object,
       status: "TEXT_QUEUED",
@@ -54,12 +79,14 @@ export async function POST(req: Request) {
       gender: a.hero.gender,
       ageGroup: a.hero.ageGroup,
       birthDate: a.hero.birthDate ? new Date(a.hero.birthDate) : undefined,
-      appearance: a.appearance as object,
+      appearance: (a.audience === "PET" ? { ...a.appearance, pet: a.pet } : a.audience === "ADULT" ? { ...a.appearance, adult: a.adult } : a.appearance) as object,
       interests: a.interests,
     },
   });
   for (const e of a.extras) {
-    await db.hero.create({ data: { bookId: book.id, userId: user?.id, role: e.role, name: e.name, appearance: { custom: e.description }, interests: [] } });
+    await db.hero.create({
+      data: { bookId: book.id, userId: user?.id, role: e.role, name: e.name, gender: e.gender, appearance: { custom: e.description, what: e.what, species: e.species }, interests: [] },
+    });
   }
   await db.quizDraft.updateMany({ where: { anonId: anon, bookId: null }, data: { bookId: book.id } });
   await enqueue(QUEUES.generateText, { bookId: book.id });

@@ -3,14 +3,20 @@
 //  preview — обложка + 2 разворота с водяным знаком (1 в сутки на контакт, суточный лимит расходов)
 //  full    — после оплаты: остальные развороты, PDF всех форматов, аудио, файлы допов
 //  redraw  — перерисовка одной иллюстрации (3 бесплатно, далее платно)
+//  mood    — смена настроения: перерисовать все готовые иллюстрации книги с новым настроением
 import sharp from "sharp";
 import type { Book } from "@prisma/client";
 import { db } from "../db";
 import { cfg } from "../settings";
-import { Answers, appearanceLine, heroAge, type QuizAnswers } from "../quiz";
-import { personalize, planForAnswers, textProvider, dedicationText, type StoryText } from "./text";
-import { imageProvider, type HeroRef, type ImageResult } from "./image";
-import { watermark } from "./demo-art";
+import { Answers, appearanceLine, extraGender, heroAge, type QuizAnswers } from "../quiz";
+import { personalize, plotForAnswers, textProvider, dedicationText, type StoryText } from "./text";
+import { imageProvider, type HeroRef, type ImageResult, type SceneJob } from "./image";
+import { watermark } from "../../content/art/render";
+import { mood as moodById } from "../../content/registry";
+import { extraDrawKind } from "../../content/art/index";
+import { HERO_KIND_BY_AUDIENCE, type DemoLook, type HeroKind } from "../../content/types";
+import type { ExtraV2T } from "../../content/answers";
+import { guessGender } from "../declension";
 import { getFile, putFile, deleteFile } from "../storage";
 import { renderPdf, type BookPageData } from "../pdf";
 import { ttsProvider } from "./tts";
@@ -35,7 +41,7 @@ export async function runText(bookId: string) {
   const provider = textProvider(ai.text);
   const variant = 2 - book.rewritesLeft;
   await db.book.update({ where: { id: bookId }, data: { status: "TEXT_QUEUED", progress: 20, error: null } });
-  const r = await provider.write(a, book.story.title, planForAnswers(a), Math.max(0, variant));
+  const r = await provider.write(a, plotForAnswers(a), Math.max(0, variant));
   const text = personalize(r.raw, a);
   const bad = checkText([text.title, ...text.spreads.map((s) => s.text)].join("\n"));
   if (bad) throw new Error(`модерация текста: ${bad}`);
@@ -50,11 +56,38 @@ async function preparePhoto(key: string) {
   return sharp(buf).rotate().resize(1024, 1024, { fit: "inside", withoutEnlargement: true }).jpeg({ quality: 92 }).toBuffer();
 }
 
+/** Внешность главного героя для демо-рисовальщика. */
+function heroLook(a: QuizAnswers): DemoLook {
+  const p = a.appearance;
+  return {
+    gender: a.hero.gender,
+    age: heroAge(a),
+    hair: p.hair,
+    hairstyle: p.hairstyle,
+    longHair: /длинн|хвост|косич|кудр|пучок|коса/i.test(p.hairstyle ?? ""),
+    skin: p.skin,
+    glasses: p.glasses,
+    freckles: p.freckles,
+    beard: p.beard,
+    species: a.pet.species,
+    breed: a.pet.breed,
+    furColor: a.pet.furColor,
+  };
+}
+
+const EXTRA_AGE: Record<string, number> = { mom: 35, dad: 37, grandma: 68, grandpa: 70, owner: 34, colleague: 38 };
+
+/** Внешность доп. героя для демо: род, возраст по роли, питомец, «свой вариант». */
+function extraLook(e: ExtraV2T, a: QuizAnswers): DemoLook {
+  const g = extraGender(e, guessGender);
+  const age = e.role === "partner" ? heroAge(a) : e.role === "child" || e.role === "grandchild" ? 7 : EXTRA_AGE[e.role];
+  return { gender: g === "n" ? undefined : g, age, species: e.species, thing: e.what || (e.role === "toy" ? e.name : undefined), furColor: e.role === "pet" ? e.description : undefined };
+}
+
 async function heroesFor(book: Book, a: QuizAnswers): Promise<HeroRef[]> {
   const rows = await db.hero.findMany({ where: { bookId: book.id }, include: { photos: { where: { deletedAt: null } } }, orderBy: { createdAt: "asc" } });
   const main = rows.find((h) => h.role === "main");
   const refs: HeroRef[] = [];
-  const longHair = /длинн|хвост|косич|кудр/i.test(a.appearance.hairstyle ?? "");
   const mainPhotos = book.withPhoto && main ? await Promise.all(main.photos.slice(0, 3).map((p) => preparePhoto(p.storageKey).catch(() => null))) : [];
   const sheetKey = main?.characterSheetKey;
   refs.push({
@@ -62,14 +95,32 @@ async function heroesFor(book: Book, a: QuizAnswers): Promise<HeroRef[]> {
     description: appearanceLine(a),
     photos: mainPhotos.filter(Boolean) as Buffer[],
     sheet: sheetKey ? await getFile("books", sheetKey).catch(() => null) : null,
-    demo: { hair: a.appearance.hair, gender: a.hero.gender, glasses: a.appearance.glasses, longHair },
+    look: heroLook(a),
   });
+  const kind = HERO_KIND_BY_AUDIENCE[a.audience];
   for (const e of a.extras) {
     const row = rows.find((h) => h.role === e.role && h.name === e.name);
     const photos = book.withPhoto && row ? await Promise.all(row.photos.slice(0, 1).map((p) => preparePhoto(p.storageKey).catch(() => null))) : [];
-    refs.push({ role: e.role, description: e.description, photos: photos.filter(Boolean) as Buffer[] });
+    refs.push({
+      role: e.role === "custom" && e.what ? e.what : e.role,
+      description: [e.what, e.description].filter(Boolean).join(", "),
+      photos: photos.filter(Boolean) as Buffer[],
+      look: extraLook(e, a),
+      drawKind: extraDrawKind(e.role, kind),
+    });
   }
   return refs;
+}
+
+/** Тема «своей истории» (нет сюжета) — по аудитории. */
+const IDEA_THEME: Record<string, string> = { CHILD: "dragon", TEEN: "city-night", ADULT: "home", PET: "pet-home" };
+
+/** Что рисуем: сюжет (тема, вид героя) и обложка. Для своей идеи — тема аудитории. */
+function plotInfo(a: QuizAnswers): { plot: SceneJob["plot"]; coverScene: string | null } {
+  const plot = plotForAnswers(a);
+  const heroKind: HeroKind = HERO_KIND_BY_AUDIENCE[a.audience];
+  if (plot) return { plot: { slug: plot.slug, theme: plot.theme, heroKind: plot.heroKind }, coverScene: plot.coverScene };
+  return { plot: { slug: "svoya-ideya", theme: IDEA_THEME[a.audience] ?? "meadow", heroKind }, coverScene: null };
 }
 
 // ── Иллюстрации ──
@@ -99,6 +150,7 @@ async function savePage(book: Book, index: number, img: ImageResult, text: strin
     create: { bookId: book.id, index, imageKey: key, previewKey, text, moderation: "ok" },
   });
   if (prev?.imageKey) await deleteFile("books", prev.imageKey).catch(() => {});
+  if (prev?.previewKey && prev.previewKey !== previewKey) await deleteFile("books", prev.previewKey).catch(() => {});
 }
 
 async function drawPages(book: Book, indices: number[], opts: { preview: boolean; variant?: number }) {
@@ -107,13 +159,14 @@ async function drawPages(book: Book, indices: number[], opts: { preview: boolean
   const gpu = await cfg("gpu");
   const provider = imageProvider(ai.image, gpu.hourlyRub);
   const text = book.text as unknown as StoryText;
-  const plan = planForAnswers(a);
+  const { plot, coverScene } = plotInfo(a);
   const heroes = await heroesFor(book, a);
   const age = heroAge(a);
+  const mood = book.mood ? moodById(book.mood) : null;
 
   // Лист персонажа — один раз на книгу (только если есть фото и настоящий провайдер)
   if (heroes[0].photos.length && !heroes[0].sheet) {
-    const sheet = await provider.sheet(heroes[0], book.styleKey, age, a.hero.gender);
+    const sheet = await provider.sheet(heroes[0], { plot, style: book.styleKey, age, gender: a.hero.gender });
     if (sheet) {
       const key = `${book.id}/sheet-main.png`;
       await putFile("books", key, sheet.data, sheet.contentType);
@@ -125,16 +178,18 @@ async function drawPages(book: Book, indices: number[], opts: { preview: boolean
 
   let done = 0;
   for (const index of indices) {
-    const scene = index === 0 ? plan?.coverScene ?? text.spreads[0]?.scene ?? "the child on an adventure" : text.spreads[index - 1]?.scene ?? "";
+    const scene = index === 0 ? coverScene ?? text.spreads[0]?.scene ?? "the hero on an adventure" : text.spreads[index - 1]?.scene ?? "";
     const img = await provider.scene({
-      storySlug: a.story.slug || "",
+      plot,
       index,
       scene,
       style: book.styleKey,
+      mood,
       heroes,
       age,
       gender: a.hero.gender,
       preview: opts.preview,
+      title: text.title,
     });
     await cost(book.id, provider.name, index === 0 ? "cover" : "scene", img);
     await savePage(book, index, img, index === 0 ? text.title : text.spreads[index - 1]?.text ?? null);
@@ -187,13 +242,21 @@ export async function bookPdfData(bookId: string, orderCode?: string): Promise<B
   const img = async (key: string | null) => {
     if (!key) return { data: Buffer.from(""), contentType: "image/png" };
     const data = await getFile("books", key);
-    return { data, contentType: key.endsWith(".svg") ? "image/svg+xml" : "image/png" };
+    // Демо-SVG с фильтрами (фактура, настроение) Chromium растрирует в огромные PDF — переводим в JPEG заранее
+    if (key.endsWith(".svg")) {
+      const jpg = await sharp(data, { density: 72 }).flatten({ background: "#ffffff" }).jpeg({ quality: 86 }).toBuffer().catch(() => null);
+      if (jpg) return { data: jpg, contentType: "image/jpeg" };
+      return { data, contentType: "image/svg+xml" };
+    }
+    return { data, contentType: "image/png" };
   };
   const cover = book.pages.find((p) => p.index === 0);
   return {
     title: text.title,
     dedication: dedicationText(a),
     heroName: a.hero.name,
+    audience: a.audience,
+    heroGender: a.hero.gender,
     cover: await img(cover?.imageKey ?? null),
     spreads: await Promise.all(
       text.spreads.map(async (s) => ({ text: book.pages.find((p) => p.index === s.index)?.text ?? s.text, image: await img(book.pages.find((p) => p.index === s.index)?.imageKey ?? null) })),
@@ -277,6 +340,20 @@ export async function renderColoring(bookId: string) {
   };
   const lines = { ...data, cover: await toLines(data.cover), spreads: await Promise.all(data.spreads.map(async (s) => ({ ...s, image: await toLines(s.image) }))) };
   await saveFile(bookId, "coloring", await renderPdf(lines, { kind: "a4" }), "pdf", "application/pdf");
+}
+
+/**
+ * Смена настроения: перерисовать все уже готовые иллюстрации (до оплаты — обложку и 2 разворота превью,
+ * после — всю книгу) и пересобрать PDF. Цена и лимиты — в api/books/[id]/action (ASSUMPTIONS.md).
+ */
+export async function runMood(bookId: string) {
+  const book = await db.book.findUniqueOrThrow({ where: { id: bookId }, include: { pages: true } });
+  const indices = book.pages.filter((p) => p.imageKey).map((p) => p.index).sort((x, y) => x - y);
+  const full = book.paidFull;
+  await db.book.update({ where: { id: bookId }, data: { status: full ? "FULL_QUEUED" : "PREVIEW_QUEUED", progress: 5, error: null } });
+  await drawPages(book, indices.length ? indices : [0, 1, 2], { preview: !full });
+  if (full) await renderBookFiles(bookId);
+  await db.book.update({ where: { id: bookId }, data: { status: full ? "FULL_READY" : "PREVIEW_READY", progress: 100 } });
 }
 
 export async function runRedraw(bookId: string, index: number) {

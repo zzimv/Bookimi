@@ -8,9 +8,7 @@
 // сначала снимает прежнее настроение, затем накладывает новое — двойного оборачивания не бывает;
 // нейтральное настроение (или null) на уже тонированном SVG возвращает исходник.
 //
-// requests (просьбы к интегратору, агенту 11 / архитектору):
-//  • types.ts → Mood: добавить `audiences?: AudienceKey[]` (сейчас поле живёт в MoodEx в moods.ts,
-//    фильтр — moodsFor(audience) там же) и расширенный демо-блок (MoodDemoFx ниже) — по желанию.
+// Аудитории настроения — Mood.audiences (types.ts), фильтр — moodsFor(audience) в moods.ts.
 
 import type { Mood } from "../types";
 import { drawDeco, rnd } from "./shared";

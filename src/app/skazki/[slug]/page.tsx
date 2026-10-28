@@ -17,8 +17,8 @@ export async function generateMetadata({ params }: { params: Promise<{ slug: str
   const { slug } = await params;
   const s = await getStory(slug);
   if (!s) return {};
-  const title = s.seoTitle ?? `${displayTitle(s.title)} — персональная сказка с вашим ребёнком`;
-  const description = s.seoDescription ?? `${s.tagline} Для детей ${s.ageMin}–${s.ageMax} лет. Бесплатное превью, PDF 990 ₽, печатная книга от 2 490 ₽.`;
+  const title = s.seoTitle ?? `${displayTitle(s.title, s.audience)} — персональная книга`;
+  const description = s.seoDescription ?? `${s.tagline} ${ageLabel(s.ageMin, s.ageMax, s.audience)}. Бесплатное превью, PDF 990 ₽, печатная книга от 2 490 ₽.`;
   return { title, description, alternates: { canonical: `/skazki/${s.slug}` }, openGraph: { title, description } };
 }
 
@@ -26,7 +26,7 @@ export default async function Page({ params }: { params: Promise<{ slug: string 
   const { slug } = await params;
   const [story, minPrice, occasions] = await Promise.all([getStory(slug), getMinPrice(), getOccasions()]);
   if (!story) notFound();
-  const title = displayTitle(story.title);
+  const title = displayTitle(story.title, story.audience);
   const occasion = occasions.find((o) => o.slug === story.occasionSlug);
   const domain = process.env.DOMAIN ?? "bookimi.ru";
 
@@ -55,15 +55,15 @@ export default async function Page({ params }: { params: Promise<{ slug: string 
         ]}
       />
       <div className="wrap story">
-        <Cover theme={story.coverTheme} title={title} coverUrl={story.coverUrl} />
+        <Cover theme={story.coverTheme} title={title} coverUrl={story.coverUrl} colors={story.coverColors} />
         <div>
           <h1 style={{ fontSize: "var(--fs-2xl)" }}>{title}</h1>
           <p className="lead">{story.description}</p>
           <ul className="facts">
-            <li>{ageLabel(story.ageMin, story.ageMax)} лет</li>
+            <li>{ageLabel(story.ageMin, story.ageMax, story.audience)}{story.audience === "CHILD" || story.audience === "TEEN" ? " лет" : ""}</li>
             <li>24 страницы, 12 иллюстрированных разворотов</li>
-            <li>Можно добавить до 3 героев: брата или сестру, маму, папу, бабушку, дедушку, питомца</li>
-            <li>3 стиля иллюстраций и посвящение от вас на первой странице</li>
+            <li>{story.extras.note ?? `Можно добавить до ${story.extras.max} героев`}</li>
+            <li>{story.artStyles.length} стиля иллюстраций на выбор и посвящение от вас на первой странице</li>
             {occasion && <li>Повод: {occasion.title.toLowerCase()}</li>}
           </ul>
           <p>

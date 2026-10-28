@@ -3,13 +3,28 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { api, goal, rub } from "@/lib/client";
+import { ThanksPanel } from "@/app/zakaz/ThanksPanel";
 
 type View =
   | { type: "qr"; qrSvg: string; payUrl: string; expiresAt: string; demo: boolean }
   | { type: "transfer"; phone: string; card: string; bank: string; holder: string; code: string; amountRub: number; expiresAt: string }
   | { type: "redirect"; url: string };
 
-export function PayBox({ orderId, total, methods, initialStatus, demo }: { orderId: string; total: number; methods: { key: string; title: string; note: string }[]; initialStatus: string; demo: boolean }) {
+export function PayBox({
+  orderId,
+  total,
+  methods,
+  initialStatus,
+  demo,
+  thanks,
+}: {
+  orderId: string;
+  total: number;
+  methods: { key: string; title: string; note: string }[];
+  initialStatus: string;
+  demo: boolean;
+  thanks?: { heroAcc?: string | null; print: boolean; bookId?: string | null };
+}) {
   const router = useRouter();
   const [view, setView] = useState<View | null>(null);
   const [status, setStatus] = useState(initialStatus);
@@ -66,11 +81,16 @@ export function PayBox({ orderId, total, methods, initialStatus, demo }: { order
     }
   }
 
+  // Оплата прошла — сразу благодарим, не дожидаясь обновления страницы
+  if (status !== "PENDING_PAYMENT" && status !== "AWAITING_CONFIRMATION" && status !== "CANCELLED") {
+    return <ThanksPanel heroAcc={thanks?.heroAcc} print={thanks?.print ?? false} bookId={thanks?.bookId} />;
+  }
+
   if (status === "AWAITING_CONFIRMATION") {
     return (
       <div className="panel">
-        <h2 style={{ fontSize: "var(--fs-lg)" }}>Проверяем перевод</h2>
-        <p>Как только деньги поступят, мы подтвердим оплату и сразу начнём делать книгу. Обычно до 2 часов в рабочее время. Сообщим, когда всё будет готово.</p>
+        <h2 style={{ fontSize: "var(--fs-lg)" }}>Спасибо! Проверяем перевод</h2>
+        <p>Как только деньги поступят, подтвердим оплату и сразу начнём рисовать{thanks?.heroAcc ? ` книгу про ${thanks.heroAcc}` : " книгу"}. Обычно это до 2 часов в рабочее время. Страницу можно закрыть — мы напишем.</p>
         <div className="spinner" />
       </div>
     );

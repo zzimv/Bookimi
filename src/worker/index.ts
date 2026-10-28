@@ -1,7 +1,7 @@
 // Фоновый воркер (контейнер `worker`): генерация, PDF, аудио, регулярные задачи.
 import { db } from "../lib/db";
 import { getBoss, QUEUES } from "../lib/queue";
-import { runText, runPreview, runFull, runRedraw, runAudio, LimitReached } from "../lib/gen/pipeline";
+import { runText, runPreview, runFull, runRedraw, runAudio, runMood, LimitReached } from "../lib/gen/pipeline";
 import { purgeExpiredPhotos } from "../lib/photos";
 import { runTriggers } from "../lib/triggers";
 import { issueDueBonuses } from "../lib/referral";
@@ -60,6 +60,17 @@ async function main() {
 
   await boss.work<{ bookId: string; index: number }>(QUEUES.redraw, async (jobs: Job<{ bookId: string; index: number }>) => {
     for (const j of jobs) await runRedraw(j.data.bookId, j.data.index);
+  });
+
+  await boss.work<{ bookId: string }>(QUEUES.mood, { batchSize: 1 }, async (jobs: Job<{ bookId: string }>) => {
+    for (const j of jobs) {
+      try {
+        await runMood(j.data.bookId);
+      } catch (e) {
+        await fail(j.data.bookId, e);
+        throw e;
+      }
+    }
   });
 
   await boss.work<{ bookId: string }>(QUEUES.audio, async (jobs: Job<{ bookId: string }>) => {

@@ -1,5 +1,6 @@
 // Контент-движок: целостность каталога, метки, склонение новых случаев, демо-рендер, анкета v2.
-// CONTENT_STRICT=1 — ещё и полнота каталога (Definition of Done контент-агентов, docs/content/ARCHITECTURE.md).
+// Строгая проверка (полнота каталога: все стили, темы, настроения, минимум сюжетов) — по умолчанию;
+// CONTENT_STRICT=0 отключает её на время работы над новым контентом.
 import { describe, expect, it } from "vitest";
 import {
   applyOccasion,
@@ -17,25 +18,25 @@ import { checkTags, maxExtraRef, nameAtLineEnd } from "@/content/tags";
 import { AnswersV2, ContactV2, normalizePhone } from "@/content/answers";
 import { AUDIENCES, OCCASIONS, TEXT_STYLE_IDS } from "@/content/profiles";
 import { ageLabel, applyGender, declineName, fillTags, guessGender } from "@/lib/declension";
-import { STORY_PLANS } from "@/lib/story-plans";
 
 describe("validateContent", () => {
   it("нет ошибок", () => {
     const r = validateContent();
     expect(r.errors).toEqual([]);
   });
-  it.runIf(process.env.CONTENT_STRICT === "1")("строгая проверка: каталог полный", () => {
+  it.runIf(process.env.CONTENT_STRICT !== "0")("строгая проверка: каталог полный", () => {
     expect(validateContent({ strict: true }).errors).toEqual([]);
   });
 });
 
 describe("каталог", () => {
-  it("5 старых сюжетов перенесены без потерь", () => {
-    for (const old of STORY_PLANS) {
-      const p = plotBySlug(old.slug);
-      expect(p, old.slug).not.toBeNull();
-      expect(p!.spreads.map((s) => s.scene)).toEqual(old.spreads.map((s) => s.scene));
+  it("5 старых сюжетов на месте (slug не менялись)", () => {
+    for (const slug of ["novogodnee-puteshestvie-s-dedom-morozom", "den-rozhdeniya-v-skazochnom-korolevstve", "imya-i-zvyozdnyj-drakonchik", "kapitan-podvodnoj-lodki", "sonnaya-strana"]) {
+      const p = plotBySlug(slug);
+      expect(p, slug).not.toBeNull();
+      expect(p!.spreads).toHaveLength(12);
     }
+    expect(plotBySlug("novogodnee-puteshestvie-s-dedom-morozom")!.spreads[2].scene).toMatch(/broken wooden sleigh/);
   });
   it("все стили текста описаны", () => {
     expect(TEXT_STYLES.map((s) => s.id).sort()).toEqual(TEXT_STYLE_IDS.map((s) => s.id).sort());

@@ -3,7 +3,7 @@ import { notFound } from "next/navigation";
 import { BookCard } from "@/components/BookCard";
 import { Breadcrumbs, JsonLd, StickyCta } from "@/components/Layout";
 import { Faq } from "@/components/Sections";
-import { getMinPrice, getOccasion, getOccasions, getStories } from "@/lib/catalog";
+import { getMinPrice, getOccasion, getOccasions, getStoriesForOccasion } from "@/lib/catalog";
 import { FAQ } from "@/lib/catalog-defaults";
 
 export const revalidate = 300;
@@ -25,13 +25,10 @@ export async function generateMetadata({ params }: { params: Promise<{ slug: str
 
 export default async function Page({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params;
-  const [occasion, stories, minPrice] = await Promise.all([getOccasion(slug), getStories(), getMinPrice()]);
+  const [occasion, stories, minPrice] = await Promise.all([getOccasion(slug), getStoriesForOccasion(slug), getMinPrice()]);
   if (!occasion) notFound();
-  // Сначала сюжеты этого повода, затем универсальные
-  const list = [
-    ...stories.filter((s) => s.occasionSlug === occasion.slug),
-    ...stories.filter((s) => s.occasionSlug === null),
-  ];
+  // Сначала сюжеты этого повода (главный повод — выше), затем лучшие остальные: повод вплетается в любой сюжет
+  const list = [...stories.filter((s) => s.occasions.includes(occasion.slug)), ...stories.filter((s) => !s.occasions.includes(occasion.slug)).slice(0, 6)];
 
   return (
     <>

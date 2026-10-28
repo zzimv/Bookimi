@@ -15,10 +15,35 @@ interface BookState {
   paid: boolean;
   loggedIn: boolean;
   pages: { index: number; text: string | null; url: string | null }[];
+  mood: string;
+  moodChanges: { preview: number; full: number };
+  redrawsLeft: number;
   photos: { id: string; url: string }[];
 }
 
-export function BookFlow({ bookId, photoEnabled, extras, dedication, printEnabled }: { bookId: string; photoEnabled: boolean; extras: { role: string; name: string }[]; dedication: string; printEnabled: boolean }) {
+export interface MoodOption {
+  id: string;
+  title: string;
+  oneLine: string;
+}
+
+export function BookFlow({
+  bookId,
+  photoEnabled,
+  extras,
+  dedication,
+  printEnabled,
+  moods = [],
+  moodChangesPreview = 2,
+}: {
+  bookId: string;
+  photoEnabled: boolean;
+  extras: { role: string; name: string }[];
+  dedication: string;
+  printEnabled: boolean;
+  moods?: MoodOption[];
+  moodChangesPreview?: number;
+}) {
   const [b, setB] = useState<BookState | null>(null);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
@@ -296,6 +321,28 @@ export function BookFlow({ bookId, photoEnabled, extras, dedication, printEnable
               </figure>
             ))}
           </div>
+          {moods.length > 1 && (b.status === "PREVIEW_READY" || b.status === "FULL_READY") && (
+            <div className="panel" style={{ marginTop: 20 }} data-mood-panel>
+              <label className="field">
+                <span>Настроение иллюстраций</span>
+                <select className="input" name="mood" value={b.mood || "as-drawn"} disabled={busy} onChange={(e) => act({ action: "mood", mood: e.target.value })}>
+                  {moods.map((m) => (
+                    <option key={m.id} value={m.id}>
+                      {m.title} — {m.oneLine}
+                    </option>
+                  ))}
+                </select>
+                <small>
+                  {b.paid
+                    ? b.moodChanges.full === 0
+                      ? "Перерисуем всю книгу в новом настроении — один раз бесплатно."
+                      : `Каждая следующая смена — одна перерисовка из бесплатных (осталось ${b.redrawsLeft}).`
+                    : `До оплаты — бесплатно, осталось ${Math.max(0, moodChangesPreview - b.moodChanges.preview)}.`}
+                </small>
+              </label>
+              {error && <p className="error">{error}</p>}
+            </div>
+          )}
           {b.status === "PREVIEW_READY" && (
             <>
               <h2 style={{ marginTop: 28, fontSize: "var(--fs-xl)" }}>Кто печатает книгу?</h2>

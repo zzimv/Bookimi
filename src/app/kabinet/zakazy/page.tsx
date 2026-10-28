@@ -2,6 +2,7 @@ import Link from "next/link";
 import { db } from "@/lib/db";
 import { currentUser } from "@/lib/auth";
 import { ruDate } from "@/lib/pricing";
+import { journeyLine } from "@/app/zakaz/journey";
 
 const ST: Record<string, string> = {
   PENDING_PAYMENT: "Ждёт оплаты", AWAITING_CONFIRMATION: "Проверяем перевод", PAID: "Оплачен", IN_PRINT: "В печати",
@@ -10,7 +11,7 @@ const ST: Record<string, string> = {
 
 export default async function Page() {
   const user = (await currentUser())!;
-  const orders = await db.order.findMany({ where: { userId: user.id }, orderBy: { createdAt: "desc" }, include: { receipts: true, shipment: true, items: true } });
+  const orders = await db.order.findMany({ where: { userId: user.id }, orderBy: { createdAt: "desc" }, include: { receipts: true, shipment: true, items: { include: { book: { select: { status: true, fullReadyAt: true } } } } } });
   return (
     <>
       <h1 style={{ fontSize: "var(--fs-xl)" }}>Заказы</h1>
@@ -21,9 +22,16 @@ export default async function Page() {
             <tbody>
               {orders.map((o) => (
                 <tr key={o.id}>
-                  <td><Link href={`/zakaz/${o.id}`}>{o.publicCode}</Link><br /><small className="muted">{o.createdAt.toLocaleDateString("ru-RU")}</small></td>
-                  <td>{ST[o.status]}</td>
-                  <td>{o.totalRub.toLocaleString("ru-RU")} ₽</td>
+                  <td style={{ whiteSpace: "nowrap" }}><Link href={`/zakaz/${o.id}`}>{o.publicCode}</Link><br /><small className="muted">{o.createdAt.toLocaleDateString("ru-RU")}</small></td>
+                  <td>
+                    {ST[o.status]}
+                    {(() => {
+                      const book = o.items.find((i) => i.book)?.book;
+                      const line = journeyLine({ ...o, bookReadyAt: book?.status === "FULL_READY" ? (book.fullReadyAt ?? o.paidAt) : null });
+                      return line && o.status !== "PENDING_PAYMENT" ? <><br /><small className="muted">{line}</small></> : null;
+                    })()}
+                  </td>
+                  <td style={{ whiteSpace: "nowrap" }}>{o.totalRub.toLocaleString("ru-RU")} ₽</td>
                   <td>{o.readyDate ? ruDate(o.readyDate) : "—"}{o.shipment?.trackNumber && <><br />Трек: {o.shipment.trackNumber}</>}</td>
                   <td>{o.receipts.filter((r) => r.status === "issued").map((r) => <a key={r.id} href={r.url ?? "#"} target="_blank" rel="noopener">чек</a>)}</td>
                   <td>{o.items[0]?.bookId && <Link href={`/kniga/${o.items[0].bookId}/kupit`}>Повторить</Link>}</td>

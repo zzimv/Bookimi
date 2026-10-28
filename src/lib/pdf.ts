@@ -10,6 +10,10 @@ export interface BookPageData {
   title: string;
   dedication: string;
   heroName: string;
+  /** Аудитория книги — от неё зависят подписи на последней странице и обложке. */
+  audience?: "CHILD" | "TEEN" | "ADULT" | "PET";
+  /** Пол героя (boy | girl) — для «главный герой / главная героиня». */
+  heroGender?: string;
   cover: { data: Buffer; contentType: string };
   spreads: { text: string; image: { data: Buffer; contentType: string } }[];
   orderCode?: string;
@@ -40,6 +44,22 @@ function fonts() {
     face("Manrope", 500, f("manrope", "manrope-latin-500-normal.woff2"), LAT),
   ].join("");
   return fontCss;
+}
+
+/** Подписи книги по аудитории: последняя страница, задняя обложка, возрастная маркировка. */
+export function bookWording(b: Pick<BookPageData, "heroName" | "audience" | "heroGender">) {
+  const girl = b.heroGender === "girl";
+  const name = b.heroName;
+  switch (b.audience) {
+    case "PET":
+      return { madeFor: `Эта книга — о ${girl ? "любимице" : "любимце"} по кличке ${name}.`, back: `История, в которой ${name} — ${girl ? "главная героиня" : "главный герой"}.`, rating: "0+" };
+    case "ADULT":
+      return { madeFor: `Эта книга создана специально для человека по имени ${name}.`, back: `История, в которой ${name} — ${girl ? "главная героиня" : "главный герой"}.`, rating: "12+" };
+    case "TEEN":
+      return { madeFor: `Эта книга создана специально для ${girl ? "героини" : "героя"} по имени ${name}.`, back: `История, в которой ${name} — ${girl ? "главная героиня" : "главный герой"}.`, rating: "6+" };
+    default:
+      return { madeFor: `Эта книга создана специально для ${girl ? "героини" : "героя"} по имени ${name}.`, back: `Сказка, в которой ${name} — ${girl ? "главная героиня" : "главный герой"}.`, rating: "0+" };
+  }
 }
 
 const uri = (img: { data: Buffer; contentType: string }) => `data:${img.contentType};base64,${img.data.toString("base64")}`;
@@ -77,7 +97,7 @@ function blockPages(b: BookPageData, pageW: number, pageH: number, inset: number
     }
   });
   pages.push(`<section class="page" style="display:flex;align-items:center;justify-content:center;text-align:center;padding:${inset + 12}mm">
-    <p style="font-size:${fs}pt">Эта книга создана специально для героя по имени ${esc(b.heroName)}.<br><br><b style="font-family:Nunito">букими</b></p></section>`);
+    <p style="font-size:${fs}pt">${esc(bookWording(b).madeFor)}<br><br><b style="font-family:Nunito">букими</b></p></section>`);
   return pages.join("");
 }
 
@@ -116,7 +136,7 @@ export function bookHtml(b: BookPageData, k: PdfKind): { html: string; wMm: numb
     <div class="img" style="left:${wrap + k.wMm + spine}mm;right:0;background-image:url(${uri(b.cover)})"></div>
     <h1 style="position:absolute;left:${wrap + k.wMm + spine + 10}mm;width:${k.wMm - 20}mm;bottom:${wrap + 14}mm;color:#fff;font-size:20pt;text-shadow:0 1mm 4mm rgba(0,0,0,.4)">${esc(b.title)}</h1>
     <div style="position:absolute;left:0;width:${wrap + k.wMm}mm;top:0;bottom:0;background:#1e4d3b"></div>
-    <p style="position:absolute;left:${wrap + 15}mm;width:${k.wMm - 30}mm;bottom:${wrap + 15}mm;color:#f3e4c2;font-size:10pt">Сказка, в которой ${esc(b.heroName)} — главный герой.<br><b style="font-family:Nunito;font-size:14pt">букими</b> · 0+</p>
+    <p style="position:absolute;left:${wrap + 15}mm;width:${k.wMm - 30}mm;bottom:${wrap + 15}mm;color:#f3e4c2;font-size:10pt">${esc(bookWording(b).back)}<br><b style="font-family:Nunito;font-size:14pt">букими</b> · ${bookWording(b).rating}</p>
     <div style="position:absolute;left:${wrap + k.wMm}mm;width:${spine}mm;top:0;bottom:0;background:#143628"></div>
     <span class="mark">${esc(b.orderCode ?? "")}</span></section>`;
   return { html, wMm: W, hMm: H };
