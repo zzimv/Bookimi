@@ -13,3 +13,4 @@ next-env.d.ts
 __pycache__/
 .venv/
 /storage
+/tools/demo/out
