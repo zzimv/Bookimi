@@ -1,0 +1,38 @@
+{
+  "name": "bookimi",
+  "version": "0.1.0",
+  "private": true,
+  "description": "БУКИМИ — персонализированные детские книги по фото ребёнка",
+  "scripts": {
+    "dev": "next dev",
+    "build": "prisma generate && next build",
+    "start": "next start -p 3000",
+    "worker": "tsx src/worker/index.ts",
+    "typecheck": "tsc --noEmit",
+    "db:migrate": "prisma migrate deploy",
+    "db:seed": "tsx prisma/seed.ts",
+    "check:bundle-secrets": "node scripts/check-bundle-secrets.mjs"
+  },
+  "prisma": {
+    "seed": "tsx prisma/seed.ts"
+  },
+  "dependencies": {
+    "@fontsource/manrope": "^5.1.0",
+    "@fontsource/nunito": "^5.1.0",
+    "@prisma/client": "^6.10.0",
+    "next": "^15.5.0",
+    "pg-boss": "^10.1.0",
+    "react": "^19.1.0",
+    "react-dom": "^19.1.0",
+    "server-only": "^0.0.1",
+    "tsx": "^4.19.0",
+    "zod": "^3.25.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "@types/react": "^19.1.0",
+    "@types/react-dom": "^19.1.0",
+    "prisma": "^6.10.0",
+    "typescript": "^5.8.0"
+  }
+}

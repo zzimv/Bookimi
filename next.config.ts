@@ -1,0 +1,43 @@
+import type { NextConfig } from "next";
+
+const isProd = process.env.NODE_ENV === "production";
+
+// CSP: сторонние скрипты — только Яндекс Метрика. 'unsafe-inline' для скриптов
+// временно (инлайн-скрипты Next); на шаге 7 заменяется на nonce.
+const csp = [
+  "default-src 'self'",
+  "script-src 'self' 'unsafe-inline' https://mc.yandex.ru https://yastatic.net" + (isProd ? "" : " 'unsafe-eval'"),
+  "style-src 'self' 'unsafe-inline'",
+  "img-src 'self' data: blob: https://*.yandexcloud.net https://storage.yandexcloud.net https://mc.yandex.ru",
+  "font-src 'self'",
+  "connect-src 'self' https://mc.yandex.ru https://smartcaptcha.yandexcloud.net",
+  "frame-src https://smartcaptcha.yandexcloud.net",
+  "frame-ancestors 'none'",
+  "base-uri 'self'",
+  "form-action 'self'",
+].join("; ");
+
+const securityHeaders = [
+  { key: "Content-Security-Policy", value: csp },
+  { key: "Strict-Transport-Security", value: "max-age=63072000; includeSubDomains; preload" },
+  { key: "X-Frame-Options", value: "DENY" },
+  { key: "X-Content-Type-Options", value: "nosniff" },
+  { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
+  { key: "Permissions-Policy", value: "camera=(self), microphone=(), geolocation=(), payment=(self)" },
+];
+
+const config: NextConfig = {
+  output: "standalone",
+  poweredByHeader: false,
+  productionBrowserSourceMaps: false,
+  compiler: { removeConsole: isProd ? { exclude: ["error"] } : false },
+  images: { formats: ["image/avif", "image/webp"] },
+  // Типы проверяются отдельным шагом CI (npm run typecheck). SKIP_TYPECHECK=1 — только
+  // для окружений без движков Prisma, где клиент сгенерирован как заглушка.
+  typescript: { ignoreBuildErrors: process.env.SKIP_TYPECHECK === "1" },
+  async headers() {
+    return [{ source: "/:path*", headers: securityHeaders }];
+  },
+};
+
+export default config;

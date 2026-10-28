@@ -1,0 +1,7 @@
+node_modules
+.next
+.git
+.env
+.env.*
+tools/recognition-test/data
+tools/recognition-test/results

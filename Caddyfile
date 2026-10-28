@@ -1,0 +1,15 @@
+# Автоматический SSL Let's Encrypt.
+# Основной домен — из DOMAIN, дополнительные (через запятую в EXTRA_DOMAINS,
+# например «букими.рф, bookimi.com») переадресуются на основной с кодом 301.
+# Кириллический домен указывайте в punycode: xn--90aiimqf.xn--p1ai
+
+{$DOMAIN} {
+	encode zstd gzip
+	reverse_proxy web:3000
+	@static path /_next/static/* /fonts/*
+	header @static Cache-Control "public, max-age=31536000, immutable"
+}
+
+{$EXTRA_DOMAINS} {
+	redir https://{$DOMAIN}{uri} 301
+}

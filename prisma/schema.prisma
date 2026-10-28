@@ -1,0 +1,567 @@
+// БУКИМИ — схема данных всего домена.
+// Все ПДн хранятся только в этой БД (VPS в РФ) и в Yandex Object Storage.
+// Идентификаторы — UUID (никаких порядковых номеров наружу).
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ───────────── Пользователи, вход, согласия ─────────────
+
+enum Role {
+  CUSTOMER
+  OWNER
+  OPERATOR   // подрядчик по ГПХ: заказы, переводы, печать, поддержка
+  MARKETER   // подрядчик по ГПХ: дашборд, триггеры, промокоды, SEO — без ПДн
+}
+
+model User {
+  id            String    @id @default(uuid()) @db.Uuid
+  email         String?   @unique
+  phone         String?   @unique
+  name          String?
+  role          Role      @default(CUSTOMER)
+  totpSecret    String?   // 2FA для админки (шифруется на уровне приложения)
+  referralCode  String    @unique
+  referredById  String?   @db.Uuid
+  referredBy    User?     @relation("Referrals", fields: [referredById], references: [id])
+  referrals     User[]    @relation("Referrals")
+  deviceHashes  String[]  // для защиты «пригласить себя»
+  createdAt     DateTime  @default(now())
+  deletedAt     DateTime?
+
+  sessions      Session[]
+  consents      Consent[]
+  heroes        Hero[]
+  books         Book[]
+  orders        Order[]
+  promoCodes    PromoCode[]       @relation("PromoOwner")
+  notifyPrefs   NotificationPref[]
+  auditLogs     AuditLog[]
+  reviews       Review[]
+}
+
+model OtpCode {
+  id         String   @id @default(uuid()) @db.Uuid
+  target     String   // email или телефон
+  codeHash   String
+  attempts   Int      @default(0)
+  expiresAt  DateTime
+  usedAt     DateTime?
+  createdAt  DateTime @default(now())
+
+  @@index([target, createdAt])
+}
+
+model Session {
+  id         String   @id @default(uuid()) @db.Uuid
+  userId     String   @db.Uuid
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tokenHash  String   @unique
+  csrfToken  String
+  expiresAt  DateTime
+  createdAt  DateTime @default(now())
+}
+
+enum ConsentType {
+  PERSONAL_DATA
+  CHILD_PHOTO
+  MARKETING
+  ANALYTICS_COOKIES
+  CROSS_BORDER    // зарубежные ИИ-модели / WhatsApp
+}
+
+model Consent {
+  id          String      @id @default(uuid()) @db.Uuid
+  userId      String?     @db.Uuid
+  user        User?       @relation(fields: [userId], references: [id], onDelete: SetNull)
+  anonId      String?     // до регистрации — id черновика/куки
+  type        ConsentType
+  docVersion  String      // версия текста согласия
+  granted     Boolean
+  ipHash      String?
+  userAgent   String?
+  createdAt   DateTime    @default(now())
+
+  @@index([userId, type])
+  @@index([anonId])
+}
+
+// ───────────── Каталог ─────────────
+
+enum Audience {
+  CHILD
+  ADULT   // задел на книги для взрослых — без переделки схемы
+}
+
+model Occasion {
+  id          String   @id @default(uuid()) @db.Uuid
+  slug        String   @unique
+  title       String
+  h1          String
+  intro       String
+  seoTitle    String?
+  seoDescription String?
+  sortOrder   Int      @default(0)
+  isActive    Boolean  @default(true)
+  stories     Story[]
+}
+
+model Story {
+  id            String    @id @default(uuid()) @db.Uuid
+  slug          String    @unique
+  title         String    // может содержать [Имя]
+  tagline       String
+  description   String
+  audience      Audience  @default(CHILD)
+  ageMin        Int
+  ageMax        Int
+  gender        String?   // null — для всех
+  occasionId    String?   @db.Uuid
+  occasion      Occasion? @relation(fields: [occasionId], references: [id])
+  textTemplate  String    // шаблон/план сюжета для TextProvider — только на сервере
+  scenePlan     Json      // 12 разворотов: промпты сцен — только на сервере
+  coverTheme    String    // ключ обложки-заглушки до загрузки иллюстрации
+  coverUrl      String?
+  seoTitle      String?
+  seoDescription String?
+  sortOrder     Int       @default(0)
+  isActive      Boolean   @default(true)
+  createdAt     DateTime  @default(now())
+  books         Book[]
+}
+
+model IllustrationStyle {
+  id          String  @id @default(uuid()) @db.Uuid
+  key         String  @unique
+  title       String
+  description String
+  promptSuffix String // только на сервере
+  exampleUrl  String?
+  sortOrder   Int     @default(0)
+  isActive    Boolean @default(true)
+}
+
+enum FormatKind {
+  PDF
+  PRINT
+}
+
+enum CoverType {
+  SOFT
+  HARD
+  NONE
+}
+
+model ProductFormat {
+  id          String     @id @default(uuid()) @db.Uuid
+  key         String     @unique   // pdf, mini-soft, std-hard ...
+  kind        FormatKind
+  title       String
+  widthMm     Int?
+  heightMm    Int?
+  pages       Int        @default(24)
+  cover       CoverType  @default(NONE)
+  priceRub    Int
+  isDefault   Boolean    @default(false)
+  sortOrder   Int        @default(0)
+  isActive    Boolean    @default(true)
+}
+
+enum AddonKind {
+  PHYSICAL
+  DIGITAL
+  MODIFIER   // второй экземпляр, срочность
+}
+
+model Addon {
+  id           String    @id @default(uuid()) @db.Uuid
+  key          String    @unique
+  kind         AddonKind
+  title        String
+  description  String
+  priceRub     Int?      // фиксированная цена
+  percentOff   Int?      // для «второй экземпляр −30%»
+  requiresPrint Boolean  @default(false)
+  sortOrder    Int       @default(0)
+  isActive     Boolean   @default(true)
+}
+
+// ───────────── Герои, фото, книги, генерация ─────────────
+
+model Hero {
+  id           String   @id @default(uuid()) @db.Uuid
+  userId       String?  @db.Uuid
+  user         User?    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  draftId      String?  @db.Uuid
+  role         String   // main | sibling | mom | dad | grandma | grandpa | pet
+  name         String
+  nickname     String?
+  gender       String?
+  ageGroup     String?
+  birthDate    DateTime?
+  appearance   Json     // чипсы + свободное описание
+  interests    String[]
+  characterSheetKey String?  // лист персонажа (без фото) — хранится бессрочно
+  createdAt    DateTime @default(now())
+  photos       Photo[]
+}
+
+model Photo {
+  id          String    @id @default(uuid()) @db.Uuid
+  heroId      String    @db.Uuid
+  hero        Hero      @relation(fields: [heroId], references: [id], onDelete: Cascade)
+  storageKey  String    // бакет photos, lifecycle 7 дней
+  moderation  String    @default("pending")
+  expiresAt   DateTime  // createdAt + 7 дней; фоновая задача удаляет
+  deletedAt   DateTime?
+  createdAt   DateTime  @default(now())
+
+  @@index([expiresAt, deletedAt])
+}
+
+model QuizDraft {
+  id          String   @id @default(uuid()) @db.Uuid
+  anonId      String
+  userId      String?  @db.Uuid
+  step        Int      @default(1)
+  answers     Json
+  contact     String?  // для триггера «брошенный квиз», только с согласием
+  updatedAt   DateTime @updatedAt
+  createdAt   DateTime @default(now())
+
+  @@index([anonId])
+}
+
+enum BookStatus {
+  DRAFT
+  PREVIEW_QUEUED
+  PREVIEW_READY
+  FULL_QUEUED
+  FULL_READY
+  FAILED
+}
+
+model Book {
+  id          String     @id @default(uuid()) @db.Uuid
+  userId      String?    @db.Uuid
+  user        User?      @relation(fields: [userId], references: [id], onDelete: SetNull)
+  draftId     String?    @db.Uuid
+  storyId     String     @db.Uuid
+  story       Story      @relation(fields: [storyId], references: [id])
+  styleKey    String
+  dedication  String?
+  params      Json       // снимок анкеты на момент генерации
+  status      BookStatus @default(DRAFT)
+  text        Json?
+  redrawsLeft Int        @default(3)
+  audioVoice  String?
+  createdAt   DateTime   @default(now())
+  pages       BookPage[]
+  files       BookFile[]
+  orderItems  OrderItem[]
+  costs       GenerationCost[]
+}
+
+model BookPage {
+  id          String   @id @default(uuid()) @db.Uuid
+  bookId      String   @db.Uuid
+  book        Book     @relation(fields: [bookId], references: [id], onDelete: Cascade)
+  index       Int      // 0 — обложка, 1..12 — развороты
+  text        String?
+  imageKey    String?
+  previewKey  String?  // водяной знак + низкое разрешение
+  moderation  String   @default("pending")
+  version     Int      @default(1)
+
+  @@unique([bookId, index])
+}
+
+model BookFile {
+  id          String   @id @default(uuid()) @db.Uuid
+  bookId      String   @db.Uuid
+  book        Book     @relation(fields: [bookId], references: [id], onDelete: Cascade)
+  kind        String   // pdf-screen | pdf-a4 | pdf-print-210 | pdf-print-150 | print-block | print-cover | audio | coloring
+  storageKey  String
+  createdAt   DateTime @default(now())
+}
+
+model GenerationCost {
+  id          String   @id @default(uuid()) @db.Uuid
+  bookId      String?  @db.Uuid
+  book        Book?    @relation(fields: [bookId], references: [id], onDelete: SetNull)
+  provider    String
+  operation   String   // text | sheet | scene | cover | tts | moderation
+  gpuSeconds  Int      @default(0)
+  costKopecks Int      @default(0)
+  createdAt   DateTime @default(now())
+
+  @@index([createdAt])
+}
+
+model GenerationLimit {
+  id         String   @id @default(uuid()) @db.Uuid
+  subject    String   // хэш телефона/email/устройства
+  day        String   // YYYY-MM-DD (МСК)
+  previews   Int      @default(0)
+
+  @@unique([subject, day])
+}
+
+// ───────────── Заказы, оплата, чеки ─────────────
+
+enum OrderStatus {
+  PENDING_PAYMENT
+  AWAITING_CONFIRMATION  // перевод: «Я оплатил(а)»
+  PAID
+  IN_PRINT
+  PACKED
+  SHIPPED
+  DELIVERED
+  CANCELLED
+  REFUNDED
+}
+
+model Order {
+  id            String      @id @default(uuid()) @db.Uuid
+  publicCode    String      @unique  // код для комментария к переводу
+  userId        String      @db.Uuid
+  user          User        @relation(fields: [userId], references: [id])
+  status        OrderStatus @default(PENDING_PAYMENT)
+  whoPrints     String      // self | bookimi
+  subtotalRub   Int
+  discountRub   Int         @default(0)
+  shippingRub   Int         @default(0)
+  totalRub      Int         // считается только на сервере
+  promoCodeId   String?     @db.Uuid
+  promoCode     PromoCode?  @relation(fields: [promoCodeId], references: [id])
+  utm           Json?
+  readyDate     DateTime?
+  expiresAt     DateTime?   // автоотмена неоплаченного
+  createdAt     DateTime    @default(now())
+  paidAt        DateTime?
+  items         OrderItem[]
+  payments      Payment[]
+  receipts      Receipt[]
+  shipment      Shipment?
+  printJob      PrintJob?
+
+  @@index([status, createdAt])
+}
+
+model OrderItem {
+  id          String   @id @default(uuid()) @db.Uuid
+  orderId     String   @db.Uuid
+  order       Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  bookId      String?  @db.Uuid
+  book        Book?    @relation(fields: [bookId], references: [id])
+  kind        String   // format | addon
+  refKey      String   // ProductFormat.key или Addon.key
+  title       String   // для чека: «Изготовление книги на заказ …»
+  qty         Int      @default(1)
+  priceRub    Int
+}
+
+model Payment {
+  id             String   @id @default(uuid()) @db.Uuid
+  orderId        String   @db.Uuid
+  order          Order    @relation(fields: [orderId], references: [id])
+  provider       String   // sbp_qr | transfer | yookassa
+  externalId     String?
+  idempotencyKey String   @unique
+  amountRub      Int
+  status         String   // created | pending | succeeded | failed | refunded
+  confirmedById  String?  @db.Uuid  // оператор при ручном подтверждении
+  raw            Json?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@unique([provider, externalId])
+}
+
+model Receipt {
+  id          String   @id @default(uuid()) @db.Uuid
+  orderId     String   @db.Uuid
+  order       Order    @relation(fields: [orderId], references: [id])
+  regime      String   // npd | 54fz
+  externalId  String?
+  url         String?
+  amountRub   Int
+  status      String   // issued | cancelled
+  createdAt   DateTime @default(now())
+  cancelledAt DateTime?
+}
+
+// ───────────── Печать и доставка ─────────────
+
+model PrintHouse {
+  id          String   @id @default(uuid()) @db.Uuid
+  name        String
+  contacts    String?
+  email       String?
+  apiUrl      String?
+  pickupAddress String?
+  leadDaysMin Int      @default(3)
+  leadDaysMax Int      @default(5)
+  costs       Json     // себестоимость по форматам и допам
+  isActive    Boolean  @default(false)
+  jobs        PrintJob[]
+}
+
+model PrintJob {
+  id           String     @id @default(uuid()) @db.Uuid
+  orderId      String     @unique @db.Uuid
+  order        Order      @relation(fields: [orderId], references: [id])
+  printHouseId String     @db.Uuid
+  printHouse   PrintHouse @relation(fields: [printHouseId], references: [id])
+  status       String     // sent | in_print | packed | handed_over
+  externalId   String?
+  sentAt       DateTime?
+  updatedAt    DateTime   @updatedAt
+}
+
+model Shipment {
+  id          String   @id @default(uuid()) @db.Uuid
+  orderId     String   @unique @db.Uuid
+  order       Order    @relation(fields: [orderId], references: [id])
+  method      String   // pickup | cdek_pvz | cdek_courier | pochta | yandex
+  address     Json
+  priceRub    Int
+  etaDate     DateTime?
+  trackNumber String?
+  status      String   @default("created")
+  updatedAt   DateTime @updatedAt
+}
+
+// ───────────── Маркетинг ─────────────
+
+model PromoCode {
+  id          String    @id @default(uuid()) @db.Uuid
+  code        String    @unique
+  percentOff  Int?
+  amountOffRub Int?
+  ownerId     String?   @db.Uuid   // бонус «Приведи друга»
+  owner       User?     @relation("PromoOwner", fields: [ownerId], references: [id])
+  source      String    // manual | referral_newbie | referral_bonus | trigger | blogger
+  blogger     String?   // utm_source блогера
+  maxUses     Int?
+  usedCount   Int       @default(0)
+  validFrom   DateTime  @default(now())
+  validTo     DateTime?
+  isActive    Boolean   @default(true)
+  orders      Order[]
+}
+
+model Referral {
+  id          String    @id @default(uuid()) @db.Uuid
+  inviterId   String    @db.Uuid
+  inviteeId   String    @unique @db.Uuid
+  orderId     String?   @db.Uuid
+  paidAt      DateTime?
+  bonusIssueAt DateTime? // paidAt + 14 дней
+  bonusPromoId String?  @db.Uuid
+  createdAt   DateTime  @default(now())
+}
+
+model NotificationPref {
+  id         String   @id @default(uuid()) @db.Uuid
+  userId     String   @db.Uuid
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  channel    String   // email | telegram | max | whatsapp
+  address    String   // email / chat_id
+  marketing  Boolean  @default(false)
+  isActive   Boolean  @default(true)
+
+  @@unique([userId, channel])
+}
+
+model TriggerRule {
+  id          String   @id @default(uuid()) @db.Uuid
+  name        String
+  event       String   // quiz_abandoned, preview_ready, pdf_only, delivered, birthday ...
+  condition   Json
+  delayMinutes Int
+  channel     String   // preferred | email | telegram | max
+  template    String
+  promoPercent Int?
+  isMarketing Boolean  @default(true)
+  controlPct  Int      @default(10)
+  isActive    Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  runs        TriggerRun[]
+}
+
+model TriggerRun {
+  id         String      @id @default(uuid()) @db.Uuid
+  ruleId     String      @db.Uuid
+  rule       TriggerRule @relation(fields: [ruleId], references: [id], onDelete: Cascade)
+  subjectId  String
+  isControl  Boolean
+  sentAt     DateTime?
+  converted  Boolean     @default(false)
+  revenueRub Int         @default(0)
+  createdAt  DateTime    @default(now())
+
+  @@index([ruleId, createdAt])
+}
+
+model FunnelEvent {
+  id         String   @id @default(uuid()) @db.Uuid
+  anonId     String
+  userId     String?  @db.Uuid
+  name       String   // quiz_start, photo_upload, preview_ready, choose_print, pay ...
+  props      Json?
+  source     String?
+  device     String?
+  createdAt  DateTime @default(now())
+
+  @@index([name, createdAt])
+}
+
+model Review {
+  id         String   @id @default(uuid()) @db.Uuid
+  userId     String?  @db.Uuid
+  user       User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+  orderId    String?  @db.Uuid
+  authorName String
+  rating     Int
+  text       String
+  storySlug  String?
+  status     String   @default("pending") // pending | approved | rejected
+  createdAt  DateTime @default(now())
+}
+
+// ───────────── Служебное ─────────────
+
+model Setting {
+  key        String   @id
+  value      Json
+  updatedAt  DateTime @updatedAt
+}
+
+model AuditLog {
+  id         String   @id @default(uuid()) @db.Uuid
+  actorId    String?  @db.Uuid
+  actor      User?    @relation(fields: [actorId], references: [id], onDelete: SetNull)
+  action     String
+  entity     String
+  entityId   String?
+  details    Json?
+  createdAt  DateTime @default(now())
+
+  @@index([createdAt])
+}
+
+model WebVital {
+  id         String   @id @default(uuid()) @db.Uuid
+  page       String
+  name       String   // LCP | INP | CLS | TTFB
+  value      Float
+  device     String?
+  createdAt  DateTime @default(now())
+}

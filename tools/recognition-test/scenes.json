@@ -1,0 +1,10 @@
+{
+  "styles": ["watercolor", "storybook", "cartoon"],
+  "scenes": [
+    { "id": "portrait", "prompt": "close portrait of the child smiling, soft daylight, simple background" },
+    { "id": "profile", "prompt": "the child in three-quarter view looking at a glowing star in a night garden" },
+    { "id": "action", "prompt": "full-body: the child running through a snowy forest holding a lantern" },
+    { "id": "emotion", "prompt": "the child laughing with surprise while opening a gift box, warm indoor light" },
+    { "id": "small", "prompt": "wide scene: the child as a small figure steering a yellow submarine among corals" }
+  ]
+}
