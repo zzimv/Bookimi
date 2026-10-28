@@ -1,4 +1,3 @@
-import "server-only";
 import { db, hasDatabase } from "./db";
 import {
   AGE_PAGES,

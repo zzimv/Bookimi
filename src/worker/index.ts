@@ -1,41 +1,97 @@
-// Фоновый воркер: отдельный контейнер `worker`.
-// На шаге 2 — инфраструктура и регулярные задачи; обработчики генерации,
-// PDF, оплаты и уведомлений добавляются на шагах 4–6.
-import { PrismaClient } from "@prisma/client";
+// Фоновый воркер (контейнер `worker`): генерация, PDF, аудио, регулярные задачи.
+import { db } from "../lib/db";
 import { getBoss, QUEUES } from "../lib/queue";
+import { runText, runPreview, runFull, runRedraw, runAudio, LimitReached } from "../lib/gen/pipeline";
+import { purgeExpiredPhotos } from "../lib/photos";
+import { runTriggers } from "../lib/triggers";
+import { issueDueBonuses } from "../lib/referral";
+import { checkNpdLimit } from "../lib/orders";
+import { gpuTick } from "../lib/gen/gpu";
+import { alertOwner } from "../lib/notify";
 
-const db = new PrismaClient();
+type Job<T> = { id: string; data: T }[];
+
+async function fail(bookId: string, e: unknown) {
+  const msg = (e as Error).message ?? String(e);
+  await db.book.update({ where: { id: bookId }, data: { status: "FAILED", error: msg.slice(0, 300) } }).catch(() => {});
+}
 
 async function main() {
   const boss = await getBoss();
 
-  // Расписание (время — МСК)
-  await boss.schedule(QUEUES.purgePhotos, "0 * * * *", {}, { tz: "Europe/Moscow" });
-  await boss.schedule(QUEUES.cancelUnpaid, "*/5 * * * *", {}, { tz: "Europe/Moscow" });
-  await boss.schedule(QUEUES.npdLimitCheck, "0 9 * * *", {}, { tz: "Europe/Moscow" });
-
-  // Удаление фото старше 7 дней (дублирует lifecycle бакета photos).
-  await boss.work(QUEUES.purgePhotos, async () => {
-    const expired = await db.photo.findMany({
-      where: { expiresAt: { lt: new Date() }, deletedAt: null },
-      take: 500,
-    });
-    // Удаление объекта из S3 подключается на шаге 4 (StorageService).
-    for (const p of expired) {
-      await db.photo.update({ where: { id: p.id }, data: { deletedAt: new Date() } });
+  await boss.work<{ bookId: string }>(QUEUES.generateText, { batchSize: 2 }, async (jobs: Job<{ bookId: string }>) => {
+    for (const j of jobs) {
+      try {
+        await runText(j.data.bookId);
+      } catch (e) {
+        await fail(j.data.bookId, e);
+        throw e;
+      }
     }
   });
 
-  // Автоотмена неоплаченных заказов: QR — 1 час, перевод — 24 часа (expiresAt задаётся при создании).
-  // Заказы, где покупатель нажал «Я оплатил(а)», не отменяются автоматически — их решает оператор.
-  await boss.work(QUEUES.cancelUnpaid, async () => {
-    await db.order.updateMany({
-      where: { status: "PENDING_PAYMENT", expiresAt: { lt: new Date() } },
-      data: { status: "CANCELLED" },
-    });
+  await boss.work<{ bookId: string }>(QUEUES.generatePreview, { batchSize: 1 }, async (jobs: Job<{ bookId: string }>) => {
+    for (const j of jobs) {
+      try {
+        await runPreview(j.data.bookId);
+      } catch (e) {
+        if (e instanceof LimitReached) {
+          // Лимит расходов: превью ждёт в очереди и повторится через 15 минут
+          await boss.send(QUEUES.generatePreview, j.data, { startAfter: 15 * 60, singletonKey: `preview-${j.data.bookId}` });
+          return;
+        }
+        await fail(j.data.bookId, e);
+        throw e;
+      }
+    }
   });
 
-  console.error("[worker] started");
+  await boss.work<{ bookId: string; orderId?: string }>(QUEUES.generateFull, { batchSize: 1 }, async (jobs: Job<{ bookId: string; orderId?: string }>) => {
+    for (const j of jobs) {
+      try {
+        await runFull(j.data.bookId, j.data.orderId);
+      } catch (e) {
+        await fail(j.data.bookId, e);
+        await alertOwner("Ошибка генерации оплаченной книги", `Книга ${j.data.bookId}: ${(e as Error).message}`);
+        throw e;
+      }
+    }
+  });
+
+  await boss.work<{ bookId: string; index: number }>(QUEUES.redraw, async (jobs: Job<{ bookId: string; index: number }>) => {
+    for (const j of jobs) await runRedraw(j.data.bookId, j.data.index);
+  });
+
+  await boss.work<{ bookId: string }>(QUEUES.audio, async (jobs: Job<{ bookId: string }>) => {
+    for (const j of jobs) await runAudio(j.data.bookId);
+  });
+
+  // ── Регулярные задачи (время — МСК) ──
+  const tz = { tz: "Europe/Moscow" };
+  await boss.schedule(QUEUES.purgePhotos, "*/30 * * * *", {}, tz);
+  await boss.schedule(QUEUES.cancelUnpaid, "*/5 * * * *", {}, tz);
+  await boss.schedule(QUEUES.triggers, "*/10 * * * *", {}, tz);
+  await boss.schedule(QUEUES.referralBonuses, "15 * * * *", {}, tz);
+  await boss.schedule(QUEUES.npdLimitCheck, "0 9 * * *", {}, tz);
+  await boss.schedule(QUEUES.gpuTick, "*/5 * * * *", {}, tz);
+
+  // Удаление фото старше 7 дней (дублирует lifecycle бакета photos)
+  await boss.work(QUEUES.purgePhotos, async () => {
+    await purgeExpiredPhotos();
+  });
+
+  // Автоотмена неоплаченных: QR — 1 час, перевод — 24 часа (expiresAt задаётся при выборе способа).
+  // «Я оплатил(а)» — не отменяется автоматически, решает оператор.
+  await boss.work(QUEUES.cancelUnpaid, async () => {
+    await db.order.updateMany({ where: { status: "PENDING_PAYMENT", expiresAt: { lt: new Date() } }, data: { status: "CANCELLED" } });
+  });
+
+  await boss.work(QUEUES.triggers, async () => runTriggers());
+  await boss.work(QUEUES.referralBonuses, async () => issueDueBonuses());
+  await boss.work(QUEUES.npdLimitCheck, async () => checkNpdLimit());
+  await boss.work(QUEUES.gpuTick, async () => gpuTick());
+
+  console.error("[worker] запущен");
 }
 
 main().catch((e) => {

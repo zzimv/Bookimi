@@ -16,6 +16,8 @@ x-app: &app
       condition: service_healthy
   restart: unless-stopped
   logging: *logging
+  volumes:
+    - storage:/app/storage   # только для STORAGE_DRIVER=local; в продакшне — Yandex Object Storage
 
 services:
   web:
@@ -31,7 +33,8 @@ services:
   worker:
     <<: *app
     command: ["node_modules/.bin/tsx", "src/worker/index.ts"]
-    mem_limit: 700m   # Chromium для PDF (шаг 4)
+    mem_limit: 700m   # Chromium для PDF
+    shm_size: 256m
 
   db:
     image: postgres:16-alpine
@@ -71,6 +74,7 @@ services:
     logging: *logging
 
 volumes:
+  storage:
   pgdata:
   caddy_data:
   caddy_config:

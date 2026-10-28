@@ -1,0 +1,14 @@
+[Unit]
+Description=BOOKIMI GPU inference server
+After=network-online.target
+
+[Service]
+WorkingDirectory=/opt/gpu-server
+Environment=GPU_INFERENCE_TOKEN=CHANGE_ME
+Environment=PRELOAD=qwen
+ExecStart=/opt/gpu-server/.venv/bin/uvicorn server:app --host 0.0.0.0 --port 8000
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

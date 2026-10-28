@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
-import type { ReactNode } from "react";
 import { notFound } from "next/navigation";
 import { Breadcrumbs } from "./Layout";
+import { renderMarkdown } from "@/lib/markdown";
 import { DOC_VERSION, LEGAL } from "@/lib/legal";
 import { getSeller, getSetting, sellerIsComplete, type Seller } from "@/lib/settings";
 
@@ -25,25 +25,6 @@ function fill(text: string, seller: Seller, domain: string) {
     .replaceAll("{email}", seller.email || "[email]")
     .replaceAll("{телефон}", seller.phone || "[телефон]")
     .replaceAll("{домен}", domain);
-}
-
-function renderMarkdown(md: string): ReactNode {
-  const blocks = md.replace(/\r/g, "").split(/\n{2,}/);
-  return blocks.map((b, i) => {
-    const lines = b.split("\n").filter(Boolean);
-    if (lines.length === 0) return null;
-    if (lines[0].startsWith("## ")) return <h2 key={i}>{lines[0].slice(3)}</h2>;
-    if (lines.every((l) => l.startsWith("- "))) {
-      return (
-        <ul key={i}>
-          {lines.map((l, j) => (
-            <li key={j}>{l.slice(2)}</li>
-          ))}
-        </ul>
-      );
-    }
-    return <p key={i}>{lines.join(" ")}</p>;
-  });
 }
 
 export async function LegalPage({ docKey }: { docKey: string }) {

@@ -19,6 +19,7 @@ export function Header() {
           <Link href="/#povody">Поводы</Link>
           <Link href="/#ceny">Цены</Link>
           <Link href="/#voprosy">Вопросы</Link>
+          <Link href="/kabinet">Кабинет</Link>
         </nav>
         <Link href="/sozdat" className="btn btn--primary">
           Создать книгу
@@ -60,6 +61,8 @@ export async function Footer() {
             <li><Link href="/povod/den-rozhdeniya">На день рождения</Link></li>
             <li><Link href="/povod/novyj-god">На Новый год</Link></li>
             <li><Link href="/vozrast/2-4-goda">Для детей 2–4 лет</Link></li>
+            <li><Link href="/blog">Блог</Link></li>
+            <li><Link href="/kabinet">Личный кабинет</Link></li>
             <li><Link href="/kontakty">Контакты</Link></li>
           </ul>
         </div>

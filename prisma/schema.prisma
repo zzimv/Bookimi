@@ -3,9 +3,12 @@
 // Идентификаторы — UUID (никаких порядковых номеров наружу).
 
 generator client {
-  provider = "prisma-client-js"
+  provider        = "prisma-client-js"
+  previewFeatures = ["queryCompiler", "driverAdapters"]
+  engineType      = "client" // без бинарного движка: WASM-компилятор + драйвер pg
 }
 
+// Подключение — через драйвер pg (src/lib/prisma-client.ts), строка — DATABASE_URL.
 datasource db {
   provider = "postgresql"
   url      = env("DATABASE_URL")
@@ -26,7 +29,9 @@ model User {
   phone         String?   @unique
   name          String?
   role          Role      @default(CUSTOMER)
-  totpSecret    String?   // 2FA для админки (шифруется на уровне приложения)
+  totpSecret    String?   // 2FA для админки (шифруется SESSION_SECRET)
+  totpEnabled   Boolean   @default(false)
+  marketingOk   Boolean   @default(false)
   referralCode  String    @unique
   referredById  String?   @db.Uuid
   referredBy    User?     @relation("Referrals", fields: [referredById], references: [id])
@@ -44,6 +49,7 @@ model User {
   notifyPrefs   NotificationPref[]
   auditLogs     AuditLog[]
   reviews       Review[]
+  tickets       SupportTicket[]
 }
 
 model OtpCode {
@@ -64,6 +70,7 @@ model Session {
   user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   tokenHash  String   @unique
   csrfToken  String
+  mfaPassed  Boolean  @default(false)
   expiresAt  DateTime
   createdAt  DateTime @default(now())
 }
@@ -196,6 +203,7 @@ model Addon {
 
 model Hero {
   id           String   @id @default(uuid()) @db.Uuid
+  bookId       String?  @db.Uuid
   userId       String?  @db.Uuid
   user         User?    @relation(fields: [userId], references: [id], onDelete: Cascade)
   draftId      String?  @db.Uuid
@@ -228,6 +236,7 @@ model Photo {
 model QuizDraft {
   id          String   @id @default(uuid()) @db.Uuid
   anonId      String
+  bookId      String?  @db.Uuid
   userId      String?  @db.Uuid
   step        Int      @default(1)
   answers     Json
@@ -240,6 +249,9 @@ model QuizDraft {
 
 enum BookStatus {
   DRAFT
+  TEXT_QUEUED
+  TEXT_READY
+  TEXT_APPROVED
   PREVIEW_QUEUED
   PREVIEW_READY
   FULL_QUEUED
@@ -257,9 +269,20 @@ model Book {
   styleKey    String
   dedication  String?
   params      Json       // снимок анкеты на момент генерации
+  anonId      String?
   status      BookStatus @default(DRAFT)
-  text        Json?
+  text        Json?      // { title, spreads: [{ index, text }] } — имя уже подставлено
+  textRaw     Json?      // ответ модели с метками {ГЕРОЙ.падеж}
+  rewritesLeft Int       @default(2)
   redrawsLeft Int        @default(3)
+  withPhoto   Boolean    @default(false)
+  contact     String?
+  error       String?
+  progress    Int        @default(0)
+  textApprovedAt DateTime?
+  previewReadyAt DateTime?
+  fullReadyAt DateTime?
+  paidFull    Boolean    @default(false)
   audioVoice  String?
   createdAt   DateTime   @default(now())
   pages       BookPage[]
@@ -307,10 +330,11 @@ model GenerationCost {
 model GenerationLimit {
   id         String   @id @default(uuid()) @db.Uuid
   subject    String   // хэш телефона/email/устройства
+  kind       String   @default("preview") // preview | text | otp | redraw
   day        String   // YYYY-MM-DD (МСК)
-  previews   Int      @default(0)
+  count      Int      @default(0)
 
-  @@unique([subject, day])
+  @@unique([subject, kind, day])
 }
 
 // ───────────── Заказы, оплата, чеки ─────────────
@@ -334,6 +358,12 @@ model Order {
   user          User        @relation(fields: [userId], references: [id])
   status        OrderStatus @default(PENDING_PAYMENT)
   whoPrints     String      // self | bookimi
+  contactName   String?
+  contactPhone  String?
+  contactEmail  String?
+  pdfCreditRub  Int         @default(0)
+  refundedAt    DateTime?
+  comment       String?
   subtotalRub   Int
   discountRub   Int         @default(0)
   shippingRub   Int         @default(0)
@@ -555,6 +585,28 @@ model AuditLog {
   createdAt  DateTime @default(now())
 
   @@index([createdAt])
+}
+
+model BlogPost {
+  id          String    @id @default(uuid()) @db.Uuid
+  slug        String    @unique
+  title       String
+  description String
+  body        String    // простая разметка: ## подзаголовок, - пункт, пустая строка — абзац
+  publishedAt DateTime?
+  updatedAt   DateTime  @updatedAt
+}
+
+model SupportTicket {
+  id          String    @id @default(uuid()) @db.Uuid
+  userId      String?   @db.Uuid
+  user        User?     @relation(fields: [userId], references: [id], onDelete: SetNull)
+  orderId     String?   @db.Uuid
+  contact     String
+  message     String
+  status      String    @default("open") // open | answered | closed
+  answer      String?
+  createdAt   DateTime  @default(now())
 }
 
 model WebVital {

@@ -1,0 +1,112 @@
+// Планы пяти сюжетов: 12 разворотов. Для каждого — текст-образец (демо-генерация и пример
+// для YandexGPT) и описание сцены для иллюстрации (английский — Qwen понимает его лучше всего).
+// Метки: {ГЕРОЙ.падеж}, {ЛАСКОВО.падеж}; {Р:мальчик|девочка} — форма по полу героя.
+// Только на сервере: в клиентский бандл не попадает.
+
+export interface Spread {
+  text: string;
+  scene: string;
+}
+
+export interface StoryPlan {
+  slug: string;
+  coverScene: string;
+  spreads: Spread[];
+}
+
+export const STORY_PLANS: StoryPlan[] = [
+  {
+    slug: "novogodnee-puteshestvie-s-dedom-morozom",
+    coverScene: "the child and Grandfather Frost in a long blue coat flying on a sleigh over a snowy forest under a starry winter sky",
+    spreads: [
+      { text: "За три дня до Нового года {ГЕРОЙ.им} нашёл{Р:|а} на подоконнике снежинку, которая светилась, как маленький фонарик. А рядом лежала записка: «Нужна помощь! Д. М.»", scene: "the child at a frosty window at night holding a glowing snowflake, a small note on the windowsill" },
+      { text: "Снежинка закружилась, распахнула окно — и вот уже {ГЕРОЙ.им} стоит посреди заснеженного леса. Навстречу спешит сам Дед Мороз, и борода у него вся в инее.", scene: "the child standing in a snowy forest, Grandfather Frost hurrying toward them, frost on his beard" },
+      { text: "— Беда, {ЛАСКОВО.им}! — вздохнул Дед Мороз. — Волшебные сани сломались, а подарки нужно развезти до полуночи. Одному мне не успеть.", scene: "Grandfather Frost pointing at a broken wooden sleigh with a cracked runner, the child listening carefully, sacks of gifts nearby" },
+      { text: "{ГЕРОЙ.им} внимательно осмотрел{Р:|а} полоз и придумал{Р:|а}: если обвязать его серебряной лентой с ёлки, он продержится всю ночь. Дед Мороз только ахнул.", scene: "the child tying a silver ribbon around the sleigh runner, Grandfather Frost watching in amazement" },
+      { text: "Сани поднялись над лесом. Внизу мерцали огоньки деревень, а ветер пел новогоднюю песню. {ГЕРОЙ.дат} было совсем не страшно — только весело.", scene: "the child and Grandfather Frost flying in the sleigh above a forest with village lights below" },
+      { text: "Первая остановка — ледяная река. Мост замело снегом, и олени остановились. «Как же нам перебраться?» — задумался Дед Мороз.", scene: "the sleigh stopped before a frozen river with a snow-covered bridge, reindeer waiting" },
+      { text: "{ГЕРОЙ.им} достал{Р:|а} из кармана светящуюся снежинку и подул{Р:|а} на неё. Снежинка рассыпалась тысячей искр и проложила по льду сверкающую дорожку.", scene: "the child blowing on a glowing snowflake that turns into a sparkling path across the frozen river" },
+      { text: "В городе огоньков все окна горели жёлтым светом. {ГЕРОЙ.им} и Дед Мороз тихонько раскладывали подарки под ёлки — так, чтобы никто не проснулся.", scene: "the child tiptoeing in a cozy living room placing a gift under a decorated New Year tree, Grandfather Frost peeking from the door" },
+      { text: "Один подарок остался без адреса. «Это для того, кто больше всех ждёт чуда», — сказал Дед Мороз. {ГЕРОЙ.им} знал{Р:|а}, кому его отнести.", scene: "the child holding a small gift without a label, thinking, Grandfather Frost smiling kindly" },
+      { text: "Подарок нашёл себе хозяина — маленького зайчонка, который грустил в лесу один. Зайчонок обнял коробку, и в лесу стало светлее.", scene: "a little hare in the snowy forest hugging a gift box, the child kneeling beside it, warm light around them" },
+      { text: "До полуночи оставалась минута. Последний подарок, последний дом — успели! Дед Мороз крепко пожал {ГЕРОЙ.дат} руку: «Без тебя бы я не справился».", scene: "Grandfather Frost shaking the child's hand on a rooftop under fireworks at midnight" },
+      { text: "Утром {ГЕРОЙ.им} проснул{Р:ся|ась} в своей кровати. На подушке лежала серебряная лента — та самая, с волшебных саней. С Новым годом, {ЛАСКОВО.им}!", scene: "the child waking up in bed on New Year morning, a silver ribbon on the pillow, snowy window" },
+    ],
+  },
+  {
+    slug: "den-rozhdeniya-v-skazochnom-korolevstve",
+    coverScene: "the child in a paper crown walking toward a fairy-tale castle with flags and balloons on a sunny hill",
+    spreads: [
+      { text: "В день рождения {ГЕРОЙ.им} проснул{Р:ся|ась} и нашёл{Р:|а} под подушкой записку, перевязанную золотой ниткой: «Твой праздник спрятан в Сказочном королевстве. Ищи подсказки!»", scene: "the child sitting up in bed reading a note tied with a golden thread, morning sunlight" },
+      { text: "За дверью вместо коридора начиналась тропинка из разноцветных камешков. Она вела через луг прямо к королевству, где на башнях развевались флаги.", scene: "the child stepping through a bedroom door onto a colorful stone path leading across a meadow to a distant castle" },
+      { text: "Первую подсказку охранял добрый великан. «Отгадаешь загадку — получишь ключ», — прогудел он. {ГЕРОЙ.им} отгадал{Р:|а} её с первого раза.", scene: "a gentle giant sitting by the path holding a big key, the child smiling up at him" },
+      { text: "Ключ открыл маленькую калитку в саду говорящей совы. Сова поправила очки: «Тебе нужно найти то, что звучит, когда радуешься».", scene: "a wise owl with round glasses on a branch in a magical garden talking to the child" },
+      { text: "{ГЕРОЙ.им} подумал{Р:|а}, прислушал{Р:ся|ась} — и нашёл{Р:|а} в кустах серебряный колокольчик. Он звенел так весело, что зацвели все ромашки вокруг.", scene: "the child holding a silver bell, daisies blooming all around in the garden" },
+      { text: "Колокольчик привёл к кухне весёлого повара. Там пахло ванилью и корицей. «Ты как раз вовремя, — подмигнул повар. — Но что я пеку, не скажу!»", scene: "a cheerful cook in a tall hat in a castle kitchen full of pastries winking at the child" },
+      { text: "На столе лежала карта королевства. Крестиком было отмечено место у большого дуба. {ГЕРОЙ.им} взял{Р:|а} карту и побежал{Р:|а} туда.", scene: "the child running across the castle courtyard with a paper map in hand" },
+      { text: "У дуба никого не было — только качели и тишина. «Неужели я ошиб{Р:ся|лась}?» — подумал{Р:|а} {ГЕРОЙ.им}. И тут кто-то тихо хихикнул за деревом.", scene: "the child standing by a huge oak tree with an empty swing, looking puzzled" },
+      { text: "— Сюрприз! — из-за дуба выбежали великан, сова, повар и все жители королевства. Над поляной взлетели воздушные шары.", scene: "a surprise party: giant, owl, cook and fairy-tale townsfolk jumping out from behind the oak, balloons rising" },
+      { text: "Повар вынес огромный торт со свечами. Ровно столько свечей, сколько лет {ГЕРОЙ.дат}. «Загадывай желание!» — закричали все.", scene: "the child in front of a big birthday cake with candles, everyone gathered around cheering" },
+      { text: "{ГЕРОЙ.им} задул{Р:|а} свечи, и в небе распустился салют из звёздочек. Весь вечер в королевстве танцевали, пели и смеялись.", scene: "the child dancing with the townsfolk under star-shaped fireworks in the evening sky" },
+      { text: "А когда {ГЕРОЙ.им} вернул{Р:ся|ась} домой, на столе ждал ещё один подарок — тот, что приготовили самые близкие. С днём рождения, {ЛАСКОВО.им}!", scene: "the child back home at a table with a wrapped gift and family love, warm evening light" },
+    ],
+  },
+  {
+    slug: "imya-i-zvyozdnyj-drakonchik",
+    coverScene: "the child holding a tiny glowing star dragon in a night garden under a sky full of stars",
+    spreads: [
+      { text: "Однажды вечером в саду что-то упало с неба — тихо, как пушинка. {ГЕРОЙ.им} подошёл{Р:|а} ближе и увидел{Р:|а} крошечного дракончика. Он светился, как звёздочка.", scene: "a tiny glowing dragon lying in the grass of a night garden, the child approaching curiously" },
+      { text: "Дракончик дрожал. «Я упал со своей звезды, — прошептал он. — Там мой дом. Ты поможешь мне вернуться?» {ГЕРОЙ.им} кивнул{Р:|а}.", scene: "the child gently picking up the shivering little star dragon" },
+      { text: "Сначала дракончику нужно было набраться сил. {ГЕРОЙ.им} укутал{Р:|а} его в шарф и налил{Р:|а} тёплого молока. Дракончик засветился ярче.", scene: "the child wrapping the dragon in a scarf and offering a cup of warm milk on the porch" },
+      { text: "«Чтобы взлететь, мне нужна звёздная пыльца, — сказал дракончик. — Она бывает только на самом высоком холме». И они отправились в путь.", scene: "the child carrying the dragon along a moonlit path toward a tall hill" },
+      { text: "Дорогу преградил тёмный лес. Было страшновато. Но {ГЕРОЙ.им} крепче прижал{Р:|а} дракончика и сказал{Р:|а}: «Смелость — это когда страшно, но идёшь».", scene: "the child walking bravely into a dark forest, the dragon's glow lighting the way" },
+      { text: "В лесу им встретился потерявшийся ёжик. {ГЕРОЙ.им} не прош{Р:ёл|ла} мимо: проводил{Р:|а} его до норки, хоть и пришлось сделать крюк.", scene: "the child guiding a small lost hedgehog to its burrow in the forest at night" },
+      { text: "Ёжик в благодарность показал короткую тропинку к холму. «Добро всегда возвращается», — улыбнулся дракончик.", scene: "the hedgehog pointing the way along a narrow path, the child and the dragon following" },
+      { text: "На вершине холма трава мерцала серебром. {ГЕРОЙ.им} собрал{Р:|а} звёздную пыльцу в ладошки и осторожно осыпал{Р:|а} ею дракончика.", scene: "the child on a hilltop sprinkling silver star dust over the dragon" },
+      { text: "Крылья дракончика расправились и засияли. Он поднялся в воздух, сделал круг над холмом — и вдруг опустился обратно.", scene: "the dragon flying in a circle above the child with shining wings" },
+      { text: "— Без тебя я бы не долетел, — сказал он. — Садись, я покажу тебе мой дом. И {ГЕРОЙ.им} полетел{Р:|а} на спине дракончика прямо к звёздам.", scene: "the child riding on the back of the now bigger glowing dragon flying toward the stars" },
+      { text: "Звезда дракончика оказалась тёплой и светлой, как лампа на кухне. Там его ждала мама-драконица. Она обняла сразу обоих.", scene: "a mother star dragon hugging the little dragon and the child on a glowing star" },
+      { text: "Домой {ГЕРОЙ.им} вернул{Р:ся|ась} перед самым рассветом. А теперь каждый вечер одна звёздочка в небе подмигивает {ГЕРОЙ.дат}. Это дракончик говорит: «Спасибо, друг».", scene: "the child at a bedroom window at dawn looking at one bright star winking in the sky" },
+    ],
+  },
+  {
+    slug: "kapitan-podvodnoj-lodki",
+    coverScene: "the child as a captain in a cap steering a yellow submarine among coral reefs and fish",
+    spreads: [
+      { text: "В порту стояла жёлтая подводная лодка, а на ней — табличка: «Капитан: {ГЕРОЙ.им}». Команда уже ждала приказа.", scene: "the child in a captain's cap standing proudly on a yellow submarine in a harbor" },
+      { text: "— Курс — на дно океана! — скомандовал{Р:|а} {ГЕРОЙ.им}. Лодка погрузилась, и за иллюминатором зашумели пузырьки.", scene: "the child at the submarine controls giving a command, bubbles outside the porthole" },
+      { text: "Мимо проплывали стайки рыб — синие, полосатые, золотые. Осьминог-картограф помахал щупальцем и протянул старую карту.", scene: "an octopus holding a map waving at the submarine among colorful fish" },
+      { text: "На карте был нарисован кит и написано: «Кит попал в беду у Кораллового рифа». {ГЕРОЙ.им} сразу повернул{Р:|а} штурвал.", scene: "the child studying an old map with a whale drawing inside the submarine" },
+      { text: "Коралловый риф оказался настоящим подводным садом: розовые, фиолетовые, оранжевые кораллы. Но где же кит?", scene: "the yellow submarine gliding through a colorful coral reef" },
+      { text: "Вдруг в глубине раздался грустный долгий звук. {ГЕРОЙ.им} прислушал{Р:ся|ась}: так поют киты, когда им нужна помощь.", scene: "the child listening with headphones inside the submarine, sound waves in the water" },
+      { text: "Большой добрый кит запутался в старой рыболовной сети. Он не мог всплыть, чтобы вдохнуть воздуха.", scene: "a large gentle whale tangled in an old fishing net near the reef" },
+      { text: "— Без паники, команда! — сказал{Р:|а} капитан {ГЕРОЙ.им}. — Выпускаем механическую руку. Аккуратно, по одной ниточке.", scene: "the submarine's mechanical arm carefully cutting the net, the child concentrating at the controls" },
+      { text: "Сеть поддалась. Кит вздохнул, махнул хвостом — и поплыл вверх, к солнцу. Рыбы закружились вокруг, будто аплодировали.", scene: "the whale swimming free toward the sunlit surface, fish swirling around in celebration" },
+      { text: "Кит вернулся и пропел «спасибо» так громко, что лодка закачалась. А потом позвал {ГЕРОЙ.вин} за собой — показать что-то важное.", scene: "the whale singing next to the submarine, the child laughing at the porthole" },
+      { text: "Кит привёл их туда, где на дне лежал мусор. «Давайте уберём, чтобы никто больше не попал в беду», — решил{Р:|а} {ГЕРОЙ.им}. И команда принялась за работу.", scene: "the submarine crew and the child collecting trash from the ocean floor with nets, the whale watching" },
+      { text: "Вечером жёлтая лодка вернулась в порт. В бортовом журнале капитан {ГЕРОЙ.им} записал{Р:|а}: «Океан стал чище, а у нас появился новый друг».", scene: "the child writing in a ship's log on the submarine deck at sunset in the harbor, the whale's tail in the distance" },
+    ],
+  },
+  {
+    slug: "sonnaya-strana",
+    coverScene: "the child in pajamas sitting on a soft cloud with a crescent moon and sleepy animals",
+    spreads: [
+      { text: "Наступил вечер. {ГЕРОЙ.им} надел{Р:|а} пижаму. Пора в Сонную страну.", scene: "the child in pajamas by the bed in a cozy room at evening, a warm lamp" },
+      { text: "Луна заглянула в окошко. «Спокойной ночи, луна», — сказал{Р:|а} {ГЕРОЙ.им}.", scene: "a smiling crescent moon peeking into the window, the child waving" },
+      { text: "Облака плывут медленно-медленно. «Спокойной ночи, облака».", scene: "soft clouds slowly floating in the evening sky, the child watching from the window" },
+      { text: "Зайчик зевнул в норке. «Спокойной ночи, зайчик».", scene: "a little bunny yawning in its burrow, the child peeking in gently" },
+      { text: "Медвежонок обнял подушку. «Спокойной ночи, мишка».", scene: "a bear cub hugging a pillow in a den, the child smiling" },
+      { text: "Птички сели в гнёздышко. Тихо-тихо. «Спокойной ночи, птички».", scene: "little birds settling in a nest on a branch at dusk, the child whispering" },
+      { text: "Звёздочки зажглись одна за другой: раз, два, три.", scene: "stars lighting up one by one in the dark blue sky above the child" },
+      { text: "Ветерок поёт колыбельную: ш-ш-ш… ш-ш-ш…", scene: "a gentle breeze moving the curtains, the child listening with closed eyes" },
+      { text: "Глазки у {ЛАСКОВО.род} закрываются. Тёплое одеяло укрывает.", scene: "the child under a warm quilt with eyes closing" },
+      { text: "Мама целует {ЛАСКОВО.вин} в щёчку. Папа гасит свет.", scene: "a parent's hand tucking the quilt, the lamp dimming, soft shadows" },
+      { text: "Сонная страна открывает ворота. Там мягко и спокойно.", scene: "a dreamy land of soft hills and pillows opening its gates under the moon" },
+      { text: "Спокойной ночи, {ЛАСКОВО.им}. Сладких снов.", scene: "the child peacefully asleep with a plush toy, moonlight on the blanket" },
+    ],
+  },
+];
+
+export const planFor = (slug: string) => STORY_PLANS.find((p) => p.slug === slug) ?? null;
+
+export { applyGender } from "./declension";

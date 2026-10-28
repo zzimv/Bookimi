@@ -16,6 +16,7 @@ function loadMetrika(id: string) {
     (w.ym.a = w.ym.a || []).push(args);
   } as typeof w.ym;
   w.ym.l = Date.now();
+  (window as unknown as { __YM_ID?: number }).__YM_ID = Number(id);
   const s = document.createElement("script");
   s.async = true;
   s.src = "https://mc.yandex.ru/metrika/tag.js";

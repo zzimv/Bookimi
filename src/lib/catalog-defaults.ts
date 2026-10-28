@@ -129,10 +129,14 @@ export const AGE_PAGES = [
   { slug: "8-9-let", title: "Книги для детей 8–9 лет", min: 8, max: 9 },
 ];
 
+// 5 стилей теста узнаваемости; покупателю показываются активные (по умолчанию 3 с наименьшим риском
+// потери сходства). Итоговый выбор — по результатам теста, переключается в админке.
 export const STYLES = [
-  { key: "watercolor", title: "Акварель", description: "Мягкие цвета и светлые тона, как в классической детской книге." },
-  { key: "storybook", title: "Сказочная гуашь", description: "Насыщенные цвета, плотные мазки и тёплый свет." },
-  { key: "cartoon", title: "Мультфильм", description: "Яркие чистые формы и выразительные эмоции." },
+  { key: "watercolor-air", title: "Воздушная акварель", description: "Тонкая линия, прозрачные акварельные пятна, много воздуха.", active: true },
+  { key: "kind-classic", title: "Добрая классика", description: "Чёткий контур и мягкие цвета, как в любимых книжках из детства.", active: true },
+  { key: "cozy-detail", title: "Уютные подробности", description: "Тёплые цвета и множество мелочей, которые интересно разглядывать.", active: true },
+  { key: "folk-lubok", title: "Народная сказка", description: "Яркие узоры и праздничные цвета русской росписи.", active: false },
+  { key: "ink-humor", title: "Весёлая графика", description: "Живая чёрная линия и один яркий цвет — с юмором.", active: false },
 ];
 
 export const FORMATS = [
@@ -150,7 +154,8 @@ export const ADDONS = [
   { key: "gift-box", kind: "PHYSICAL", title: "Подарочная упаковка с картой приключений и открыткой", price: 490, pct: null, print: true },
   { key: "stickers", kind: "PHYSICAL", title: "Наклейки с героем (лист А5)", price: 350, pct: null, print: true },
   { key: "poster", kind: "PHYSICAL", title: "Постер с обложкой А3", price: 590, pct: null, print: true },
-  { key: "audiobook", kind: "DIGITAL", title: "Аудиокнига", price: 390, pct: null, print: false },
+  { key: "audiobook", kind: "DIGITAL", title: "Аудиокнига: озвучка диктором", price: 390, pct: null, print: false },
+  { key: "audio-self", kind: "DIGITAL", title: "Аудиокнига вашим голосом: запишите сами в кабинете", price: 490, pct: null, print: false },
   { key: "coloring", kind: "DIGITAL", title: "Раскраска PDF по иллюстрациям книги", price: 290, pct: null, print: false },
   { key: "second-copy", kind: "MODIFIER", title: "Второй экземпляр книги", price: null, pct: 30, print: true },
   { key: "urgent", kind: "MODIFIER", title: "Срочное изготовление", price: 500, pct: null, print: true },

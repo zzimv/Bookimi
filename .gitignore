@@ -12,3 +12,4 @@ next-env.d.ts
 /data/reviews.json
 __pycache__/
 .venv/
+/storage

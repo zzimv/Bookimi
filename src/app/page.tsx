@@ -4,6 +4,8 @@ import { CatalogFilters } from "@/components/Catalog";
 import { Cover } from "@/components/Cover";
 import { JsonLd, StickyCta } from "@/components/Layout";
 import { NamePreview } from "@/components/NamePreview";
+import { ContinueBanner } from "@/components/ContinueBanner";
+import { getApprovedReviews } from "@/lib/catalog";
 import { Faq, PriceSection, Reviews } from "@/components/Sections";
 import { displayTitle, getMinPrice, getOccasions, getStories } from "@/lib/catalog";
 import { FAQ } from "@/lib/catalog-defaults";
@@ -13,17 +15,21 @@ export const revalidate = 300;
 export default async function Home() {
   const [stories, occasions, minPrice] = await Promise.all([getStories(), getOccasions(), getMinPrice()]);
   const [first, second] = stories;
+  const reviews = await getApprovedReviews();
+  // AggregateRating — только по реальным опубликованным отзывам
+  const rating = reviews.length ? { "@type": "AggregateRating", ratingValue: (reviews.reduce((s, r) => s + r.rating, 0) / reviews.length).toFixed(1), reviewCount: reviews.length } : undefined;
   const domain = process.env.DOMAIN ?? "bookimi.ru";
 
   return (
     <>
       <JsonLd
         data={[
-          { "@context": "https://schema.org", "@type": "Organization", name: "БУКИМИ", alternateName: "Bookimi", url: `https://${domain}` },
+          { "@context": "https://schema.org", "@type": "Organization", name: "БУКИМИ", alternateName: "Bookimi", url: `https://${domain}`, ...(rating ? { aggregateRating: rating } : {}) },
           { "@context": "https://schema.org", "@type": "WebSite", name: "БУКИМИ", url: `https://${domain}`, inLanguage: "ru" },
         ]}
       />
 
+      <ContinueBanner />
       <section className="hero">
         <div className="wrap hero__grid">
           <div>

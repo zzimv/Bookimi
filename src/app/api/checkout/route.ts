@@ -1,0 +1,37 @@
+import { body, err, json, throttle, ownBook, utmCookie } from "@/lib/api";
+import { currentUser } from "@/lib/auth";
+import { createOrder } from "@/lib/orders";
+import { Checkout } from "@/lib/checkout-schema";
+import { notifyUser } from "@/lib/notify";
+import { db } from "@/lib/db";
+
+export async function POST(req: Request) {
+  const t = await throttle("checkout", 10, 60_000);
+  if (t) return t;
+  const user = await currentUser();
+  if (!user) return err("Войдите по коду", 401);
+  const b = await body(req, Checkout);
+  if (!b) return err("Проверьте данные заказа");
+  const own = await ownBook(b.bookId);
+  if (!own || own.book.userId !== user.id) return err("Не найдено", 404);
+  if (b.whoPrints === "bookimi") {
+    if (!b.shipping) return err("Выберите доставку");
+    if (b.shipping.method !== "pickup" && !b.shipping.address.city) return err("Укажите город");
+    if (!b.contact.name || !b.contact.phone) return err("Укажите имя и телефон получателя");
+  }
+  // UTM блогера → его промокод автоматически
+  const utm = await utmCookie();
+  let promo = b.promo;
+  if (!promo && utm?.utm_source) {
+    const p = await db.promoCode.findFirst({ where: { blogger: utm.utm_source, isActive: true } });
+    if (p) promo = p.code;
+  }
+  try {
+    if (b.voice && b.addons.includes("audiobook")) await db.book.update({ where: { id: b.bookId }, data: { audioVoice: b.voice } });
+    const order = await createOrder(user.id, { ...b, promo, utm, contact: { ...b.contact, email: b.contact.email || user.email || undefined } });
+    await notifyUser(user.id, "order_created", { code: order.publicCode, total: order.totalRub, orderId: order.id });
+    return json({ orderId: order.id });
+  } catch (e) {
+    return err((e as Error).message);
+  }
+}

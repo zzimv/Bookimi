@@ -7,6 +7,7 @@ import "@fontsource/manrope/700.css";
 import "./globals.css";
 import { Footer, Header, PromoBar } from "@/components/Layout";
 import { CookieBanner } from "@/components/CookieBanner";
+import { Vitals } from "@/components/Vitals";
 
 const domain = process.env.DOMAIN ?? "bookimi.ru";
 
@@ -30,6 +31,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <main>{children}</main>
         <Footer />
         <CookieBanner metrikaId={process.env.YANDEX_METRIKA_ID} />
+        <Vitals />
       </body>
     </html>
   );

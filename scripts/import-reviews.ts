@@ -2,7 +2,7 @@
 // Отзывы без consentToPublish: true не загружаются.
 import { readFileSync } from "node:fs";
 import { createHash } from "node:crypto";
-import { PrismaClient } from "@prisma/client";
+import { createPrisma } from "../src/lib/prisma-client";
 import { z } from "zod";
 
 const Item = z.object({
@@ -20,7 +20,7 @@ async function main() {
   const [file, flag] = process.argv.slice(2);
   if (!file) throw new Error("укажите путь: npx tsx scripts/import-reviews.ts data/reviews.json [--approve]");
   const items = z.array(Item).parse(JSON.parse(readFileSync(file, "utf8")));
-  const db = new PrismaClient();
+  const db = createPrisma();
   let added = 0, skipped = 0, noConsent = 0;
 
   for (const r of items) {
