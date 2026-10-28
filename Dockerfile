@@ -21,6 +21,7 @@ COPY --from=build --chown=app /app/.next/static ./.next/static
 COPY --from=build --chown=app /app/public ./public
 COPY --from=build --chown=app /app/prisma ./prisma
 COPY --from=build --chown=app /app/src ./src
+COPY --from=build --chown=app /app/scripts ./scripts
 COPY --from=build --chown=app /app/node_modules ./node_modules
 COPY --from=build --chown=app /app/package.json ./package.json
 USER app

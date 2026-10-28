@@ -1,0 +1,42 @@
+{
+  "_comment": "Стили описаны техникой, палитрой и композицией, без имён художников в промптах. Имена — только во внутреннем поле reference. Причины: работы Сутеева, Ю. Васнецова, Бидструпа и Нурдквиста охраняются авторским правом (Нурдквист жив), «Маленький принц» — товарный знак наследников; имя художника в промпте тянет в картинку его персонажей и композиции, а в рекламе даёт повод для претензий. В продукте показываются только свои названия стилей.",
+  "identity_clause": "The child must look exactly like the child in the reference photo: same face shape, eyes and eye color, eyebrows, nose, mouth, cheeks, ears, hair color and haircut. Keep realistic child proportions for the stated age. Do not beautify, do not change age, do not caricature the face.",
+  "negative": "photo, photorealistic, 3d render, adult face, distorted face, extra fingers, deformed hands, text, letters, watermark, logo, signature, frame, multiple copies of the child",
+  "styles": [
+    {
+      "key": "watercolor-air",
+      "title": "Воздушная акварель",
+      "reference": "иллюстрации к «Маленькому принцу» (А. де Сент-Экзюпери)",
+      "prompt": "delicate children's book illustration, thin slightly wobbly pen-and-ink outline, transparent watercolor washes, lots of untouched white paper, pale sky blue, butter yellow and soft green, naive simple shapes, quiet poetic mood, small details, hand-made feel",
+      "likeness_risk": "средний: мало деталей лица, возможна потеря черт на дальнем плане"
+    },
+    {
+      "key": "kind-classic",
+      "title": "Добрая классика",
+      "reference": "советская детская книга, В. Сутеев",
+      "prompt": "classic mid-century children's book illustration, confident clean black ink contour, flat soft colors with gentle shading, pale paper background, round friendly forms, clear readable staging, expressive kind faces, warm humor, subtle printed paper texture",
+      "likeness_risk": "средний: округлые упрощённые лица"
+    },
+    {
+      "key": "folk-lubok",
+      "title": "Народная сказка",
+      "reference": "русский лубок, Ю. Васнецов",
+      "prompt": "Russian folk naive painting for a children's book, matte gouache, bold flat decorative shapes, ornamental flowers, berries and patterned borders, deep red, ochre, black, emerald and cream palette, stylized symmetric composition, textured hand-painted surface, cheerful festive mood",
+      "likeness_risk": "высокий: стилизация лица, проверить отдельно"
+    },
+    {
+      "key": "ink-humor",
+      "title": "Весёлая графика",
+      "reference": "Х. Бидструп",
+      "prompt": "lively black ink line drawing for a children's book, expressive gesture and dynamic poses, light cross-hatching, white background, one warm accent color, gentle situational humor, face drawn with careful realistic proportions",
+      "likeness_risk": "высокий: штриховая графика без цвета кожи и волос — цвет волос и глаз передавать акцентным цветом"
+    },
+    {
+      "key": "cozy-detail",
+      "title": "Уютные подробности",
+      "reference": "С. Нурдквист",
+      "prompt": "richly detailed ink and watercolor children's book illustration, warm earthy palette, cozy scene full of tiny objects, tools, plants and small hidden creatures to discover, countryside atmosphere, soft daylight, careful fine linework",
+      "likeness_risk": "низкий–средний: много деталей, герой может теряться в сцене"
+    }
+  ]
+}

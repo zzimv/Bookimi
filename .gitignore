@@ -8,3 +8,5 @@ out
 next-env.d.ts
 /tools/recognition-test/data
 /tools/recognition-test/results
+
+/data/reviews.json

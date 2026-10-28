@@ -1,10 +1,65 @@
 {
-  "styles": ["watercolor", "storybook", "cartoon"],
+  "_comment": "10 сцен из сюжетов БУКИМИ. Каждая проверяет отдельный риск узнаваемости: ракурс, размер лица, эмоцию, свет, головной убор, второго персонажа.",
   "scenes": [
-    { "id": "portrait", "prompt": "close portrait of the child smiling, soft daylight, simple background" },
-    { "id": "profile", "prompt": "the child in three-quarter view looking at a glowing star in a night garden" },
-    { "id": "action", "prompt": "full-body: the child running through a snowy forest holding a lantern" },
-    { "id": "emotion", "prompt": "the child laughing with surprise while opening a gift box, warm indoor light" },
-    { "id": "small", "prompt": "wide scene: the child as a small figure steering a yellow submarine among corals" }
+    {
+      "id": "s01-portrait",
+      "story": "любой (обложка)",
+      "checks": "базовый анфас, крупно",
+      "prompt": "close-up portrait of the child smiling and holding an open picture book, looking at the viewer, simple soft background"
+    },
+    {
+      "id": "s02-dragon-34",
+      "story": "звёздный дракончик",
+      "checks": "три четверти, ночное освещение",
+      "prompt": "the child in three-quarter view in a night garden, gently holding a tiny glowing star dragon in both hands, warm light from the dragon on the child's face"
+    },
+    {
+      "id": "s03-sub-profile",
+      "story": "капитан подводной лодки",
+      "checks": "профиль — самый трудный ракурс",
+      "prompt": "the child in side profile looking through a round porthole of a yellow submarine at a big friendly whale, blue underwater light"
+    },
+    {
+      "id": "s04-snow-hat",
+      "story": "новогоднее путешествие",
+      "checks": "шапка закрывает волосы, движение",
+      "prompt": "full-body: the child running through a snowy forest in a knitted winter hat and scarf, holding a small lantern, snowflakes, rosy cheeks"
+    },
+    {
+      "id": "s05-sleigh-duo",
+      "story": "новогоднее путешествие",
+      "checks": "второй крупный персонаж рядом",
+      "prompt": "the child sitting on a sleigh next to Grandfather Frost in a long blue coat with a white beard, both laughing, a sack of gifts behind them, starry winter night"
+    },
+    {
+      "id": "s06-gift-surprise",
+      "story": "день рождения",
+      "checks": "сильная эмоция: удивление, смех",
+      "prompt": "the child opening a big gift box with an amazed open-mouthed laugh, confetti in the air, birthday garlands"
+    },
+    {
+      "id": "s07-castle-far",
+      "story": "день рождения в королевстве",
+      "checks": "дальний план, лицо маленькое",
+      "prompt": "wide landscape: the child as a small figure walking along a winding path toward a fairy-tale castle on a hill, holding a paper map, flags on towers"
+    },
+    {
+      "id": "s08-bedtime",
+      "story": "сонная страна",
+      "checks": "тёмная тёплая сцена, сонное лицо",
+      "prompt": "the child in pajamas lying in bed under a quilt, sleepy half-closed eyes, hugging a plush bunny, warm bedside lamp light, moon in the window"
+    },
+    {
+      "id": "s09-hug-dog",
+      "story": "дополнительный герой (питомец)",
+      "checks": "объятие, лицо частично прикрыто",
+      "prompt": "the child hugging a fluffy happy dog, cheek pressed to the dog's head, sunny meadow"
+    },
+    {
+      "id": "s10-hill-backlight",
+      "story": "звёздный дракончик / любой финал",
+      "checks": "ракурс снизу, контровой свет",
+      "prompt": "low-angle view of the child standing proudly on a hill at sunset, looking through a brass telescope at the first stars, warm backlight"
+    }
   ]
 }
