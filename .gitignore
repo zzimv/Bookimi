@@ -10,3 +10,5 @@ next-env.d.ts
 /tools/recognition-test/results
 
 /data/reviews.json
+__pycache__/
+.venv/
