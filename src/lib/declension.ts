@@ -16,11 +16,20 @@ export function isNeuter(g: Gender) {
 }
 /** Род по имени, если пол не указан: -а/-я → женский (кроме частых мужских), иначе мужской. */
 export function guessGender(name: string): "boy" | "girl" {
+  // Имя-отчество: «Мария Ивановна», «Иван Петрович» — род по отчеству
+  const words = name.trim().toLowerCase().split(/\s+/);
+  if (words.length > 1 && FEM_PATRONYMIC.test(words[1])) return "girl";
+  if (words.length > 1 && MASC_PATRONYMIC.test(words[1])) return "boy";
   const low = name.trim().split(/[\s-]/)[0].toLowerCase();
   if (/^(илья|никита|кузьма|фома|лука|савва|данила|гаврила|миша|саша|паша|гоша|лёша|алёша|ваня|петя|вася|дима|женя|витя|толя|коля|серёжа|юра|слава|сеня|федя|тёма|тима|лёва|вова|костя|стёпа|гриша|боря)$/.test(low)) return "boy";
   if (/[ая]$/.test(low) || /^(любовь|рысь|ночь|мышь)$/.test(low)) return "girl";
   return "boy";
 }
+
+/** Отчества: «Ивановна», «Ильинична», «Кузьминична» / «Петрович», «Сергеевич», «Ильич». */
+const FEM_PATRONYMIC = /(овна|евна|ична|инична)$/i;
+const MASC_PATRONYMIC = /(ович|евич|ич)$/i;
+export const isPatronymic = (w: string) => FEM_PATRONYMIC.test(w) || MASC_PATRONYMIC.test(w);
 
 const INDECLINABLE = /(о|е|э|и|у|ю|ы)$/i; // Саша → но «Саша» на «а»; Лео, Ники, Рене — не склоняются
 const HUSHING = /[жшчщц]$/i;
@@ -36,8 +45,9 @@ export function declineName(name: string, c: Case, gender: Gender): string {
   // Двойные имена: «Анна-Мария»
   if (n.includes("-")) return n.split("-").map((p) => declineName(p, c, gender)).join("-");
   if (n.includes(" ")) {
-    const [first, ...rest] = n.split(" ");
-    return [declineName(first, c, gender), ...rest].join(" ");
+    // Имя + отчество склоняются оба («Марии Ивановне», «Ивану Петровичу»); фамилия и прочее — как есть
+    const [first, ...rest] = n.split(/\s+/);
+    return [declineName(first, c, gender), ...rest.map((w) => (isPatronymic(w) ? declineName(w, c, FEM_PATRONYMIC.test(w) ? "girl" : "boy") : w))].join(" ");
   }
   const low = n.toLowerCase();
   const stem = n.slice(0, -1);
@@ -131,6 +141,19 @@ export interface TagPerson {
   name: string;
   gender?: Gender;
 }
+/** Группа (детский сад, класс, команда): дети без героя и взрослые (воспитатели, учитель). */
+export interface TagGroup {
+  /** Дети группы, кроме героя, по порядку анкеты. */
+  members: TagPerson[];
+  /** Взрослые: «Мария Ивановна» (имя-отчество склоняется целиком). */
+  adults?: TagPerson[];
+  /**
+   * Сколько слотов {ДРУГn} в книге (groupSlotCount(plot) в registry.ts). Если детей больше, чем слотов,
+   * слот получает несколько детей подряд («Ваня, Петя и Оля»). Не задано — слот n = ребёнок n.
+   */
+  slots?: number;
+}
+
 export interface TagContext {
   hero: HeroNames;
   /** Доп. герои по порядку: ДОП1, ДОП2, ДОП3. */
@@ -142,6 +165,8 @@ export interface TagContext {
   occasion?: string | Partial<Record<Case, string>>;
   /** Возраст героя — для {ВОЗРАСТ}. */
   age?: number;
+  /** Группа для {ГРУППА.*}, {ДРУГn.*}, {РДn:…}, {ВОСПИТАТЕЛЬn.*}, {ПЕРЕКЛИЧКА} и блоков [[?…: …]]. */
+  group?: TagGroup;
 }
 
 function occasionForm(occ: TagContext["occasion"], c: Case): string {
@@ -150,7 +175,7 @@ function occasionForm(occ: TagContext["occasion"], c: Case): string {
   return occ[c] ?? occ.им ?? "";
 }
 
-const joinRu = (xs: string[]) => (xs.length > 1 ? xs.slice(0, -1).join(", ") + " и " + xs.at(-1) : xs[0] ?? "");
+export const joinRu = (xs: string[]) => (xs.length > 1 ? xs.slice(0, -1).join(", ") + " и " + xs.at(-1) : xs[0] ?? "");
 
 // Подставленные значения помечаются служебными символами, чтобы после подстановки поправить предлог
 // перед ними («о Ане» → «об Ане», «с Львом» → «со Львом») и поднять регистр в начале фразы.
@@ -187,6 +212,116 @@ function capitalizeStarts(text: string) {
   return text.replace(new RegExp(`(^|[.!?…]\\s+|\\n\\s*|[«"„]|^—\\s|\\n—\\s)${OPEN}(\\p{Ll})`, "gu"), (_m, pre: string, ch: string) => pre + OPEN + ch.toUpperCase());
 }
 
+// ---------------------------------------------------------------------------
+// Группа: распределение детей по слотам, блоки-условия, списки
+// ---------------------------------------------------------------------------
+
+/** Больше стольких имён в одном перечислении — продолжение уходит в следующие фразы. */
+export const LIST_MAX = 8;
+
+/**
+ * Дети по слотам {ДРУГ1..ДРУГS}: результат[i] — индексы детей в слоте i+1.
+ *  M ≤ S: слот i — ребёнок i, слоты после M пустые (необязательные фразы выпадают);
+ *  M > S: дети делятся на S подряд идущих кучек почти равного размера («Ваня, Петя и Оля»).
+ * Так каждый ребёнок назван хотя бы раз и никто не назван дважды, пока не прозвучали все
+ * (если слоты в книге идут по возрастанию номеров и каждый живёт в одном развороте — это проверяет validateContent).
+ */
+export function distributeMembers(members: number, slots: number): number[][] {
+  const S = Math.max(0, Math.floor(slots));
+  const M = Math.max(0, Math.floor(members));
+  const out: number[][] = Array.from({ length: S }, () => []);
+  if (!M || !S) return out;
+  if (M <= S) {
+    for (let i = 0; i < M; i++) out[i] = [i];
+    return out;
+  }
+  for (let i = 0; i < S; i++) {
+    const a = Math.floor((i * M) / S);
+    const b = Math.floor(((i + 1) * M) / S);
+    for (let k = a; k < b; k++) out[i].push(k);
+  }
+  return out;
+}
+
+/** Делит список на куски ≤ max почти равной длины: 9 → 5+4, 15 → 8+7, 39 → 8+8+8+8+7. */
+export function chunkNames<T>(xs: T[], max = LIST_MAX): T[][] {
+  if (xs.length <= max) return xs.length ? [xs] : [];
+  const parts = Math.ceil(xs.length / max);
+  const out: T[][] = [];
+  for (let i = 0; i < parts; i++) out.push(xs.slice(Math.ceil((i * xs.length) / parts), Math.ceil(((i + 1) * xs.length) / parts)));
+  return out;
+}
+
+/** Продолжения длинного перечисления — нейтральны к падежу («И Ване, Оле и Тимуру — тоже.»). */
+const LIST_TAILS = ["И {X} — тоже.", "А ещё {X}.", "И, конечно, {X}.", "И {X} — тоже!", "А с ними {X}."];
+
+/**
+ * Перечисление, которое не душит фразу: до 8 имён — одной фразой («Ане, Пете и Маше»);
+ * больше — первая часть в самой фразе, остальные — следующими фразами («И Ване, Оле и Тимуру — тоже.»).
+ * Возвращает [в строку, хвостовые фразы]. Предлог перед списком (с, к, о, у…) повторяется в хвостах.
+ */
+export function flowingList(names: string[], prep = "", max = LIST_MAX, wrap: (s: string) => string = (x) => x): [string, string[]] {
+  const chunks = chunkNames(names, max);
+  if (!chunks.length) return ["", []];
+  const p = prep ? prep.toLowerCase() + " " : "";
+  return [joinRu(chunks[0]), chunks.slice(1).map((c, i) => LIST_TAILS[i % LIST_TAILS.length].replace("{X}", p + wrap(joinRu(c))))];
+}
+
+/** Как условие блока [[?…]] относится к группе. */
+export interface GroupCounts {
+  members: number;
+  adults: number;
+  slots?: number;
+}
+
+const BLOCK_RE = /\[\[\?([^:\]\n]+):\s?([\s\S]*?)\]\]/g;
+const DROPPED = "\u0003";
+
+/** Истинно ли условие блока: ДРУГn (у слота n есть свои дети), ГРУППА / ГРУППА>k / ГРУППА<k, ВОСПИТАТЕЛЬn, ВОСПИТАТЕЛИ / ВОСПИТАТЕЛИ>k. */
+export function blockCondition(cond: string, g: GroupCounts): boolean {
+  const c = cond.trim();
+  let m = c.match(/^ДРУГ(\d+)$/);
+  if (m) return (distributeMembers(g.members, g.slots ?? Math.max(g.members, Number(m[1])))[Number(m[1]) - 1]?.length ?? 0) > 0;
+  m = c.match(/^ВОСПИТАТЕЛЬ(\d)?$/);
+  if (m) return g.adults >= Number(m[1] ?? 1);
+  m = c.match(/^(ГРУППА|ВОСПИТАТЕЛИ)(?:([<>])(\d+))?$/);
+  if (m) {
+    const n = m[1] === "ГРУППА" ? g.members : g.adults;
+    if (!m[2]) return n >= 1;
+    return m[2] === ">" ? n > Number(m[3]) : n < Number(m[3]);
+  }
+  return false;
+}
+
+/**
+ * Раскрывает блоки [[?УСЛОВИЕ: текст]] и [[?УСЛОВИЕ: текст || иначе]] под размер группы.
+ * Выпавший блок, занимавший целую строку (стихи), убирает и строку. Метки внутри не трогает —
+ * так можно готовить план для модели (знает только число детей, без имён).
+ */
+export function resolveGroupBlocks(text: string, g: GroupCounts): string {
+  if (!text.includes("[[?")) return text;
+  const out = text.replace(BLOCK_RE, (_m, cond: string, body: string) => {
+    const [then, ...rest] = body.split("||");
+    const v = blockCondition(cond, g) ? then : rest.join("||");
+    return v.trim() ? v.replace(/\s+$/, "") : DROPPED;
+  });
+  return out
+    .split("\n")
+    .filter((l) => !(l.includes(DROPPED) && !l.replace(new RegExp(DROPPED, "g"), "").trim()))
+    .join("\n")
+    .replace(new RegExp(DROPPED, "g"), "")
+    .replace(/[ \t]{2,}/g, " ")
+    .replace(/[ \t]+([.,!?;:])/g, "$1")
+    .replace(/^[ \t]+|[ \t]+$/gm, "");
+}
+
+/** Ведомость «Наш класс»: все имена через « · », герой — посередине (как на общей фотографии). */
+export function rosterLine(heroName: string, members: string[]): string {
+  const all = [...members];
+  all.splice(Math.floor(all.length / 2), 0, heroName);
+  return all.filter(Boolean).join(" · ");
+}
+
 /**
  * Полная подстановка меток (спецификация — docs/content/ARCHITECTURE.md):
  * {Р:м|ж(|ср)}, {Р1..3:…}, {МН:один|много}, {ДОПЫ.падеж}, {ПОВОД}, {ВОЗРАСТ},
@@ -196,7 +331,9 @@ function capitalizeStarts(text: string) {
 export function fillTags(text: string, ctx: TagContext) {
   const extras = ctx.extras ?? [];
   const hero = ctx.hero;
-  let out = applyGender(text, hero.gender);
+  let out = text;
+  if (ctx.group || /\[\[\?|\{(ДРУГ|РД|РВ|ГРУППА|МН_ГРУППЫ|ВОСПИТАТЕЛ|ПЕРЕКЛИЧКА)/.test(text)) out = fillGroup(out, ctx);
+  out = applyGender(out, hero.gender);
   out = out.replace(/\{Р([1-3]):([^}]*)\}/g, (_, n: string, forms: string) => pickForm(forms, extras[Number(n) - 1]?.gender));
   out = out.replace(/\{МН:([^|}]*)\|([^}]*)\}/g, (_, one: string, many: string) => (extras.length > 1 ? many : one));
   out = out.replace(/\{ДОПЫ\.(им|род|дат|вин|тв|пр)\}/g, (_, c: Case) => mark(joinRu(extras.map((e) => declineName(e.name, c, e.gender)))));
@@ -212,4 +349,54 @@ export function fillTags(text: string, ctx: TagContext) {
   });
   out = capitalizeStarts(fixPrepositions(out));
   return out.replace(new RegExp(`[${OPEN}${CLOSE}]`, "g"), "").replace(/ {2,}/g, " ");
+}
+
+/** Метки и блоки группы (часть fillTags). Значения помечены для правки предлогов и заглавных. */
+function fillGroup(text: string, ctx: TagContext): string {
+  const g = ctx.group ?? { members: [] };
+  const members = g.members;
+  const adults = g.adults ?? [];
+  const M = members.length;
+  const slots = g.slots ?? Math.max(M, 1);
+  const dist = distributeMembers(M, slots);
+  /** Дети слота n: свои, иначе — повтор по кругу (только после того, как прозвучали все). */
+  const slot = (n: number): TagPerson[] => {
+    const own = dist[n - 1];
+    if (own?.length) return own.map((i) => members[i]);
+    return M ? [members[(n - 1) % M]] : [];
+  };
+  const genderOf = (ps: TagPerson[]) => (ps.length > 1 ? "many" : ps[0]?.gender ?? (ps[0] ? guessGender(ps[0].name) : undefined));
+  const pick3 = (forms: string, who: TagPerson[]) => {
+    const [m, f = m, many = m] = forms.split("|");
+    const gg = genderOf(who);
+    return gg === "many" ? many : isFeminine(gg) ? f : m;
+  };
+  const dec = (p: TagPerson, c: Case) => declineName(p.name, c, p.gender ?? guessGender(p.name));
+
+  let out = resolveGroupBlocks(text, { members: M, adults: adults.length, slots });
+  out = out.replace(/\{РД(\d+):([^}]*)\}/g, (_, n: string, forms: string) => pick3(forms, slot(Number(n))));
+  out = out.replace(/\{РВ(\d)?:([^}]*)\}/g, (_, n: string | undefined, forms: string) => pickForm(forms, adults[Number(n ?? 1) - 1]?.gender ?? guessGender(adults[Number(n ?? 1) - 1]?.name ?? "")));
+  out = out.replace(/\{МН_ГРУППЫ:([^}]*)\}/g, (_, forms: string) => pick3(forms, members));
+  out = out.replace(/\{ПЕРЕКЛИЧКА\}/g, () => mark(rosterLine(ctx.hero.name, members.map((p) => p.name))));
+  out = out.replace(/\{ДРУГ(\d+)(?:\.(им|род|дат|вин|тв|пр))?\}/g, (_, n: string, c?: Case) => mark(joinRu(slot(Number(n)).map((p) => dec(p, c ?? "им")))));
+  out = out.replace(/\{ВОСПИТАТЕЛЬ(\d)?(?:\.(им|род|дат|вин|тв|пр))?\}/g, (_, n: string | undefined, c?: Case) => {
+    const a = adults[Number(n ?? 1) - 1];
+    return a ? mark(dec(a, c ?? "им")) : "";
+  });
+  out = out.replace(/\{ВОСПИТАТЕЛИ(?:\.(им|род|дат|вин|тв|пр))?\}/g, (_, c?: Case) => mark(joinRu(adults.map((a) => dec(a, c ?? "им")))));
+  // {ГРУППА.падеж}: длинный список — первая часть во фразе, остальное — хвостами после конца этой фразы
+  const re = /(?:(?<![А-Яа-яЁё])(с|со|к|ко|о|об|у|от|для|про|при|за|над|перед|между|без|до|из|по)\s)?\{ГРУППА(?:\.(им|род|дат|вин|тв|пр))?\}/i;
+  for (let m = out.match(re); m && m.index !== undefined; m = out.match(re)) {
+    const prep = m[1] ?? "";
+    const [head, rest] = flowingList(members.map((p) => dec(p, (m![2] as Case) ?? "им")), prep, LIST_MAX, mark);
+    const put = (prep ? prep + " " : "") + mark(head);
+    out = out.slice(0, m.index) + put + out.slice(m.index + m[0].length);
+    if (!rest.length) continue;
+    const from = m.index + put.length;
+    const tail = out.slice(from);
+    const end = tail.match(/[.!?…]+(?:»|")?(?=\s|$)/);
+    const cut = end?.index !== undefined ? from + end.index + end[0].length : out.length;
+    out = out.slice(0, cut) + " " + rest.join(" ") + out.slice(cut);
+  }
+  return out;
 }

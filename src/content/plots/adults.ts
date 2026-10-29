@@ -33,6 +33,7 @@ export const ADULT_PLOTS: Plot[] = [
     description:
       "Тёплая книга-воспоминание от лица второй половинки: первая встреча, прогулка до закрытия всех кафе, ужин на полу среди коробок, полка с четырьмя лишними винтиками и маленькие домашние законы. Смешно, нежно и очень по-вашему — а детали из анкеты станут отдельными сценами.",
     occasions: ["godovshchina", "den-vlyublennyh", "svadba", "den-rozhdeniya", "8-marta", "23-fevralya", "den-semi"],
+    coreOccasions: ["godovshchina", "svadba"],
     textStyle: "our-story-memoir",
     artStyles: ["naive-watercolor", "retro-poster", "ink-humor", "linocut"],
     theme: "romance-city",
@@ -133,6 +134,7 @@ export const ADULT_PLOTS: Plot[] = [
     description:
       "Нежные стихи о паре как о двух крошечных планетах: окно, горящее вдалеке, мост от кометы, разговоры до рассвета, общий дом с двумя кружками и одной калиткой. Простые образы вместо громких слов — книга, которую читают вдвоём вслух.",
     occasions: ["den-vlyublennyh", "godovshchina", "svadba", "den-rozhdeniya", "8-marta"],
+    coreOccasions: ["den-vlyublennyh"],
     textStyle: "lyrical-verse",
     artStyles: ["naive-watercolor", "linocut", "retro-poster"],
     theme: "starry-sky",
@@ -221,6 +223,7 @@ export const ADULT_PLOTS: Plot[] = [
     description:
       "Шуточная былина от детей о маме или папе: один обычный день воспет как подвиги богатыря. Великий Сбор за семь минут, задача про два поезда, сказка, которая усыпляет даже Сон-Непоседу, и пир блинами. А в финале — без всякой иронии: спасибо, что ты у нас есть.",
     occasions: ["den-materi", "den-otca", "8-marta", "23-fevralya", "den-rozhdeniya"],
+    coreOccasions: ["den-materi", "den-otca"],
     textStyle: "mock-epic",
     artStyles: ["kind-classic", "ink-humor", "naive-watercolor"],
     theme: "home",
@@ -327,6 +330,7 @@ export const ADULT_PLOTS: Plot[] = [
     description:
       "Книга в стихах от выросших (или растущих) детей маме или папе: двенадцать маленьких уроков, которые не задают в школе. Щёлка света в двери, кролик вокруг пенька, мандарин на всех, зонт вверх тормашками — простые сцены, от которых щиплет в носу.",
     occasions: ["den-materi", "den-otca", "den-rozhdeniya", "yubilej", "8-marta", "23-fevralya"],
+    coreOccasions: ["den-materi", "den-otca"],
     textStyle: "lyrical-verse",
     artStyles: ["naive-watercolor", "kind-classic", "pen-ink-1920s"],
     theme: "home",
@@ -415,6 +419,7 @@ export const ADULT_PLOTS: Plot[] = [
     description:
       "Сказка в стихах о бабушке или дедушке с золотыми руками и добрым сердцем. Царь Несмеян объявляет три испытания: оживить засохший сад, завести остановившиеся часы и рассмешить его самого. Помогает скворушка, а главное чудо случается, когда герой рассказывает царю про своих внуков.",
     occasions: ["den-babushek-i-dedushek", "yubilej", "den-rozhdeniya", "pensiya", "8-marta", "23-fevralya"],
+    coreOccasions: ["den-babushek-i-dedushek"],
     textStyle: "pushkin-verse",
     artStyles: ["folk-lubok", "pen-ink-1920s", "vintage-postcard", "kind-classic"],
     theme: "dacha",
@@ -509,6 +514,7 @@ export const ADULT_PLOTS: Plot[] = [
     description:
       "Шуточная былина для коллеги, друга или начальника: офисные будни воспеты высоким слогом. Герой укрощает бесконечное совещание песочными часами, договаривается с капризным принтером и сдаёт отчёт ровно в шесть. В финале — тёплые слова от всей команды. Идеально на юбилей, повышение или проводы.",
     occasions: ["yubilej", "novaya-rabota", "den-rozhdeniya", "pensiya", "23-fevralya", "8-marta"],
+    coreOccasions: ["novaya-rabota"],
     textStyle: "mock-epic",
     artStyles: ["ink-humor", "retro-poster", "graphic-novel", "risograph-zine"],
     theme: "office",
@@ -609,6 +615,7 @@ export const ADULT_PLOTS: Plot[] = [
     description:
       "Комикс для коллеги или друга, который уходит на заслуженный отдых. Последний день и передача суперсил, будильник, который никак не смирится, неспешный завтрак, кабачки по росту, танцы по вторникам и билет в одну сторону. Смешно до самого конца — а конец искренний.",
     occasions: ["pensiya", "yubilej", "den-rozhdeniya"],
+    coreOccasions: ["pensiya"],
     textStyle: "comic-captions",
     artStyles: ["retro-poster", "ink-humor", "risograph-zine", "graphic-novel"],
     theme: "travel-map",

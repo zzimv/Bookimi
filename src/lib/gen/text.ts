@@ -3,13 +3,13 @@
 //  YandexGPT — системный промпт голоса (text-styles.ts) + бриф: сегмент (длина, запреты), герой, повод, план сюжета.
 //  Demo      — заранее написанные развороты сюжета + крючки повода + доп. герои и увлечения.
 // Без Node API: модуль собирается и в демо-стенд (tools/demo).
-import { applyOccasion, getPlots, hooksFor, plotBySlug, textStyle } from "../../content/registry";
+import { applyGroupScenes, applyOccasion, getPlots, groupMembersMax, groupSlotCount, hooksFor, plotBySlug, textStyle } from "../../content/registry";
 import { occasionWord } from "../../content/occasions";
 import { titleTemplate } from "../../content/title";
 import { OCCASIONS, type Segment } from "../../content/profiles";
 import type { Plot, TextStyle } from "../../content/types";
 import { appearanceLine, exactAge, extraGender, EXTRA_ROLE_LABELS, heroAge, segmentFor, type QuizAnswers } from "../quiz";
-import { fillTags, guessGender, type TagContext } from "../declension";
+import { fillTags, guessGender, resolveGroupBlocks, type TagContext } from "../declension";
 import { personsOf, redactForText } from "./redact";
 
 export interface StoryText {
@@ -27,6 +27,12 @@ export interface TextProvider {
   /** plot — готовый сюжет; null — «своя история» по идее покупателя. */
   write(a: QuizAnswers, plot: Plot | null, variant: number): Promise<TextResult>;
   ideas(idea: string, a: QuizAnswers): Promise<{ title: string; summary: string }[]>;
+}
+
+/** Группа анкеты, обрезанная по лимитам сюжета (дети — до group.max − 1, взрослые — до includeAdults.max). */
+export function groupOf(a: QuizAnswers, plot: Plot | null) {
+  if (!plot?.group || !a.group) return { members: [], adults: [] } as NonNullable<QuizAnswers["group"]>;
+  return { members: a.group.members.slice(0, groupMembersMax(plot)), adults: a.group.adults.slice(0, plot.group.includeAdults?.max ?? 0) };
 }
 
 /** Сюжет из анкеты (null — своя идея). */
@@ -75,7 +81,8 @@ export class DemoTextProvider implements TextProvider {
 
   async write(a: QuizAnswers, plot: Plot | null, variant: number): Promise<TextResult> {
     const base = plot ?? demoBasePlot(a, variant);
-    const spreads = applyOccasion(base, a.occasion.key, a.occasion.custom).map((s, i) => ({ index: i + 1, text: s.text, scene: s.scene }));
+    const g = groupOf(a, base);
+    const spreads = applyGroupScenes(base, applyOccasion(base, a.occasion.key, a.occasion.custom), g.members.length, g.adults.length).map((s, i) => ({ index: i + 1, text: s.text, scene: s.scene }));
     const verse = !!textStyle(base.textStyle)?.verse;
     if (a.audience === "CHILD" && !verse) {
       const interest = [...a.interests, a.interestCustom].map((x) => INTEREST_LINES[x?.toLowerCase?.() ?? ""]).find(Boolean);
@@ -153,6 +160,17 @@ export function brief(a: QuizAnswers, plot: Plot | null, style: TextStyle | null
       ? `Дополнительные герои: ${a.extras.map((e, i) => `{ДОП${i + 1}} — ${EXTRA_ROLE_LABELS[e.role] ?? e.role}${e.what ? ` (${clean(e.what)})` : ""}${e.description ? `: ${clean(e.description)}` : ""}`).join("; ")}. Все вместе — {ДОПЫ}.`
       : "Дополнительных героев нет.",
   );
+  const grp = groupOf(a, plot);
+  if (plot?.group) {
+    const S = groupSlotCount(plot);
+    const n = grp.members.length;
+    lines.push(
+      n
+        ? `Группа (${plot.group.label}): кроме героя ещё ${n} ${n % 10 === 1 && n % 100 !== 11 ? "ребёнок" : [2, 3, 4].includes(n % 10) && ![12, 13, 14].includes(n % 100) ? "ребёнка" : "детей"}. Имена — только метками слотов из плана: {ДРУГ1}…{ДРУГ${Math.min(S, n)}} (слот может означать нескольких детей — согласуй слова формами {РДn:м|ж|мн}). Каждый слот из плана сохрани: так каждый ребёнок будет назван. Ведомость {ПЕРЕКЛИЧКА} не меняй. Не придумывай других имён детей.`
+        : `Группа (${plot.group.label}): других детей в анкете нет — пиши «ребята», «друзья», без имён.`,
+    );
+    if (grp.adults.length) lines.push(`Взрослые группы: ${grp.adults.map((x, i) => `{ВОСПИТАТЕЛЬ${i + 1}} — ${x.role}`).join("; ")} (зови по имени-отчеству метками; род — {РВn:м|ж}).`);
+  }
   const occ = OCCASIONS.find((o) => o.key === a.occasion.key);
   if (a.occasion.key && a.occasion.key !== "bez" && (a.occasion.key !== "svoj" || a.occasion.custom)) {
     const w = occasionWord(a.occasion.key, a.occasion.key === "svoj" ? clean(a.occasion.custom) : "");
@@ -164,7 +182,9 @@ export function brief(a: QuizAnswers, plot: Plot | null, style: TextStyle | null
   if (style) lines.push(`Голос книги: «${style.title}»${style.verse ? " (стихи)" : ""}.`);
   if (plot) {
     lines.push(`Сюжет «${titleTemplate(plot.title)}». Следуй плану по разворотам (можно менять детали и формулировки, сохраняя ход событий):`);
-    applyOccasion(plot, a.occasion.key, a.occasion.custom).forEach((s, i) => lines.push(`${i + 1}. ${s.text.replace(/\n/g, " / ")}`));
+    // План группы — под её размер (лишние слоты выпали, блоки раскрыты), имён нет — только метки
+    const counts = { members: grp.members.length, adults: grp.adults.length, slots: groupSlotCount(plot) };
+    applyOccasion(plot, a.occasion.key, a.occasion.custom).forEach((s, i) => lines.push(`${i + 1}. ${resolveGroupBlocks(s.text, counts).replace(/\n/g, " / ")}`));
   } else {
     const idea = a.story.ideaChoice ? `${a.story.ideaChoice.title}: ${a.story.ideaChoice.summary}` : a.story.idea;
     lines.push(`Сюжет по идее покупателя: ${clean(idea)}`);
@@ -209,7 +229,8 @@ export class YandexGptProvider implements TextProvider {
     const parsed = JSON.parse(json) as { title: string; spreads: { text: string; scene: string }[] };
     if (!Array.isArray(parsed.spreads) || parsed.spreads.length < 10) throw new Error("YandexGPT: неполный ответ");
     // Для готовых сюжетов — проверенные описания сцен (с реквизитом повода)
-    const planned = plot ? applyOccasion(plot, a.occasion.key, a.occasion.custom) : null;
+    const g = groupOf(a, plot);
+    const planned = plot ? applyGroupScenes(plot, applyOccasion(plot, a.occasion.key, a.occasion.custom), g.members.length, g.adults.length) : null;
     const spreads = parsed.spreads.slice(0, 12).map((s, i) => ({ index: i + 1, text: s.text, scene: planned?.[i]?.scene ?? s.scene }));
     return { raw: { title: plot ? titleTemplate(plot.title) : parsed.title, spreads }, costKopecks, provider: this.name };
   }
@@ -237,7 +258,16 @@ export function textProvider(name: string): TextProvider {
 
 /** Контекст меток анкеты: герой, доп. герои с родом, повод, возраст. */
 export function tagContext(a: QuizAnswers): TagContext {
+  const plot = plotForAnswers(a);
+  const g = groupOf(a, plot);
   return {
+    group: plot?.group
+      ? {
+          members: g.members.map((m) => ({ name: m.name, gender: m.gender ?? guessGender(m.name) })),
+          adults: g.adults.map((x) => ({ name: x.name, gender: x.gender ?? guessGender(x.name) })),
+          slots: groupSlotCount(plot),
+        }
+      : undefined,
     hero: { name: a.hero.name, nickname: a.hero.nickname || a.hero.name, gender: a.hero.gender },
     extras: a.extras.map((e) => ({ name: e.name, gender: extraGender(e, guessGender) })),
     occasion: occasionWord(a.occasion.key, a.occasion.custom) ?? "",

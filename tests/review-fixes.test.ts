@@ -218,8 +218,8 @@ describe("8. имена в стихах — только отдельной ст
     expect(unevenGenderForms("{Р:наш герой|героиня} и {Р:Добрым|Доброй}")).toEqual(["{Р:наш герой|героиня}"]);
   });
   const versePlots = PLOTS.filter((p) => textStyle(p.textStyle)?.verse);
-  it("стихотворных сюжетов 6, в каждом не больше 4 меток имени", () => {
-    expect(versePlots.map((p) => p.slug).sort()).toEqual(["dve-planety", "dvenadcat-urokov", "imya-i-mesyac-yasnyj", "nosochnyj-klad", "skazka-pro-carya-nesmeyana", "utro-kuvyrkom"]);
+  it("стихотворных сюжетов 7, в каждом не больше 4 меток имени", () => {
+    expect(versePlots.map((p) => p.slug).sort()).toEqual(["dve-planety", "dvenadcat-urokov", "imya-i-mesyac-yasnyj", "my-vyrosli", "nosochnyj-klad", "skazka-pro-carya-nesmeyana", "utro-kuvyrkom"]);
     for (const p of versePlots) expect(p.spreads.reduce((n, s) => n + countNameTags(s.text), 0), p.slug).toBeLessThanOrEqual(4);
   });
   const heroes: Record<string, [string, "boy" | "girl"][]> = {

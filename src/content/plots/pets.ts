@@ -514,6 +514,7 @@ export const PET_PLOTS: Plot[] = [
     description:
       "Книга-письмо от семьи своему питомцу — собаке или кошке. Как мы готовились, как ты обнюхал каждый угол, как прошла первая ночь и как мы учились понимать друг друга. Тёплый подарок к годовщине появления питомца в семье — читать вслух и хранить.",
     occasions: ["poyavlenie-pitomca", "den-pitomca", "den-rozhdeniya", "bez"],
+    coreOccasions: ["poyavlenie-pitomca"],
     textStyle: "gentle-bedtime",
     artStyles: ["soft-gouache", "watercolor-air", "vintage-postcard", "pen-ink-1920s"],
     theme: "pet-home",

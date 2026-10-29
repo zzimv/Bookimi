@@ -417,6 +417,7 @@ export const TEEN_PLOTS: Plot[] = [
     ageMin: 14,
     ageMax: 17,
     occasions: ["vypusknoj-v-shkole", "den-rozhdeniya", "novyj-god", "bez"],
+    coreOccasions: ["vypusknoj-v-shkole"],
     textStyle: "quest-fantasy-humor",
     artStyles: ["painterly-fantasy", "graphic-novel", "retro-poster"],
     theme: "mountains",

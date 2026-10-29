@@ -3,7 +3,7 @@
 //  • в брифе модели — метками {ГЕРОЙ.падеж}, {ЛАСКОВО.падеж}, {ДОПn.падеж} (модель пишет метки, имена ставим мы);
 //  • в промпте картинок — нейтральными словами роли: «the hero», «the friend».
 // Телефоны, почта, ссылки, @ники и длинные числа удаляются. Без Node API (собирается и в демо-стенд).
-import { CASES, declineName, guessGender, type Case } from "../declension";
+import { CASES, declineName, guessGender, isPatronymic, type Case } from "../declension";
 
 export interface RedactPerson {
   /** Метка без падежа: ГЕРОЙ, ЛАСКОВО, ДОП1… */
@@ -12,6 +12,11 @@ export interface RedactPerson {
   gender?: string;
   /** Слово для промпта картинки: «the hero», «the friend». */
   role: string;
+  /**
+   * Вместо метки в брифе — нейтральное слово (дети группы: слот {ДРУГn} зависит от размера группы,
+   * поэтому имя ребёнка из свободного текста становится «друг из группы»).
+   */
+  textWord?: string;
 }
 
 /** Частые пары «полное имя ↔ домашние формы» (в обе стороны). */
@@ -100,6 +105,9 @@ function formsFor(persons: RedactPerson[]): Form[] {
     const name = p.name.trim();
     if (name.length < 2) continue;
     for (const [word, c] of caseForms(name, p.gender)) forms.push({ word, person: p, case: c, variant: false });
+    // «Мария Ивановна»: ещё имя и отчество по отдельности («спросили Марию», «Ивановна сказала»)
+    const words = name.split(/\s+/).filter((w) => w.length >= 2);
+    if (words.length > 1) for (const w of words) for (const [word, c] of caseForms(w, isPatronymic(w) ? guessGender(`x ${w}`) : p.gender)) forms.push({ word, person: p, case: c, variant: false });
     for (const v of variantsOf(name)) for (const [word, c] of caseForms(v, guessGender(v))) forms.push({ word, person: p, case: c, variant: true });
   }
   return forms;
@@ -160,7 +168,12 @@ export function redactForText(text: string | undefined | null, persons: RedactPe
   if (!text) return "";
   // Ласковая форма имени героя → {ЛАСКОВО.*} (без домашнего имени fillTags подставит имя)
   const tagOf = (p: RedactPerson, variant: boolean) => (variant && p.tag === "ГЕРОЙ" ? "ЛАСКОВО" : p.tag);
-  return replaceNames(stripContacts(text), persons, (f) => `{${tagOf(f.person, f.variant)}.${f.case}}`, (p) => `{${tagOf(p, true)}.им}`);
+  return replaceNames(
+    stripContacts(text),
+    persons,
+    (f) => f.person.textWord ?? `{${tagOf(f.person, f.variant)}.${f.case}}`,
+    (p) => p.textWord ?? `{${tagOf(p, true)}.им}`,
+  );
 }
 
 /** Свободный текст для промпта картинки: имена → «the hero» / «the friend», контакты удалены. */
@@ -189,12 +202,21 @@ const ROLE_WORD: Record<string, string> = {
 interface AnswersLike {
   hero: { name: string; nickname?: string; gender?: string };
   extras: { name: string; role: string; gender?: string }[];
+  /** Группа (детсад, класс): дети → {ДРУГn}, взрослые → {ВОСПИТАТЕЛЬn}. */
+  group?: { members: { name: string; gender?: string }[]; adults: { name: string; role?: string; gender?: string }[] };
 }
 
-/** Люди анкеты для обезличивания: герой, домашнее имя, доп. герои (ДОП1..3). */
+const ADULT_ROLE_WORD: Record<string, string> = { воспитатель: "the kindergarten teacher", "помощник воспитателя": "the teacher's assistant", учитель: "the teacher" };
+
+/**
+ * Люди анкеты для обезличивания: герой, домашнее имя, доп. герои (ДОП1..3), дети группы (ДРУГn — по порядку
+ * анкеты; в брифе модели слоты уже раскрыты под размер группы) и взрослые группы (ВОСПИТАТЕЛЬn).
+ */
 export function personsOf(a: AnswersLike, extraGender?: (e: AnswersLike["extras"][number]) => string): RedactPerson[] {
   const list: RedactPerson[] = [{ tag: "ГЕРОЙ", name: a.hero.name, gender: a.hero.gender, role: "the hero" }];
   if (a.hero.nickname?.trim() && a.hero.nickname.trim() !== a.hero.name.trim()) list.push({ tag: "ЛАСКОВО", name: a.hero.nickname, gender: a.hero.gender, role: "the hero" });
   a.extras.forEach((e, i) => list.push({ tag: `ДОП${i + 1}`, name: e.name, gender: extraGender ? extraGender(e) : e.gender, role: ROLE_WORD[e.role] ?? "the companion" }));
+  a.group?.members.forEach((m, i) => list.push({ tag: `ДРУГ${i + 1}`, name: m.name, gender: m.gender, role: "a child from the group", textWord: "друг из группы" }));
+  a.group?.adults.forEach((m, i) => list.push({ tag: `ВОСПИТАТЕЛЬ${i + 1}`, name: m.name, gender: m.gender ?? guessGender(m.name), role: ADULT_ROLE_WORD[m.role ?? ""] ?? "the teacher" }));
   return list;
 }

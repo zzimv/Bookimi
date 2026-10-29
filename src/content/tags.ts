@@ -2,6 +2,8 @@
 // Спецификация — docs/content/ARCHITECTURE.md, раздел «Метки».
 
 const CASE = "(им|род|дат|вин|тв|пр)";
+/** Номер слота {ДРУГn}: 1..14. */
+const SLOT = "[1-9]|1[0-4]";
 
 /** Все допустимые формы меток. Любой другой текст в {фигурных скобках} — ошибка. */
 export const TAG_GRAMMAR: { re: RegExp; doc: string }[] = [
@@ -17,7 +19,50 @@ export const TAG_GRAMMAR: { re: RegExp; doc: string }[] = [
   { re: /^ПОВОД$/, doc: "{ПОВОД} — повод словом для текста («новоселье», «годовщина») или текст «своего повода»" },
   { re: new RegExp(`^ПОВОД\\.${CASE}$`), doc: "{ПОВОД.род} — повод в падеже («к годовщине» — {ПОВОД.дат}); свой повод не склоняется" },
   { re: /^ВОЗРАСТ$/, doc: "{ВОЗРАСТ} — «5 лет», «3 года»" },
+  // Группа (сюжеты с plot.group): дети группы/класса без героя и взрослые
+  { re: new RegExp(`^ГРУППА(\\.${CASE})?$`), doc: "{ГРУППА.дат} — все дети группы (без героя) списком: «Ане, Пете и Маше»; > 8 имён — продолжение следующими фразами" },
+  { re: new RegExp(`^ДРУГ(${SLOT})(\\.${CASE})?$`), doc: "{ДРУГ3.тв} — слот 1..14: ребёнок (или несколько детей подряд, если детей больше, чем слотов)" },
+  { re: new RegExp(`^РД(${SLOT}):[^|{}]*\\|[^|{}]*(\\|[^|{}]*)?$`), doc: "{РД3:нашёл|нашла|нашли} — форма по слоту: мальчик | девочка | несколько детей" },
+  { re: /^МН_ГРУППЫ:[^|{}]*\|[^|{}]*(\|[^|{}]*)?$/, doc: "{МН_ГРУППЫ:пришёл|пришла|пришли} — по детям группы: один мальчик | одна девочка | много" },
+  { re: new RegExp(`^ВОСПИТАТЕЛЬ[1-3]?(\\.${CASE})?$`), doc: "{ВОСПИТАТЕЛЬ.дат}, {ВОСПИТАТЕЛЬ2.тв} — взрослый группы 1..3 (имя-отчество: «Марии Ивановне»)" },
+  { re: new RegExp(`^ВОСПИТАТЕЛИ(\\.${CASE})?$`), doc: "{ВОСПИТАТЕЛИ.дат} — все взрослые группы списком" },
+  { re: /^РВ[1-3]?:[^|{}]*\|[^|{}]*$/, doc: "{РВ:сказал|сказала}, {РВ2:…} — форма по полу взрослого группы" },
+  { re: /^ПЕРЕКЛИЧКА$/, doc: "{ПЕРЕКЛИЧКА} — все имена группы через « · », герой посередине (разворот «Наш класс»)" },
 ];
+
+/** Условия блоков [[?УСЛОВИЕ: текст || иначе]] (раскрывает resolveGroupBlocks в lib/declension.ts). */
+export const BLOCK_COND_RE = new RegExp(`^(ДРУГ(${SLOT})|ВОСПИТАТЕЛЬ[1-3]?|(ГРУППА|ВОСПИТАТЕЛИ)([<>]\\d{1,2})?)$`);
+/** Все блоки текста: [условие, «то», «иначе»]. */
+export const BLOCK_RE = /\[\[\?([^:\]\n]+):\s?([\s\S]*?)\]\]/g;
+
+export function blocksOf(text: string): { cond: string; then: string; else: string; start: number; end: number }[] {
+  return [...text.matchAll(BLOCK_RE)].map((m) => {
+    const [then, ...rest] = m[2].split("||");
+    return { cond: m[1].trim(), then, else: rest.join("||"), start: m.index ?? 0, end: (m.index ?? 0) + m[0].length };
+  });
+}
+
+/** Текст с раскрытыми блоками: "then" — все условия истинны, "else" — все ложны (для проверок обеих веток). */
+export function blockVariant(text: string, branch: "then" | "else"): string {
+  return text
+    .replace(BLOCK_RE, (_m, _c: string, body: string) => {
+      const [then, ...rest] = body.split("||");
+      return (branch === "then" ? then : rest.join("||")).trim() || "\u0003";
+    })
+    .split("\n")
+    .filter((l) => l.replace(/\u0003/g, "").trim() || !l.includes("\u0003"))
+    .join("\n")
+    .replace(/\u0003/g, "");
+}
+
+/** Метки группы в тексте. */
+export const GROUP_TAG_RE = /\{(ГРУППА|ДРУГ\d+|РД\d+|МН_ГРУППЫ|ПЕРЕКЛИЧКА)[.:}]/;
+export const ADULT_TAG_RE = /\{(ВОСПИТАТЕЛЬ[1-3]?|ВОСПИТАТЕЛИ|РВ[1-3]?)[.:}]/;
+
+/** Номера слотов {ДРУГn}/{РДn} в тексте. */
+export function slotsIn(text: string): number[] {
+  return [...new Set([...text.matchAll(/\{(?:ДРУГ|РД)(\d+)[.:}]/g)].map((m) => Number(m[1])))].sort((a, b) => a - b);
+}
 
 /** Метки имён — их нельзя ставить в конец стихотворной строки (имена разной длины ломают рифму). */
 export const NAME_TAG_RE = /\{(ГЕРОЙ|ЛАСКОВО|ДОП[1-3]|ДОПЫ)(\.(им|род|дат|вин|тв|пр))?\}/;
@@ -40,6 +85,14 @@ export function checkTags(text: string): string[] {
     if (!TAG_GRAMMAR.some((g) => g.re.test(body))) errors.push(`неизвестная метка {${body}}`);
   }
   if (/\[Имя\]/.test(text)) errors.push("[Имя] допустимо только в названии сюжета");
+  // Блоки [[?…: …]]: известное условие, без вложенности, не больше одного «||»
+  for (const b of blocksOf(text)) {
+    if (!BLOCK_COND_RE.test(b.cond)) errors.push(`неизвестное условие блока [[?${b.cond}: …]]`);
+    if (b.then.includes("[[") || b.else.includes("[[")) errors.push("вложенные блоки [[?…]] не поддерживаются");
+    if (b.else.includes("||")) errors.push("в блоке не больше одного «||»");
+  }
+  const rest = text.replace(BLOCK_RE, "");
+  if (/\[\[|\]\]/.test(rest)) errors.push("незакрытый или неверный блок [[?УСЛОВИЕ: текст]]");
   return errors;
 }
 
@@ -60,7 +113,10 @@ export function nameAtLineEnd(text: string): string[] {
 }
 
 /** Метки переменной длины в стихах: имена и повод ({ПОВОД} — от одного до шести слов). */
-const VARIABLE_TAG_RE = new RegExp(`${NAME_TAG_RE.source}|\\{ПОВОД(\\.(им|род|дат|вин|тв|пр))?\\}`, "g");
+const VARIABLE_TAG_RE = new RegExp(
+  `${NAME_TAG_RE.source}|\\{ПОВОД(\\.(им|род|дат|вин|тв|пр))?\\}|\\{(ГРУППА|ДРУГ\\d+|ВОСПИТАТЕЛЬ[1-3]?|ВОСПИТАТЕЛИ)(\\.(им|род|дат|вин|тв|пр))?\\}|\\{ПЕРЕКЛИЧКА\\}`,
+  "g",
+);
 
 /**
  * Строка-обращение вне метра: кроме меток имени/повода — не больше одного слова
@@ -91,7 +147,7 @@ const VOWELS = /[аеёиоуыэюя]/gi;
 /** Формы рода {Р:…|…} с разным числом слогов (в стихах ломают метр): «{Р:наш герой|героиня}». */
 export function unevenGenderForms(text: string): string[] {
   const bad: string[] = [];
-  for (const m of text.matchAll(/\{Р[1-3]?:([^{}]*)\}/g)) {
+  for (const m of text.matchAll(/\{(?:Р[1-3]?|РД\d+|РВ[1-3]?|МН_ГРУППЫ):([^{}]*)\}/g)) {
     const counts = m[1].split("|").map((f) => (f.match(VOWELS) ?? []).length);
     if (new Set(counts).size > 1) bad.push(m[0]);
   }

@@ -92,6 +92,33 @@ export interface PlotExtras {
   note?: string;
 }
 
+// ---------------------------------------------------------------------------
+// Группа: детский сад, класс, команда (сюжеты, где по имени звучат все дети)
+// ---------------------------------------------------------------------------
+
+export const GROUP_LABELS = ["группа", "класс", "команда"] as const;
+export type GroupLabel = (typeof GROUP_LABELS)[number];
+
+export const GROUP_ADULT_ROLES = ["воспитатель", "помощник воспитателя", "учитель"] as const;
+export type GroupAdultRole = (typeof GROUP_ADULT_ROLES)[number];
+
+/** Верхняя граница размера группы для любого сюжета (класс бывает и 40 человек). */
+export const GROUP_MAX_LIMIT = 40;
+/** Слотов {ДРУГn} в книге не больше 14: если детей больше, слот получает несколько имён подряд. */
+export const GROUP_SLOT_LIMIT = 14;
+
+export interface PlotGroup {
+  /** Размер группы ВМЕСТЕ с героем: min 1 — герой может быть и один. */
+  min: number;
+  /** ВМЕСТЕ с героем, ≤ GROUP_MAX_LIMIT (детсад — 30, класс — 40). Детей в анкете — до max − 1. */
+  max: number;
+  label: GroupLabel;
+  /** Взрослые группы: воспитатели, помощник, учитель (до 3). */
+  includeAdults?: { roles: GroupAdultRole[]; max: number };
+  /** Подсказка для анкеты. */
+  note?: string;
+}
+
 export interface Plot {
   /** Латиница, kebab-case, уникален во всём каталоге. */
   slug: string;
@@ -107,6 +134,16 @@ export interface Plot {
   ageMax?: number;
   /** Ключи поводов из OCCASIONS, для которых сюжет особенно хорош (первый — главный). */
   occasions: string[];
+  /**
+   * Поводы, для которых сюжет написан («core»): в каталоге повода он идёт первым. Если не задано —
+   * поводы с пустым крючком {opening:"",closing:""}. Остальные из occasions и поводы со своим крючком — «fits».
+   */
+  coreOccasions?: string[];
+  /**
+   * Сюжет про группу: {ГРУППА.*}, слоты {ДРУГn.*}/{РДn:…}, взрослые {ВОСПИТАТЕЛЬn.*}, {ПЕРЕКЛИЧКА},
+   * блоки [[?ДРУГn: …]]; в сценах — {GROUP} / {GROUP_ADULTS} (заменяет applyGroupScenes).
+   */
+  group?: PlotGroup;
   /** Голос книги — один id из TEXT_STYLE_IDS. */
   textStyle: string;
   /** Рекомендуемые стили картинок, id из ART_STYLE_IDS, лучший первый. */

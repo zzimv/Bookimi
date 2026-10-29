@@ -9,6 +9,7 @@ import { KIDS_PLOTS } from "./plots/kids";
 import { TEEN_PLOTS } from "./plots/teens";
 import { ADULT_PLOTS } from "./plots/adults";
 import { PET_PLOTS } from "./plots/pets";
+import { KIDS_GROUP_PLOTS, TEEN_GROUP_PLOTS } from "./plots/groups";
 import { MOODS } from "./moods";
 import { KIDS_ART_STYLES, KIDS_THEMES } from "./art/kids";
 import { TEEN_ART_STYLES, TEEN_THEMES } from "./art/teens";
@@ -18,11 +19,27 @@ import { TRIAL_ART_STYLES } from "./art/trial";
 import { ART_STYLES, artStyle, heroDrawer, themeFor, themesByKey } from "./art/index";
 import { GENERIC_HOOKS, occasionText } from "./occasions";
 import { titleTemplate } from "./title";
-import { checkTags, countNameTags, maxExtraRef, nameInMetricLine, unevenGenderForms } from "./tags";
+import {
+  ADULT_TAG_RE,
+  blocksOf,
+  blockVariant,
+  checkTags,
+  countNameTags,
+  GROUP_TAG_RE,
+  maxExtraRef,
+  nameInMetricLine,
+  slotsIn,
+  unevenGenderForms,
+} from "./tags";
+import { distributeMembers, resolveGroupBlocks } from "../lib/declension";
 import {
   ART_STYLE_OWNERS,
   DEMO_THEME_KEYS,
   EXTRA_ROLES,
+  GROUP_ADULT_ROLES,
+  GROUP_LABELS,
+  GROUP_MAX_LIMIT,
+  GROUP_SLOT_LIMIT,
   HERO_KIND_BY_AUDIENCE,
   type Mood,
   type OccasionHook,
@@ -34,7 +51,7 @@ import {
 
 export { TEXT_STYLES, ART_STYLES, MOODS, themesByKey, themeFor, heroDrawer, artStyle, occasionText };
 
-export const PLOTS: Plot[] = [...KIDS_PLOTS, ...TEEN_PLOTS, ...ADULT_PLOTS, ...PET_PLOTS];
+export const PLOTS: Plot[] = [...KIDS_PLOTS, ...KIDS_GROUP_PLOTS, ...TEEN_PLOTS, ...TEEN_GROUP_PLOTS, ...ADULT_PLOTS, ...PET_PLOTS];
 
 /** Минимум сюжетов по аудиториям (Definition of Done контент-агентов). */
 export const PLOT_TARGETS: Record<AudienceKey, number> = { CHILD: 9, TEEN: 5, ADULT: 5, PET: 4 };
@@ -58,21 +75,168 @@ export const mood = (id: string): Mood | null => MOODS.find((m) => m.id === id) 
 export const defaultMood = (): Mood | null => MOODS[0] ?? null;
 export const segmentsFor = (audience: AudienceKey) => SEGMENTS.filter((s) => s.audience === audience);
 
+// ---------------------------------------------------------------------------
+// Повод → какие книги показывать (модель релевантности)
+// ---------------------------------------------------------------------------
+
+/** core — сюжет написан для этого повода; fits — повод вплетается естественно (крючок, occasions); generic — общий крючок. */
+export type Relevance = "core" | "fits" | "generic";
+
 /**
- * Сюжеты для повода: сначала те, у кого повод в occasions (главный повод — выше), затем остальные.
- * Никогда не пустой: если у аудитории ещё нет сюжетов — возвращает весь каталог.
+ * Поводы с сильной темой: в каталоге — только core, «Своя история» и fits («Тоже подойдут»);
+ * чужие сюжеты скрыты (никакой подводной лодки на выпускной в детском саду).
+ */
+export const STRONG_OCCASIONS = [
+  "vypusknoj-v-sadu",
+  "pervyj-klass",
+  "vypusknoj-v-shkole",
+  "rozhdenie-brata-ili-sestry",
+  "svadba",
+  "godovshchina",
+  "pensiya",
+  "poyavlenie-pitomca",
+  "novyj-god",
+  "den-rozhdeniya",
+] as const;
+
+/** Без повода и свой повод: «Своя история» первой, затем все сюжеты. */
+export const OPEN_OCCASIONS = ["bez", "svoj", ""] as const;
+
+const isEmptyHook = (h?: OccasionHook) => !!h && !h.opening && !h.closing;
+
+/** Родственные поводы: книги про Новый год «тоже подходят» к Рождеству и Старому Новому году. */
+export const RELATED_OCCASIONS: Record<string, string> = { rozhdestvo: "novyj-god", "staryj-novyj-god": "novyj-god" };
+
+export function relevance(plot: Plot, occasionKey: string): Relevance {
+  const hook = plot.occasionHooks?.[occasionKey];
+  if (plot.coreOccasions?.includes(occasionKey) || isEmptyHook(hook)) return "core";
+  if (plot.occasions.includes(occasionKey) || hook) return "fits";
+  const rel = RELATED_OCCASIONS[occasionKey];
+  if (rel && relevance(plot, rel) !== "generic") return "fits";
+  return "generic";
+}
+
+export interface OccasionSections {
+  occasion: string;
+  /** Сильная тема: generic-сюжеты скрыты (если для повода нет ни core, ни fits — не скрываем, strong = false). */
+  strong: boolean;
+  /** Показывать «Своя история» до core (без повода, свой повод, нет core-сюжетов). */
+  customFirst: boolean;
+  /** Написаны для повода (лучшие — первыми). */
+  core: Plot[];
+  /** Карточка «Своя история» показывается всегда. */
+  custom: true;
+  /** «Тоже подойдут — впишем ваш повод». */
+  fits: Plot[];
+  fitsTitle: string;
+  /** Остальные (показываются для поводов без сильной темы и для «без повода»/«своего»). */
+  others: Plot[];
+  /** Сколько сюжетов скрыто (сильная тема). */
+  hiddenCount: number;
+}
+
+export const FITS_TITLE = "Тоже подойдут — впишем ваш повод";
+
+/**
+ * Каталог повода по разделам. Порядок показа: customFirst ? [custom, core, fits, others] : [core, custom, fits, others].
+ * opts.segment / opts.age сужают выбор (сегмент — p.segments, возраст — ageMin..ageMax).
+ */
+export function plotSections(occasionKey: string, audience?: AudienceKey, opts: { segment?: string; age?: number } = {}): OccasionSections {
+  const pool = getPlots({ audience, segment: opts.segment, age: opts.age });
+  const key = occasionKey ?? "";
+  const base = { occasion: key, custom: true as const, fitsTitle: FITS_TITLE };
+  if ((OPEN_OCCASIONS as readonly string[]).includes(key)) {
+    // «Без повода»: сюжеты с bez в occasions — первыми
+    const others = key === "bez" ? [...pool.filter((p) => p.occasions.includes("bez")), ...pool.filter((p) => !p.occasions.includes("bez"))] : pool;
+    return { ...base, strong: false, customFirst: true, core: [], fits: [], others, hiddenCount: 0 };
+  }
+  const rank = (p: Plot) => {
+    const i = p.occasions.indexOf(key);
+    return i < 0 ? 100 : i;
+  };
+  const by = (r: Relevance) =>
+    pool
+      .map((p, i) => ({ p, i }))
+      .filter((x) => relevance(x.p, key) === r)
+      .sort((a, b) => rank(a.p) - rank(b.p) || a.i - b.i)
+      .map((x) => x.p);
+  const core = by("core");
+  const fits = by("fits");
+  const generic = by("generic");
+  // Сильная тема прячет чужие сюжеты — но не оставляет пустой каталог (тогда это пробел контента, см. OCCASIONS-MATRIX.md)
+  const strong = (STRONG_OCCASIONS as readonly string[]).includes(key) && core.length + fits.length > 0;
+  return { ...base, strong, customFirst: core.length === 0, core, fits, others: strong ? [] : generic, hiddenCount: strong ? generic.length : 0 };
+}
+
+/**
+ * Старый вид (совместимость): все сюжеты аудитории — core, затем fits, затем остальные.
+ * Никогда не пустой: если у аудитории ещё нет сюжетов — возвращает весь каталог. Новый код — plotSections.
  */
 export function plotsForOccasion(occasionKey: string, audience?: AudienceKey): Plot[] {
   let pool = audience ? PLOTS.filter((p) => p.audience === audience) : PLOTS;
   if (!pool.length) pool = PLOTS;
+  const order: Record<Relevance, number> = { core: 0, fits: 1, generic: 2 };
   const rank = (p: Plot) => {
     const i = p.occasions.indexOf(occasionKey);
-    return i < 0 ? 1000 : i;
+    return order[relevance(p, occasionKey)] * 1000 + (i < 0 ? 100 : i);
   };
   return pool
     .map((p, i) => ({ p, i }))
     .sort((a, b) => rank(a.p) - rank(b.p) || a.i - b.i)
     .map((x) => x.p);
+}
+
+// ---------------------------------------------------------------------------
+// Группа: слоты, сцены
+// ---------------------------------------------------------------------------
+
+/** Сколько слотов {ДРУГn} в книге (для TagGroup.slots и распределения детей). */
+export function groupSlotCount(plot: Pick<Plot, "spreads">): number {
+  return Math.max(0, ...plot.spreads.flatMap((s) => slotsIn(s.text)));
+}
+
+/** Сколько детей в анкете можно указать для сюжета (без героя). */
+export const groupMembersMax = (plot: Pick<Plot, "group">) => Math.max(0, (plot.group?.max ?? 1) - 1);
+
+/**
+ * Кто из детей по имени звучит в каждом развороте через слоты (без ведомости {ПЕРЕКЛИЧКА} и списков {ГРУППА}).
+ * members — число детей без героя. Для проверки «каждый назван, никто дважды, пока не прозвучали все».
+ */
+export function slotMentions(plot: Plot, members: number, adults = 0): number[][] {
+  const S = groupSlotCount(plot);
+  const dist = distributeMembers(members, S);
+  return applyOccasion(plot, "bez").map((sp) => {
+    const t = resolveGroupBlocks(sp.text, { members, adults, slots: S });
+    const out = new Set<number>();
+    for (const n of slotsIn(t)) for (const i of dist[n - 1]?.length ? dist[n - 1] : members ? [(n - 1) % members] : []) out.add(i);
+    return [...out];
+  });
+}
+
+const GROUP_NOUN: Record<string, [string, string]> = {
+  "kids-2-4": ["toddlers", "kindergarten teacher"],
+  "kids-5-7": ["kindergarten children", "kindergarten teacher"],
+  "kids-8-10": ["schoolchildren", "teacher"],
+  "teens-11-13": ["teenage classmates", "teacher"],
+  "teens-14-17": ["teenage classmates", "teacher"],
+};
+
+/**
+ * Сцены группы: {GROUP} → «a group of 12 kindergarten children» (без имён), {GROUP_ADULTS} → «a kind kindergarten teacher».
+ * members — дети без героя; adults — взрослые группы. Сюжеты без group не меняются.
+ */
+export function applyGroupScenes<T extends { scene: string }>(plot: Plot, spreads: T[], members: number, adults = 0): T[] {
+  if (!plot.group) return spreads;
+  const [kids, teacher] = GROUP_NOUN[plot.segments[0]] ?? ["children", "teacher"];
+  const pupils = plot.group.label === "класс" && plot.audience === "CHILD" && (plot.ageMax ?? 7) <= 8 ? "first-graders" : kids;
+  const group = members <= 0 ? "a couple of friendly " + pupils : members === 1 ? `one friend, another of the ${pupils}` : `a group of ${members} ${pupils}`;
+  const grown = adults <= 0 ? `a kind ${teacher} in the background` : adults === 1 ? `a kind ${teacher}` : `${adults} kind grown-ups (${teacher}s)`;
+  return spreads.map((s) => ({ ...s, scene: s.scene.replace(/\{GROUP\}/g, group).replace(/\{GROUP_ADULTS\}/g, grown) }));
+}
+
+/** Развороты группы (сцена с {GROUP}) — в них демо-рендер рисует толпу (renderDemoSpread({ crowd })). */
+export function groupSpreadIndexes(plot: Plot): number[] {
+  return plot.spreads.flatMap((s, i) => (/\{GROUP\}/.test(s.scene) ? [i + 1] : []));
 }
 
 /**
@@ -97,6 +261,57 @@ export function applyOccasion(plot: Plot, occasionKey: string, custom?: string):
   if (h.openingScene) spreads[0].scene = `${spreads[0].scene}, ${h.openingScene}`;
   if (h.closingScene) spreads[11].scene = `${spreads[11].scene}, ${h.closingScene}`;
   return spreads;
+}
+
+// ---------------------------------------------------------------------------
+// Проверка группы
+// ---------------------------------------------------------------------------
+
+/** Условия, при которых в блоке гарантированно есть хотя бы один ребёнок. */
+const MEMBER_COND = /^(ДРУГ\d+|ГРУППА(>\d+)?)$/;
+
+function groupChecks(p: Plot, texts: [string, string][], errors: string[]) {
+  const at = `plot ${p.slug}`;
+  const g = p.group;
+  const all = texts.map(([, t]) => t).join("\n");
+  if (!g) {
+    if (GROUP_TAG_RE.test(all) || ADULT_TAG_RE.test(all) || /\[\[\?/.test(all)) errors.push(`${at}: метки группы и блоки [[?…]] — только у сюжетов с group`);
+    return;
+  }
+  if (!(g.min >= 1 && g.max <= GROUP_MAX_LIMIT && g.min <= g.max)) errors.push(`${at}: group — 1 ≤ min ≤ max ≤ ${GROUP_MAX_LIMIT} (размер вместе с героем)`);
+  if (!(GROUP_LABELS as readonly string[]).includes(g.label)) errors.push(`${at}: group.label — ${GROUP_LABELS.join(" | ")}`);
+  if (g.includeAdults) {
+    if (!(g.includeAdults.max >= 0 && g.includeAdults.max <= 3)) errors.push(`${at}: group.includeAdults.max — 0..3`);
+    for (const r of g.includeAdults.roles) if (!(GROUP_ADULT_ROLES as readonly string[]).includes(r)) errors.push(`${at}: неизвестная роль взрослого ${r}`);
+  } else if (ADULT_TAG_RE.test(all)) errors.push(`${at}: метки взрослых группы без group.includeAdults`);
+
+  const spreads = p.spreads.map((s) => s.text ?? "");
+  // Слоты: 1..S подряд, S ≤ 14; каждый слот — в одном развороте; первые появления — по возрастанию номеров
+  const S = groupSlotCount(p);
+  const need = Math.min(GROUP_SLOT_LIMIT, g.max - 1);
+  if (S > GROUP_SLOT_LIMIT) errors.push(`${at}: слотов {ДРУГn} ${S}, максимум ${GROUP_SLOT_LIMIT}`);
+  if (S < need) errors.push(`${at}: слотов {ДРУГn} ${S}, нужно ${need} — иначе не у каждого ребёнка будет свой момент`);
+  const home = new Map<number, number>();
+  spreads.forEach((t, i) => {
+    for (const n of slotsIn(t)) {
+      if (home.has(n) && home.get(n) !== i) errors.push(`${at}: слот ДРУГ${n} в разворотах ${home.get(n)! + 1} и ${i + 1} — слот живёт в одном развороте`);
+      if (!home.has(n)) home.set(n, i);
+    }
+  });
+  for (let n = 1; n <= S; n++) if (!home.has(n)) errors.push(`${at}: пропущен слот ДРУГ${n} (слоты — подряд с 1)`);
+  for (let n = 2; n <= S; n++) if ((home.get(n) ?? 0) < (home.get(n - 1) ?? 0)) errors.push(`${at}: слот ДРУГ${n} появляется раньше ДРУГ${n - 1}`);
+  // Свой блок [[?ДРУГn: …]] — у каждого слота; метки детей — только внутри блоков с ребёнком (или если min ≥ 2)
+  for (let n = 1; n <= S; n++) if (!spreads.some((t) => blocksOf(t).some((b) => b.cond === `ДРУГ${n}`))) errors.push(`${at}: у слота ДРУГ${n} нет блока [[?ДРУГ${n}: …]] (без ребёнка фраза должна выпадать)`);
+  for (const [where, t] of texts) {
+    const outside = t.replace(/\[\[\?([^:\]\n]+):\s?([\s\S]*?)\]\]/g, (m, cond: string) => (MEMBER_COND.test(cond.trim()) ? "" : m));
+    if (g.min < 2 && /\{(ГРУППА|ДРУГ\d+|РД\d+|МН_ГРУППЫ)[.:}]/.test(outside.replace(/\{ПЕРЕКЛИЧКА\}/g, "")))
+      errors.push(`${at}: ${where} — метки детей группы вне блока [[?ДРУГn: …]] / [[?ГРУППА: …]] (группа может быть пустой)`);
+    const outsideAdults = t.replace(/\[\[\?(ВОСПИТАТЕЛ[^:\]\n]*):\s?([\s\S]*?)\]\]/g, (m, _c: string, body: string) => body.split("||").slice(1).join(""));
+    if (ADULT_TAG_RE.test(outsideAdults)) errors.push(`${at}: ${where} — метки взрослых вне блока [[?ВОСПИТАТЕЛЬn: … || без взрослых]]`);
+    // Слот больше одного ребёнка (детей больше, чем слотов): формы {РДn:…} — с третьей формой для многих
+    if (g.max - 1 > S) for (const m of t.matchAll(/\{РД\d+:([^{}]*)\}/g)) if (m[1].split("|").length < 3) errors.push(`${at}: ${where} — ${m[0]}: нужна форма для нескольких детей ({РДn:м|ж|мн}), детей бывает больше, чем слотов`);
+  }
+  if (g.max > 9 && !spreads.some((t) => t.includes("{ПЕРЕКЛИЧКА}"))) errors.push(`${at}: группа больше 9 — нужен разворот-ведомость с {ПЕРЕКЛИЧКА} («Наш класс»)`);
 }
 
 // ---------------------------------------------------------------------------
@@ -253,22 +468,26 @@ export function validateContent(opts: { strict?: boolean } = {}): ContentReport 
     if (!ex || ex.min < 0 || ex.max > 3 || ex.min > ex.max) errors.push(`${at}: extras — 0 ≤ min ≤ max ≤ 3`);
     for (const r of ex?.roles ?? []) if (!(EXTRA_ROLES as readonly string[]).includes(r)) errors.push(`${at}: неизвестная роль доп. героя ${r}`);
 
-    if (!p.coverScene || CYR.test(p.coverScene)) errors.push(`${at}: coverScene — на английском`);
+    if (!p.coverScene || CYR.test(p.coverScene) || /[{}]/.test(p.coverScene)) errors.push(`${at}: coverScene — на английском, без меток`);
+    for (const k of p.coreOccasions ?? []) if (!p.occasions.includes(k)) errors.push(`${at}: coreOccasions ${k} нет в occasions`);
     if (p.spreads.length !== 12) errors.push(`${at}: ${p.spreads.length} разворотов, нужно ровно 12`);
     const verse = !!textStyle(p.textStyle)?.verse;
     const texts: [string, string][] = [["title", titleTemplate(p.title)]];
     p.spreads.forEach((s, i) => {
       if (!s.text?.trim()) errors.push(`${at}: разворот ${i + 1} без текста`);
       if (!s.scene?.trim() || CYR.test(s.scene)) errors.push(`${at}: разворот ${i + 1} — scene на английском и без имён`);
+      if (!p.group && /\{GROUP(_ADULTS)?\}/.test(s.scene)) errors.push(`${at}: разворот ${i + 1} — {GROUP} в сцене только у сюжетов с group`);
+      if (/\{(?!GROUP\}|GROUP_ADULTS\})[^}]*\}/.test(s.scene)) errors.push(`${at}: разворот ${i + 1} — в сцене допустимы только {GROUP} и {GROUP_ADULTS}`);
       texts.push([`разворот ${i + 1}`, s.text ?? ""]);
     });
     if (verse) {
-      // Стихи: имя и повод — только в отдельных строках-обращениях; имён — не больше 4 на книгу; формы рода — равной длины
+      // Стихи (обе ветки блоков [[?…]]): имя и повод — только в отдельных строках-обращениях; имён — не больше 4 на книгу; формы рода — равной длины
       const verseTexts: [string, string][] = [
         ...p.spreads.map((s, i): [string, string] => [`разворот ${i + 1}`, s.text ?? ""]),
         ...Object.entries(p.occasionHooks ?? {}).flatMap(([k, h]): [string, string][] => (h ? [[`крючок ${k}`, h.opening], [`крючок ${k}`, h.closing]] : [])),
       ];
-      for (const [where, t] of verseTexts) {
+      for (const [where, t0] of verseTexts) {
+        const t = `${blockVariant(t0, "then")}\n${blockVariant(t0, "else")}`;
         for (const l of nameInMetricLine(t)) errors.push(`${at}: ${where} — имя или повод внутри стихотворной строки «${l}» (только отдельной строкой-обращением)`);
         for (const f of unevenGenderForms(t)) errors.push(`${at}: ${where} — формы рода разной длины ${f} ломают метр`);
       }
@@ -282,6 +501,7 @@ export function validateContent(opts: { strict?: boolean } = {}): ContentReport 
       if (CYR.test(h.openingScene ?? "") || CYR.test(h.closingScene ?? "")) errors.push(`${at}: крючок ${k} — сцены на английском`);
       texts.push([`крючок ${k}`, h.opening], [`крючок ${k}`, h.closing]);
     }
+    groupChecks(p, texts, errors);
     for (const [where, t] of texts) {
       for (const e of checkTags(t)) errors.push(`${at}: ${where}: ${e}`);
       if (BAD_GENDER.test(t)) errors.push(`${at}: ${where}: форма вида «нашёл{Р:|а}» даёт «нашёла» — пишите {Р:нашёл|нашла}`);

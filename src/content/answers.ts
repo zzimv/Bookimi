@@ -4,7 +4,7 @@
 // Модуль безопасен для клиента (только zod).
 
 import { z } from "zod";
-import { EXTRA_ROLES, HERO_KIND_BY_AUDIENCE, type HeroKind } from "./types";
+import { EXTRA_ROLES, GROUP_ADULT_ROLES, GROUP_MAX_LIMIT, HERO_KIND_BY_AUDIENCE, type HeroKind } from "./types";
 import type { AudienceKey } from "./profiles";
 
 const str = (max: number) => z.string().trim().max(max);
@@ -53,6 +53,32 @@ export const ExtraV2 = z.object({
   species: z.enum(["dog", "cat", "other"]).optional(),
 });
 export type ExtraV2T = z.infer<typeof ExtraV2>;
+
+/** Ребёнок группы (детсад, класс) — без героя. Пол — для {РДn:…}; пусто — по имени (guessGender). */
+export const GroupMemberV2 = z.object({
+  name: str(30).min(1, "Укажите имя"),
+  gender: Gender.optional(),
+  /** Есть ли фото (сами фото — отдельной загрузкой, как у доп. героев). */
+  photo: z.boolean().optional().default(false),
+  /** Пара слов для рисунка: «рыжие кудряшки, очки» — имена отсюда вычищает redact.ts. */
+  description: str(200).optional().default(""),
+});
+export type GroupMemberV2T = z.infer<typeof GroupMemberV2>;
+
+/** Взрослый группы: имя-отчество можно («Мария Ивановна»), роль, пол (пусто — по отчеству/имени). */
+export const GroupAdultV2 = z.object({
+  name: str(60).min(1, "Укажите имя"),
+  role: z.enum(GROUP_ADULT_ROLES),
+  gender: Gender.optional(),
+});
+export type GroupAdultV2T = z.infer<typeof GroupAdultV2>;
+
+/** Группа: дети без героя (до GROUP_MAX_LIMIT − 1; лимит сюжета — plot.group.max − 1) и до 3 взрослых. */
+export const GroupV2 = z.object({
+  members: z.array(GroupMemberV2).max(GROUP_MAX_LIMIT - 1).default([]),
+  adults: z.array(GroupAdultV2).max(3).default([]),
+});
+export type GroupV2T = z.infer<typeof GroupV2>;
 
 export const AnswersV2 = z.preprocess(
   (raw) => {
@@ -117,6 +143,8 @@ export const AnswersV2 = z.preprocess(
       .default({}),
     /** Доп. герои: ДОП1..ДОП3. Пары — partner первым; хозяева питомца — owner; дарители — child/grandchild/friend/colleague. */
     extras: z.array(ExtraV2).max(3).default([]),
+    /** Группа для сюжетов с plot.group (выпускной в саду, первый класс, выпускной в школе). Необязательна: старые черновики без неё. */
+    group: GroupV2.optional(),
     /** id стиля картинок (ART_STYLE_IDS). Старое поле style переносится сюда. */
     artStyle: str(40).default("watercolor-air"),
     /** Старое поле — оставлено для совместимости, не использовать в новом коде. */

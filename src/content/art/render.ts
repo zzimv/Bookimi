@@ -7,7 +7,7 @@ import type { ArtStyle, DemoExtra, DemoLook, DemoSceneCtx, ExtraDrawKind, HeroKi
 import { artStyle as artStyleById, extraDrawKind, heroDrawer, themeFor } from "./index";
 import { applyMood } from "./mood";
 import { MOODS } from "../moods";
-import { drawDeco, escapeXml, rnd } from "./shared";
+import { drawDeco, escapeXml, HAIR_COLORS, rnd } from "./shared";
 import { FIGURE_FILTERS, fxBackdrop, fxDefs, fxLayers } from "./fx";
 
 const DEFAULT_STYLE: ArtStyle["demo"] = { palette: { paper: "#fbf8f1", ink: "#3a3a44", accents: ["#d9534f", "#3e8ed0", "#f0ad4e", "#5cb85c"] }, line: "none", texture: "none" };
@@ -28,6 +28,129 @@ export interface DemoRenderOpts {
   wide?: boolean;
   /** Заголовок на обложке (уже с подставленным именем). */
   title?: string;
+  /**
+   * Слой для мультфильма (параллакс): background — сцена без героев; mask — силуэт героев белым на чёрном
+   * (альфа для вырезания героев из полной картинки). По умолчанию — вся иллюстрация.
+   */
+  layer?: "background" | "mask";
+  /**
+   * Группа на заднем плане (дети группы/класса и взрослые, до 40): маленькие фигуры рядами, как на общей
+   * фотографии, никогда не заходят на героя и доп. героев. Внешность — crowdLooks(...). Рисуется, если передана.
+   */
+  crowd?: DemoCrowdMember[];
+  /** around — герой на своём месте, группа по сторонам; photo — «общая фотография»: герой в центре первого ряда. */
+  crowdLayout?: "around" | "photo";
+}
+
+/** Фигура группы для демо. */
+export interface DemoCrowdMember {
+  kind?: "child" | "teen" | "adult";
+  look: DemoLook;
+}
+
+/** Детей группы на картинке — до 40 (плюс до 3 взрослых). */
+export const CROWD_MAX = 40;
+
+const CROWD_HAIR = Object.keys(HAIR_COLORS).filter((h) => h !== "седые" && h !== "с проседью");
+const CROWD_SKIN = ["светлый", "светлый", "светлый", "смуглый", "тёмный"];
+const CROWD_OUTFIT = ["#e07a5f", "#3d85c6", "#f2cc8f", "#81b29a", "#9b72cf", "#f28482", "#4ea8de", "#ffb703", "#6a994e", "#d1495b"];
+
+/**
+ * Внешность группы для демо: пол и приметы из анкеты (описание «рыжие, очки, косички»), остальное —
+ * детерминированно по номеру (seed), чтобы на всех разворотах ребёнок выглядел одинаково.
+ */
+export function crowdLooks(
+  members: { gender?: string; description?: string }[],
+  adults: { gender?: string }[] = [],
+  opts: { kind?: "child" | "teen"; age?: number; seed?: number } = {},
+): DemoCrowdMember[] {
+  const r = rnd(97 + (opts.seed ?? 0));
+  const kids = members.slice(0, CROWD_MAX).map((m, i): DemoCrowdMember => {
+    const d = (m.description ?? "").toLowerCase();
+    const rh = r();
+    const rs = r();
+    const rg = r();
+    const hair = CROWD_HAIR.find((h) => d.includes(h.slice(0, 4))) ?? CROWD_HAIR[Math.floor(rh * CROWD_HAIR.length)];
+    const skin = (["светлый", "смуглый", "тёмный"] as const).find((x) => d.includes(x.slice(0, 5))) ?? CROWD_SKIN[Math.floor(rs * CROWD_SKIN.length)];
+    return {
+      kind: opts.kind ?? "child",
+      look: {
+        gender: m.gender ?? (rg < 0.5 ? "boy" : "girl"),
+        age: opts.age ?? 6,
+        hair,
+        skin,
+        hairstyle: /кос|хвост|кудр|каре|коротк/.test(d) ? d : "",
+        glasses: /очк/.test(d) || rg > 0.92,
+        freckles: /веснуш/.test(d),
+        outfit: CROWD_OUTFIT[(i * 7 + Math.floor(rs * 3)) % CROWD_OUTFIT.length],
+      },
+    };
+  });
+  const grown = adults.slice(0, 3).map((a, i): DemoCrowdMember => ({ kind: "adult", look: { gender: a.gender ?? "girl", age: 40, hair: CROWD_HAIR[(i + 2) % CROWD_HAIR.length], outfit: CROWD_OUTFIT[(i * 3 + 5) % CROWD_OUTFIT.length] } }));
+  return [...kids, ...grown];
+}
+
+export interface CrowdSlot {
+  /** Номер фигуры в crowd. */
+  i: number;
+  x: number;
+  /** Ступни. */
+  feet: number;
+  scale: number;
+  /** Полуширина фигуры с учётом масштаба. */
+  halfWidth: number;
+}
+
+/**
+ * Раскладка группы рядами (как на общей фотографии): до 4 рядов, задние — выше и рисуются раньше.
+ * Фигуры стоят только вне полосы [zoneLo, zoneHi] (герой и доп. герои) и в пределах кадра; если не влезают —
+ * уменьшаются.
+ */
+export function crowdLayout(o: { W: number; H: number; count: number; kinds: (HeroKind | "adult")[]; heroFeet: number; heroScale: number; zoneLo: number; zoneHi: number }): CrowdSlot[] {
+  const N = Math.min(o.count, CROWD_MAX + 3);
+  if (N <= 0) return [];
+  const M = 14; // край кадра и зазор до героя
+  const segs = ([
+    [M, o.zoneLo - M],
+    [o.zoneHi + M, o.W - M],
+  ] as [number, number][]).filter(([a, b]) => b - a > 0);
+  const hwOf = (k: HeroKind | "adult") => halfWidth(k === "adult" ? "adult" : k) * (k === "adult" ? 1.12 : 1);
+  const maxHw = Math.max(72, ...o.kinds.slice(0, N).map(hwOf));
+  let s = o.heroScale * 0.62;
+  for (let step = 0; step < 40; step++, s *= 0.92) {
+    const hw = maxHw * s;
+    const pitch = hw * 1.5; // соседи чуть заходят друг за друга — как на фото, но не на героя
+    const rowStep = 95 * s;
+    const caps = segs.map(([a, b]) => (b - a >= 2 * hw ? Math.floor((b - a - 2 * hw) / pitch) + 1 : 0));
+    const cap = caps.reduce((x, y) => x + y, 0);
+    if (!cap) continue;
+    const rows = Math.ceil(N / cap);
+    const backFeet = o.heroFeet - 30 - (rows - 1) * rowStep;
+    if (rows > 4 || backFeet - 250 * s < 8) continue;
+    const out: CrowdSlot[] = [];
+    let i = 0;
+    for (let r = 0; r < rows && i < N; r++) {
+      const inRow = Math.min(cap, N - i);
+      // Ряд делится между сторонами пропорционально вместимости
+      const share = caps.map((c) => Math.floor((c / cap) * inRow));
+      let left = inRow - share.reduce((x, y) => x + y, 0);
+      for (let k = 0; left > 0; k = (k + 1) % caps.length) if (share[k] < caps[k]) (share[k]++, left--);
+      segs.forEach(([a, b], k) => {
+        const n = share[k];
+        const span = b - a - 2 * hw;
+        const off = r % 2 && n < caps[k] ? pitch / 2 : 0;
+        for (let j = 0; j < n; j++) {
+          const x = a + hw + (n === 1 ? span / 2 : off + (j * (span - off)) / (n - 1));
+          const sc = o.kinds[i] === "adult" ? s * 1.12 : s;
+          out.push({ i, x, feet: o.heroFeet - 30 - r * rowStep, scale: sc, halfWidth: halfWidth(o.kinds[i] === "adult" ? "adult" : (o.kinds[i] ?? "child")) * sc });
+          i++;
+        }
+      });
+    }
+    // Задние ряды — первыми (под передними)
+    return out.sort((x, y) => x.feet - y.feet);
+  }
+  return [];
 }
 
 const GAP = 26;
@@ -136,7 +259,8 @@ export function renderDemoSpread(o: DemoRenderOpts): string {
 
   const heroKind = o.hero.kind ?? o.plot.heroKind;
   const left = idx % 2 === 1;
-  const hx = left ? W * 0.62 : W * 0.38;
+  const photo = o.crowdLayout === "photo" && !!o.crowd?.length;
+  const hx = photo ? W / 2 : left ? W * 0.62 : W * 0.38;
   const heroScale = idx === 0 ? 1.5 : 1.25;
   const heroFeet = H * 0.6 + 190 * heroScale;
   // Доп. герои стоят рядом, не перекрывая героя: шаг = полуширина соседа + полуширина героя + зазор,
@@ -162,13 +286,27 @@ export function renderDemoSpread(o: DemoRenderOpts): string {
     const drawKind = kind === "toy" || kind === "custom" ? heroKind : kind;
     return heroDrawer(kind)({ kind: drawKind, look: e.look, x: heroX + dir * dx, y: feet - 190 * scale, scale, style, index: idx + i + 1, flip: !left });
   });
+  // Группа: рядами по сторонам, вне полосы героя и доп. героев
+  const zoneLo = dir > 0 ? heroX - heroHw : heroX - edge;
+  const zoneHi = dir > 0 ? heroX + edge : heroX + heroHw;
+  const crowdList = (o.crowd ?? []).slice(0, CROWD_MAX + 3);
+  const crowdKinds = crowdList.map((c) => c.kind ?? (heroKind === "teen" ? "teen" : "child"));
+  const crowd = crowdLayout({ W, H, count: crowdList.length, kinds: crowdKinds, heroFeet, heroScale, zoneLo, zoneHi }).map((c) => {
+    const k = crowdKinds[c.i];
+    return heroDrawer(k)({ kind: k, look: crowdList[c.i].look, x: c.x, y: c.feet - 190 * c.scale, scale: c.scale, style, index: idx + c.i + 3, flip: c.x > heroX });
+  });
   const hero = heroDrawer(heroKind)({ kind: heroKind, look: o.hero, x: heroX, y: H * 0.6, scale: heroScale, style, index: idx, flip: left && heroKind === "pet" });
 
   // Фильтр стиля — только на фигуры: на фоне он рвёт края кадра
   const fx = style.filter && ["wobble", "posterize", "soft", ...FIGURE_FILTERS].includes(style.filter) ? ` filter="url(#${style.filter})"` : "";
   const extraFx = Boolean(style.backdrop || style.overlays?.length || (style.filter && (FIGURE_FILTERS as readonly string[]).includes(style.filter)));
   const layers = style.overlays?.length ? fxLayers(style, { W, H, heroX, feet: heroFeet, scale: heroScale, index: idx }) : { behind: "", above: "" };
-  const art = `${bg}${layers.behind}<g${fx}>${extras.join("")}${hero}</g>${layers.above}${textureOverlay(style, W, H)}`;
+  if (o.layer === "mask") {
+    const white = `<filter id="mask-white" color-interpolation-filters="sRGB"><feColorMatrix type="matrix" values="0 0 0 0 1 0 0 0 0 1 0 0 0 0 1 0 0 0 1 0"/></filter>`;
+    return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${H}" width="${W}" height="${H}"><defs>${white}${textureDefs(style)}${extraFx ? fxDefs(style, W, H) : ""}</defs><rect width="${W}" height="${H}" fill="#000"/><g filter="url(#mask-white)"><g${fx}>${crowd.join("")}${extras.join("")}${hero}</g></g></svg>`;
+  }
+  const figures = o.layer === "background" ? "" : `<g${fx}>${crowd.join("")}${extras.join("")}${hero}</g>`;
+  const art = `${bg}${layers.behind}${figures}${layers.above}${textureOverlay(style, W, H)}`;
   let svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${H}" width="${W}" height="${H}">
   <defs><linearGradient id="sky" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="${theme.sky[0]}"/><stop offset="1" stop-color="${theme.sky[1]}"/></linearGradient>${textureDefs(style)}${extraFx ? fxDefs(style, W, H) : ""}</defs>
   ${art}

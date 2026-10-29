@@ -66,7 +66,7 @@ async function preparePhoto(key: string) {
 }
 
 /** Внешность главного героя для демо-рисовальщика. */
-function heroLook(a: QuizAnswers): DemoLook {
+export function heroLook(a: QuizAnswers): DemoLook {
   const p = a.appearance;
   return {
     gender: a.hero.gender,
@@ -87,7 +87,7 @@ function heroLook(a: QuizAnswers): DemoLook {
 const EXTRA_AGE: Record<string, number> = { mom: 35, dad: 37, grandma: 68, grandpa: 70, owner: 34, colleague: 38 };
 
 /** Внешность доп. героя для демо: род, возраст по роли, питомец, «свой вариант». */
-function extraLook(e: ExtraV2T, a: QuizAnswers): DemoLook {
+export function extraLook(e: ExtraV2T, a: QuizAnswers): DemoLook {
   const g = extraGender(e, guessGender);
   const age = e.role === "partner" ? heroAge(a) : e.role === "child" || e.role === "grandchild" ? 7 : EXTRA_AGE[e.role];
   return { gender: g === "n" ? undefined : g, age, species: e.species, thing: e.what || (e.role === "toy" ? e.name : undefined), furColor: e.role === "pet" ? e.description : undefined };
@@ -128,7 +128,7 @@ async function heroesFor(book: Book, a: QuizAnswers): Promise<HeroRef[]> {
 const IDEA_THEME: Record<string, string> = { CHILD: "dragon", TEEN: "city-night", ADULT: "home", PET: "pet-home" };
 
 /** Что рисуем: сюжет (тема, вид героя) и обложка. Для своей идеи — тема аудитории. */
-function plotInfo(a: QuizAnswers): { plot: SceneJob["plot"]; coverScene: string | null } {
+export function plotInfo(a: QuizAnswers): { plot: SceneJob["plot"]; coverScene: string | null } {
   const plot = plotForAnswers(a);
   const heroKind: HeroKind = HERO_KIND_BY_AUDIENCE[a.audience];
   if (plot) return { plot: { slug: plot.slug, theme: plot.theme, heroKind: plot.heroKind }, coverScene: plot.coverScene };

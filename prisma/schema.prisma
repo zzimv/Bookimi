@@ -83,6 +83,7 @@ enum ConsentType {
   MARKETING
   ANALYTICS_COOKIES
   CROSS_BORDER    // зарубежные ИИ-модели / WhatsApp
+  VOICE           // запись своего голоса для мультфильма (удаляется через 30 дней после выдачи)
 }
 
 model Consent {
@@ -301,6 +302,7 @@ model Book {
   files       BookFile[]
   orderItems  OrderItem[]
   costs       GenerationCost[]
+  cartoon     Cartoon?
 }
 
 model BookPage {
@@ -315,6 +317,45 @@ model BookPage {
   version     Int      @default(1)
 
   @@unique([bookId, index])
+}
+
+enum CartoonStatus {
+  PENDING        // куплен, ждёт готовой книги
+  QUEUED
+  RENDERING
+  READY
+  FAILED
+}
+
+// «Мультфильм по книге»: сценарий озвучки, голос (диктор или свой), файлы — в BookFile (cartoon, cartoon-vertical,
+// cartoon-poster, cartoon-cue-NN — записи покупателя). Записи голоса удаляются через 30 дней после выдачи.
+model Cartoon {
+  id              String        @id @default(uuid()) @db.Uuid
+  bookId          String        @unique @db.Uuid
+  book            Book          @relation(fields: [bookId], references: [id], onDelete: Cascade)
+  status          CartoonStatus @default(PENDING)
+  progress        Int           @default(0)
+  error           String?
+  voiceMode       String        @default("auto") // auto — диктор, own — свой голос
+  ownVoicePaid    Boolean       @default(false)
+  voice           String?       // голос диктора (SpeechKit), null — по аудитории из настроек
+  subtitles       Boolean       @default(true)
+  script          Json?         // { cues: [{ n, kind, page, text, targetSec }], words, source }
+  textHash        String?       // текст книги, по которому собран сценарий
+  renderedKey     String?       // что собрано: голос + субтитры + текст (для «ничего не изменилось»)
+  rerendersLeft   Int           @default(1)   // бесплатная пересборка при смене голоса/текста
+  ownBuildsLeft   Int           @default(3)   // сборок со своим голосом (перезаписали реплики — собрать снова)
+  durationSec     Float?
+  renderSeconds   Float?
+  deliveredAt     DateTime?
+  voicePurgeAt    DateTime?     // когда удалить записи голоса (30 дней после выдачи)
+  voicePurgedAt   DateTime?
+  shareToken      String?       @unique
+  shareExpiresAt  DateTime?
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  @@index([voicePurgeAt])
 }
 
 model BookFile {
