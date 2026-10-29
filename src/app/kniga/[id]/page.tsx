@@ -6,6 +6,7 @@ import { cfg } from "@/lib/settings";
 import { AnswersV2, heroAge } from "@/lib/quiz";
 import { dedicationText } from "@/lib/gen/text";
 import { moodsFor } from "@/content/moods";
+import { moodSwatch } from "@/lib/mood-swatch";
 
 export const metadata: Metadata = { title: "Ваша книга", robots: { index: false } };
 export const dynamic = "force-dynamic";
@@ -17,7 +18,7 @@ export default async function Page({ params }: { params: Promise<{ id: string }>
   const flags = await cfg("flags");
   const a = AnswersV2.safeParse(own.book.params);
   const limits = await cfg("limits");
-  const moods = a.success ? moodsFor(a.data.audience, heroAge(a.data)).map((m) => ({ id: m.id, title: m.title, oneLine: m.oneLine })) : [];
+  const moods = a.success ? moodsFor(a.data.audience, heroAge(a.data)).map((m) => ({ id: m.id, title: m.title, oneLine: m.oneLine, swatch: moodSwatch(m) })) : [];
   return (
     <BookFlow
       bookId={id}
@@ -27,6 +28,7 @@ export default async function Page({ params }: { params: Promise<{ id: string }>
       dedication={a.success ? dedicationText(a.data) : ""}
       moods={moods}
       moodChangesPreview={limits.moodChangesPreview}
+      audience={a.success ? a.data.audience : "CHILD"}
     />
   );
 }

@@ -105,17 +105,56 @@ function Art({ theme, colors }: { theme: string; colors?: CoverColors }) {
   }
 }
 
-export function Cover({ theme, title, coverUrl, colors }: { theme: string; title: string; coverUrl?: string | null; colors?: CoverColors }) {
+export function Cover({
+  theme,
+  title,
+  coverUrl,
+  colors,
+  sample,
+  name,
+  eager,
+  rawTitle,
+  heroWord = "Ваш герой",
+}: {
+  theme: string;
+  title: string;
+  coverUrl?: string | null;
+  colors?: CoverColors;
+  /** Демо-иллюстрация /obrazec, если настоящей обложки нет. */
+  sample?: string;
+  /** Имя на обложке; без него — из CSS-переменной --hero-name (поле «Как зовут героя?»). */
+  name?: string;
+  /**
+   * Название с «[Имя]» в начале — имя встаёт прямо в название, пока покупатель его печатает
+   * (пусто — показываем heroWord: «Ваш ребёнок»).
+   */
+  rawTitle?: string;
+  heroWord?: string;
+  eager?: boolean;
+}) {
+  const src = coverUrl || sample;
+  const slot = name === undefined && rawTitle?.startsWith("[Имя]");
   return (
     <div className="cover">
-      {coverUrl ? (
+      {src ? (
         // eslint-disable-next-line @next/next/no-img-element
-        <img src={coverUrl} alt="" loading="lazy" width={600} height={600} />
+        <img src={src} alt="" loading={eager ? "eager" : "lazy"} decoding="async" width={600} height={600} />
       ) : (
         <Art theme={theme} colors={colors} />
       )}
-      <div className="cover__name" aria-hidden="true" />
-      <div className="cover__title" aria-hidden="true">{title}</div>
+      {name !== undefined ? (
+        <div className="cover__name cover__name--own" aria-hidden="true">{name}</div>
+      ) : slot ? null : (
+        <div className="cover__name" aria-hidden="true" />
+      )}
+      {slot ? (
+        <div className="cover__title cover__title--big" aria-hidden="true">
+          <span className="name-slot" data-ph={heroWord} />
+          {rawTitle!.slice("[Имя]".length)}
+        </div>
+      ) : (
+        title && <div className="cover__title" aria-hidden="true">{title}</div>
+      )}
     </div>
   );
 }

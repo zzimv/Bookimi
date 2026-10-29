@@ -13,18 +13,31 @@ const domain = process.env.DOMAIN ?? "bookimi.ru";
 
 export const metadata: Metadata = {
   metadataBase: new URL(`https://${domain}`),
-  title: { default: "БУКИМИ — сказка, где ваш ребёнок главный герой", template: "%s — БУКИМИ" },
+  title: { default: "БУКИМИ — книга, где главный герой тот, кого вы любите", template: "%s — БУКИМИ" },
   description:
-    "Персональная детская книга по фото ребёнка: его лицо на иллюстрациях, имя в тексте, посвящение от вас. Бесплатное превью за 5 минут, PDF — 990 ₽, печатная книга — от 2 490 ₽.",
+    "Персональная книга по фото: ребёнок, подросток, близкий взрослый или питомец — главный герой иллюстраций и текста. Бесплатное превью за 5 минут, PDF — 990 ₽, печатная книга — от 2 490 ₽.",
   openGraph: { type: "website", locale: "ru_RU", siteName: "БУКИМИ" },
   formatDetection: { telephone: false },
 };
 
-export const viewport: Viewport = { themeColor: "#1e4d3b", width: "device-width", initialScale: 1 };
+export const viewport: Viewport = {
+  themeColor: [
+    { media: "(prefers-color-scheme: light)", color: "#1e4d3b" },
+    { media: "(prefers-color-scheme: dark)", color: "#0b120f" },
+  ],
+  width: "device-width",
+  initialScale: 1,
+};
+
+// Выбранная вручную тема — до первой отрисовки (без вспышки). "auto" — как в системе.
+const THEME_SCRIPT = `try{var t=localStorage.getItem("bk_theme");if(t==="light"||t==="dark")document.documentElement.dataset.theme=t}catch(e){}`;
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="ru">
+    <html lang="ru" data-theme="auto" suppressHydrationWarning>
+      <head>
+        <script dangerouslySetInnerHTML={{ __html: THEME_SCRIPT }} />
+      </head>
       <body>
         <PromoBar />
         <Header />

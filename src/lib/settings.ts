@@ -90,6 +90,15 @@ export const DEFAULTS = {
   },
   referral: { newbiePct: 10, bonusPct: 10, delayDays: 14 },
   promoBar: { enabled: true, text: "Бесплатное превью книги за 5 минут — без регистрации" },
+  /** Сезонная кнопка на главной и пункт меню. mode: auto — по дате (ноябрь–декабрь — Новый год…), manual — повод ниже, off — без сезона. */
+  season: {
+    mode: "auto" as "auto" | "manual" | "off",
+    occasion: "novyj-god",
+    /** Последний день заказа печатной книги к празднику (ГГГГ-ММ-ДД); пусто — посчитать (печать 5 раб. дней + доставка 7 дней). */
+    printDeadline: "",
+  },
+  /** Подписка на главной «−300 ₽ на первый заказ». Блок виден, только если указан активный промокод. */
+  newsletter: { promoCode: "", discountText: "−300 ₽ на первый заказ" },
   flags: { printEnabled: true, photoUploadEnabled: false, demoMode: false },
 };
 

@@ -1,5 +1,7 @@
 import Link from "next/link";
 import { getPromoBar, getSeller, sellerIsComplete } from "@/lib/settings";
+import { AUDIENCE_PAGES, getSeason } from "@/lib/storefront";
+import { ThemeToggle } from "./ThemeToggle";
 
 export async function PromoBar() {
   const p = await getPromoBar();
@@ -7,7 +9,13 @@ export async function PromoBar() {
   return <div className="promo">{p.text}</div>;
 }
 
-export function Header() {
+export async function Header() {
+  const season = await getSeason();
+  const links = [
+    { href: "/skazki", label: "Книги" },
+    ...AUDIENCE_PAGES.map((a) => ({ href: `/dlya/${a.slug}`, label: a.nav })),
+    { href: "/povody", label: "Поводы" },
+  ];
   return (
     <header className="header">
       <div className="wrap header__in">
@@ -15,15 +23,36 @@ export function Header() {
           букими<span>.</span>
         </Link>
         <nav className="nav" aria-label="Основное меню">
-          <Link href="/skazki">Сказки</Link>
-          <Link href="/#povody">Поводы</Link>
-          <Link href="/#ceny">Цены</Link>
-          <Link href="/#voprosy">Вопросы</Link>
-          <Link href="/kabinet">Кабинет</Link>
+          {links.map((l) => (
+            <Link key={l.href} href={l.href}>{l.label}</Link>
+          ))}
+          {season && (
+            <Link href={season.href} className="nav__season">{season.nav}</Link>
+          )}
         </nav>
-        <Link href="/sozdat" className="btn btn--primary">
-          Создать книгу
-        </Link>
+        <div className="header__right">
+          <Link href="/kabinet" className="header__cab" aria-label="Личный кабинет">
+            <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><circle cx="12" cy="8" r="4" fill="none" stroke="currentColor" strokeWidth="2" /><path d="M4 21c1.5-4 4.5-6 8-6s6.5 2 8 6" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" /></svg>
+            <span>Кабинет</span>
+          </Link>
+          <Link href="/sozdat" className="btn btn--primary header__cta">
+            Создать книгу
+          </Link>
+          {/* Меню на телефоне — без JavaScript */}
+          <details className="burger">
+            <summary aria-label="Меню">
+              <svg viewBox="0 0 24 24" width="26" height="26" aria-hidden="true"><path d="M3 6h18M3 12h18M3 18h18" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" /></svg>
+            </summary>
+            <nav className="burger__menu" aria-label="Меню">
+              {season && <Link href={season.href} className="nav__season">{season.nav}</Link>}
+              {links.map((l) => (
+                <Link key={l.href} href={l.href}>{l.label}</Link>
+              ))}
+              <Link href="/kabinet">Личный кабинет</Link>
+              <Link href="/sozdat" className="btn btn--primary btn--block">Создать книгу</Link>
+            </nav>
+          </details>
+        </div>
       </div>
     </header>
   );
@@ -41,7 +70,7 @@ export async function Footer() {
             букими
           </Link>
           <span className="footer__age" aria-label="Возрастная маркировка 0+">0+</span>
-          <p style={{ marginTop: 14 }}>Персональные сказки, где ваш ребёнок — главный герой.</p>
+          <p style={{ marginTop: 14 }}>Персональные книги, где главный герой — тот, кого вы любите: ребёнок, подросток, близкий взрослый или питомец.</p>
           <p>
             {ok ? (
               <>
@@ -54,11 +83,15 @@ export async function Footer() {
             )}
           </p>
           <p>© {year} БУКИМИ. Копирование материалов сайта запрещено.</p>
+          <ThemeToggle />
         </div>
         <div>
           <ul>
-            <li><Link href="/skazki">Все сказки</Link></li>
-            <li><Link href="/povod/den-rozhdeniya">На день рождения</Link></li>
+            <li><Link href="/skazki">Все книги</Link></li>
+            {AUDIENCE_PAGES.map((a) => (
+              <li key={a.slug}><Link href={`/dlya/${a.slug}`}>{a.nav}</Link></li>
+            ))}
+            <li><Link href="/povody">Все поводы</Link></li>
             <li><Link href="/povod/novyj-god">На Новый год</Link></li>
             <li><Link href="/vozrast/2-4-goda">Для детей 2–4 лет</Link></li>
             <li><Link href="/blog">Блог</Link></li>
@@ -71,7 +104,7 @@ export async function Footer() {
             <li><Link href="/oferta">Публичная оферта</Link></li>
             <li><Link href="/politika">Политика обработки персональных данных</Link></li>
             <li><Link href="/soglasie/pd">Согласие на обработку ПДн</Link></li>
-            <li><Link href="/soglasie/foto">Согласие на обработку фото ребёнка</Link></li>
+            <li><Link href="/soglasie/foto">Согласие на обработку фото</Link></li>
             <li><Link href="/soglasie/rassylka">Согласие на рассылку</Link></li>
             <li><Link href="/vozvrat">Возврат и брак</Link></li>
             <li><Link href="/cookies">Файлы cookie</Link></li>

@@ -10,12 +10,14 @@ import { DOC_VERSION } from "@/lib/legal";
 import { spentTodayRub } from "@/lib/limits";
 import { AnswersV2, heroAge } from "@/lib/quiz";
 import { moodsFor } from "@/content/moods";
+import { hasConsent } from "@/lib/consent";
 
 const Input = z.discriminatedUnion("action", [
   z.object({ action: z.literal("rewrite") }),
   z.object({ action: z.literal("approve") }),
   z.object({ action: z.literal("consent"), pd: z.literal(true), photo: z.boolean() }),
-  z.object({ action: z.literal("preview"), withPhoto: z.boolean(), marketing: z.boolean().optional() }),
+  // pd: true — согласие на ПДн, если его ещё нет (старые аккаунты); marketing — только для совместимости, новая форма спрашивает на входе
+  z.object({ action: z.literal("preview"), withPhoto: z.boolean(), marketing: z.boolean().optional(), pd: z.boolean().optional() }),
   z.object({ action: z.literal("redraw"), index: z.number().int().min(0).max(12) }),
   z.object({ action: z.literal("retry") }),
   // Смена настроения всех иллюстраций; "" — «как задумал художник»
@@ -51,10 +53,15 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       return json({ ok: true });
     }
     case "consent": {
+      // Согласия перед загрузкой фото — первая точка сбора данных. Уже данные не дублируем.
       const user = await currentUser();
+      const who = { userId: user?.id, anonId: anon };
       const ua = req.headers.get("user-agent")?.slice(0, 300);
-      await db.consent.create({ data: { userId: user?.id, anonId: anon, type: "PERSONAL_DATA", docVersion: DOC_VERSION, granted: true, userAgent: ua } });
-      if (b.photo) {
+      if (!(await hasConsent("PERSONAL_DATA", who))) {
+        await db.consent.create({ data: { userId: user?.id, anonId: anon, type: "PERSONAL_DATA", docVersion: DOC_VERSION, granted: true, userAgent: ua } });
+      }
+      // Тип CHILD_PHOTO — согласие на обработку фото; формулировка галочки зависит от аудитории книги (ребёнок / своё фото / питомец)
+      if (b.photo && !(await hasConsent("CHILD_PHOTO", who))) {
         await db.consent.create({ data: { userId: user?.id, anonId: anon, type: "CHILD_PHOTO", docVersion: DOC_VERSION, granted: true, userAgent: ua } });
       }
       return json({ ok: true });
@@ -64,6 +71,10 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       if (!user) return err("Войдите по коду, чтобы мы прислали превью", 401);
       if ((await cfg("auth")).phoneRequired && !user.phone) return err("Укажите телефон при входе — он нужен для связи по заказу", 401);
       if (book.status !== "TEXT_APPROVED" && book.status !== "FAILED") return err("Сначала подтвердите текст сказки");
+      if (!(await hasConsent("PERSONAL_DATA", { userId: user.id, anonId: anon }))) {
+        if (!b.pd) return err("Отметьте согласие на обработку персональных данных");
+        await db.consent.create({ data: { userId: user.id, type: "PERSONAL_DATA", docVersion: DOC_VERSION, granted: true, userAgent: req.headers.get("user-agent")?.slice(0, 300) } });
+      }
       if (b.withPhoto) {
         const n = await db.photo.count({ where: { hero: { bookId: id }, deletedAt: null } });
         if (n === 0) return err("Загрузите хотя бы одно фото или выберите «по описанию»");

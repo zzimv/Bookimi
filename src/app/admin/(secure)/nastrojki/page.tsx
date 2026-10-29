@@ -157,6 +157,23 @@ const SECTIONS: { key: SettingKey; title: string; note?: string; fields: Field[]
     ],
   },
   { key: "promoBar", title: "Полоса промо сверху", fields: [{ p: "enabled", label: "Показывать", t: "bool" }, { p: "text", label: "Текст" }] },
+  {
+    key: "season",
+    title: "Сезон на главной",
+    fields: [
+      { p: "mode", label: "Сезон", t: "select", options: [["auto", "По дате (ноябрь–декабрь — Новый год и т. д.)"], ["manual", "Выбранный повод"], ["off", "Без сезона"]] },
+      { p: "occasion", label: "Повод (для «Выбранный повод»), например novyj-god" },
+      { p: "printDeadline", label: "Последний день заказа печатной книги к празднику (ГГГГ-ММ-ДД)", hint: "Пусто — посчитаем сами: печать 5 рабочих дней + доставка до 7 дней." },
+    ],
+  },
+  {
+    key: "newsletter",
+    title: "Подписка на главной",
+    fields: [
+      { p: "promoCode", label: "Промокод за подписку", hint: "Создайте промокод в разделе «Промокоды». Пусто — блок подписки скрыт." },
+      { p: "discountText", label: "Текст выгоды" },
+    ],
+  },
 ];
 
 const get = (o: unknown, path: string) => path.split(".").reduce<unknown>((x, k) => (x as Record<string, unknown>)?.[k], o);

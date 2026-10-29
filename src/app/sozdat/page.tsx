@@ -3,7 +3,9 @@ import { QuizWizard } from "@/components/quiz/QuizWizard";
 import { getStories } from "@/lib/catalog";
 import { db, hasDatabase } from "@/lib/db";
 import { currentUser } from "@/lib/auth";
-import { ART_STYLE_IDS, AUDIENCES, type AudienceKey } from "@/content/profiles";
+import { ART_STYLE_IDS, OCCASIONS } from "@/content/profiles";
+import { audienceFromParam, SVOYA_IDEYA } from "@/lib/storefront";
+import { moodSwatch } from "@/lib/mood-swatch";
 import { MOODS } from "@/content/moods";
 
 export const metadata: Metadata = { title: "Создать книгу", robots: { index: false } };
@@ -26,17 +28,22 @@ async function quizStyles() {
 
 export default async function Page({ searchParams }: { searchParams: Promise<Record<string, string | undefined>> }) {
   const sp = await searchParams;
-  const [stories, styles] = await Promise.all([getStories(), quizStyles()]);
+  const [all, styles] = await Promise.all([getStories(), quizStyles()]);
+  const stories = all.filter((s) => s.slug !== SVOYA_IDEYA);
   const initial: Record<string, unknown> = {};
-  // ?dlya=ADULT|TEEN|PET|CHILD — аудитория; ?skazka=<slug> — сюжет (аудитория берётся из него)
-  const dlya = sp.dlya?.toUpperCase();
-  if (dlya && AUDIENCES.some((a) => a.key === dlya)) initial.audience = dlya as AudienceKey;
+  // ?dlya=ADULT|TEEN|PET|CHILD (или detyam/podrostkam/…) — аудитория; ?skazka=<slug> — книга (аудитория берётся из неё);
+  // ?povod=<ключ> — повод. Книга выбрана → анкета не спрашивает ни повод, ни сюжет.
+  const dlya = audienceFromParam(sp.dlya);
+  if (dlya) initial.audience = dlya;
   const picked = sp.skazka ? stories.find((s) => s.slug === sp.skazka) : undefined;
+  const povod = sp.povod && OCCASIONS.some((o) => o.key === sp.povod) ? sp.povod : undefined;
   if (picked) {
     initial.story = { slug: picked.slug, idea: "" };
     initial.audience = picked.audience;
-  }
-  if (sp.povod) initial.occasion = { key: sp.povod, custom: "" };
+    // Повод: из ссылки; иначе — если книга написана к одному поводу (новогодняя, ко дню рождения); иначе без повода
+    const own = picked.occasions.filter((o) => o !== "bez");
+    initial.occasion = { key: povod ?? (own.length === 1 ? own[0] : "bez"), custom: "" };
+  } else if (povod) initial.occasion = { key: povod, custom: "" };
   // «Новая книга с этим героем» из кабинета
   if (sp.geroj) {
     const user = await currentUser();
@@ -55,16 +62,19 @@ export default async function Page({ searchParams }: { searchParams: Promise<Rec
         tagline: s.tagline,
         audience: s.audience,
         coverTheme: s.coverTheme,
-        coverColors: s.coverColors,
         ageMin: s.ageMin,
         ageMax: s.ageMax,
         occasions: s.occasions,
         artStyles: s.artStyles,
+        segments: s.segments,
         extras: s.extras,
       }))}
       styles={styles}
-      moods={MOODS.map((m) => ({ id: m.id, title: m.title, oneLine: m.oneLine, audiences: m.audiences, minAge: m.minAge }))}
+      moods={MOODS.map((m) => ({ id: m.id, title: m.title, oneLine: m.oneLine, audiences: m.audiences, minAge: m.minAge, swatch: moodSwatch(m) }))}
       initial={initial}
+      locked={Boolean(picked)}
+      presetAudience={Boolean(dlya) && !picked}
+      presetOccasion={Boolean(povod) && !picked}
       captchaKey={process.env.YANDEX_SMARTCAPTCHA_CLIENT_KEY || undefined}
     />
   );

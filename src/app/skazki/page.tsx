@@ -1,39 +1,52 @@
 import type { Metadata } from "next";
-import { BookCard } from "@/components/BookCard";
-import { CatalogFilters } from "@/components/Catalog";
+import { CatalogNav } from "@/components/CatalogNav";
+import { filteredStories, parseCatalogQuery, StoryGroups, type SP } from "@/components/StoryGroups";
 import { Breadcrumbs, JsonLd, StickyCta } from "@/components/Layout";
-import { getMinPrice, getOccasions, getStories } from "@/lib/catalog";
-
-export const revalidate = 300;
+import { PriceSection } from "@/components/Sections";
+import { getMinPrice } from "@/lib/catalog";
+import { OCCASIONS as OCCASION_KEYS, SEGMENTS } from "@/content/profiles";
+import { audiencePage } from "@/lib/storefront";
 
 export const metadata: Metadata = {
-  title: "Все сказки с вашим ребёнком в главной роли",
+  title: "Все книги: детям, подросткам, взрослым и о питомцах",
   description: "Персональные книги для детей, подростков, взрослых и о питомцах: сказки, приключения, истории любви и семейные былины. Превью бесплатно, PDF 990 ₽.",
   alternates: { canonical: "/skazki" },
 };
 
-export default async function Page() {
-  const [stories, occasions, minPrice] = await Promise.all([getStories(), getOccasions(), getMinPrice()]);
+export default async function Page({ searchParams }: { searchParams: Promise<SP> }) {
+  const q = parseCatalogQuery(await searchParams);
+  const [{ matching, others }, minPrice] = await Promise.all([filteredStories(q), getMinPrice()]);
+  const page = q.audience ? audiencePage(q.audience) : null;
+  const seg = q.segments.length === 1 ? SEGMENTS.find((s) => s.id === q.segments[0]) : null;
+  const occ = q.povod ? OCCASION_KEYS.find((o) => o.key === q.povod) : null;
+  const h1 = seg ? seg.title : page ? `Книги: ${page.nav.toLowerCase()}` : "Все книги";
+  const total = matching.length + others.length;
+
   return (
     <>
-      <Breadcrumbs items={[{ href: "/", label: "Главная" }, { label: "Сказки" }]} />
+      <Breadcrumbs items={[{ href: "/", label: "Главная" }, ...(page ? [{ href: "/skazki", label: "Книги" }, { label: page.nav }] : [{ label: "Книги" }])]} />
       <JsonLd data={{ "@context": "https://schema.org", "@type": "BreadcrumbList", itemListElement: [
         { "@type": "ListItem", position: 1, name: "Главная", item: "/" },
-        { "@type": "ListItem", position: 2, name: "Сказки", item: "/skazki" },
+        { "@type": "ListItem", position: 2, name: "Книги", item: "/skazki" },
       ] }} />
-      <section className="section" style={{ paddingTop: 24 }}>
+      <section className="section section--tight">
         <div className="wrap">
-          <h1>Все сказки</h1>
-          <p className="lead">Выберите историю — имя, внешность и увлечения ребёнка мы вплетём в каждую страницу.</p>
-          <CatalogFilters occasions={occasions.map((o) => ({ slug: o.slug, title: o.title }))} />
-          <div className="grid">
-            {stories.map((s) => (
-              <BookCard key={s.slug} story={s} minPrice={minPrice} />
-            ))}
-          </div>
+          <h1>{h1}</h1>
+          <p className="lead">
+            {occ
+              ? `Повод — «${occ.label}». Сначала книги, написанные к нему; в любую другую мы впишем ваш повод.`
+              : "Выберите историю — имя, внешность и увлечения героя мы вплетём в каждую страницу."}
+          </p>
+          <CatalogNav q={q} />
+          <p className="small muted" aria-live="polite">
+            {total} {total % 10 === 1 && total % 100 !== 11 ? "книга" : [2, 3, 4].includes(total % 10) && ![12, 13, 14].includes(total % 100) ? "книги" : "книг"}
+          </p>
+          <StoryGroups matching={matching} others={others} povod={q.povod} minPrice={minPrice} />
         </div>
       </section>
-      <StickyCta />
+      <PriceSection />
+      <StickyCta href={q.audience ? `/sozdat?dlya=${q.audience}${q.povod ? `&povod=${q.povod}` : ""}` : "/sozdat"} />
     </>
   );
 }
+

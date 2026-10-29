@@ -4,6 +4,8 @@ import { body, err, json, throttle } from "@/lib/api";
 import { cfg } from "@/lib/settings";
 import { db } from "@/lib/db";
 import { normalizePhone } from "@/lib/quiz";
+import { anonId } from "@/lib/auth";
+import { hasConsent } from "@/lib/consent";
 
 // Вход по коду. Новый формат: { email, phone } — телефон обязателен (настройка auth.phoneRequired),
 // код приходит на почту. Старый формат { target } (email или телефон) оставлен для совместимости.
@@ -26,6 +28,7 @@ export async function POST(req: Request) {
     phone = normalizePhone(b.phone);
     if (!phone) return err("Укажите мобильный номер: +7 9XX XXX-XX-XX");
   }
+  let needsConsent = true;
   if (target.kind === "email") {
     const existing = await db.user.findUnique({ where: { email: target.value }, select: { id: true, role: true, phone: true } });
     // Телефон обязателен для покупателей; сотрудникам и тем, у кого он уже сохранён, — нет
@@ -36,8 +39,10 @@ export async function POST(req: Request) {
       const owner = await db.user.findUnique({ where: { phone }, select: { id: true } });
       if (owner && owner.id !== existing?.id) return err("Этот телефон уже привязан к другому аккаунту. Войдите с почтой того аккаунта или напишите в поддержку.");
     }
+    needsConsent = !(existing && existing.role !== "CUSTOMER") && !(await hasConsent("PERSONAL_DATA", { userId: existing?.id, anonId: await anonId() }));
   }
   const r = await requestOtp(target.value);
   if (!r.ok) return err(r.error, 429);
-  return json(r);
+  // Подсказка форме: согласие на обработку ПДн уже дано (на шаге фото или раньше) — галочку не показываем
+  return json({ ...r, needsConsent });
 }

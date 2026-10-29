@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { cookies } from "next/headers";
-import { verifyOtp } from "@/lib/auth";
+import { anonId, normalizeTarget, verifyOtp } from "@/lib/auth";
+import { attachAnonConsents, hasConsent } from "@/lib/consent";
 import { body, deviceKey, err, json, throttle } from "@/lib/api";
 import { subjectHash } from "@/lib/crypto";
 import { db } from "@/lib/db";
@@ -18,9 +19,20 @@ export async function POST(req: Request) {
       phone: z.string().trim().max(30).optional(),
       code: z.string().min(4).max(8),
       consentPd: z.boolean().optional(),
+      /** Необязательная отдельная галочка «новости и скидки» — только на входе. */
+      marketing: z.boolean().optional(),
     }),
   );
   if (!b || !(b.email || b.target)) return err("Введите код");
+  // Согласие на обработку ПДн — один раз: если уже дано (с этого устройства или в аккаунте), повторно не требуем.
+  // Проверяем до кода, чтобы не «сжечь» его. Сотрудникам согласие покупателя не нужно.
+  const anon = await anonId();
+  const t0 = normalizeTarget(b.email || b.target!);
+  const existing = t0 ? await db.user.findUnique({ where: t0.kind === "email" ? { email: t0.value } : { phone: t0.value }, select: { id: true, role: true } }) : null;
+  const pdGiven = await hasConsent("PERSONAL_DATA", { userId: existing?.id, anonId: anon });
+  if (!b.consentPd && !pdGiven && !(existing && existing.role !== "CUSTOMER")) {
+    return err("Отметьте согласие на обработку персональных данных");
+  }
   const ref = (await cookies()).get("bk_ref")?.value;
   const r = await verifyOtp(b.email || b.target!, b.code, { referral: ref, device: subjectHash(await deviceKey()) });
   if (!r.ok) return err(r.error);
@@ -30,14 +42,19 @@ export async function POST(req: Request) {
     const owner = await db.user.findUnique({ where: { phone }, select: { id: true } });
     if (!owner) r.user = await db.user.update({ where: { id: r.user.id }, data: { phone } });
   }
-  if (b.consentPd) {
-    await db.consent.create({ data: { userId: r.user.id, type: "PERSONAL_DATA", docVersion: DOC_VERSION, granted: true } });
+  await attachAnonConsents(r.user.id, anon);
+  if (b.consentPd && !pdGiven) {
+    await db.consent.create({ data: { userId: r.user.id, type: "PERSONAL_DATA", docVersion: DOC_VERSION, granted: true, userAgent: req.headers.get("user-agent")?.slice(0, 300) } });
+  }
+  if (b.marketing) {
+    r.user = await db.user.update({ where: { id: r.user.id }, data: { marketingOk: true } });
+    await db.consent.create({ data: { userId: r.user.id, type: "MARKETING", docVersion: DOC_VERSION, granted: true } });
   }
   // Канал уведомлений по умолчанию — тот, через который вошли
   if (r.user.email) {
     await db.notificationPref.upsert({
       where: { userId_channel: { userId: r.user.id, channel: "email" } },
-      update: {},
+      update: b.marketing ? { marketing: true } : {},
       create: { userId: r.user.id, channel: "email", address: r.user.email, marketing: r.user.marketingOk },
     });
   }

@@ -8,8 +8,8 @@
 
 | Часть | Где |
 |---|---|
-| Публичный сайт: главная, сказки, поводы, возраст, блог, документы | `src/app/(страницы)`, `src/components` |
-| Квиз (7 шагов, без фото) → сказка → согласие → фото → вход по коду → превью | `src/app/sozdat`, `src/components/quiz`, `src/components/book/BookFlow.tsx` |
+| Публичный сайт: главная (как у Wonderbly), книги с фильтрами, `/dlya/*` по аудиториям, поводы, книга, блог, документы; тёмная тема | `src/app/(страницы)`, `src/components`, `src/lib/storefront.ts` |
+| Анкета: книга выбрана — 4 шага (герой → внешность → кто ещё → стиль); иначе «Для кого?» → «Повод и книга» → те же шаги. Сказка → согласия один раз → фото → вход (телефон + код на почту) → превью | `src/app/sozdat`, `src/components/quiz`, `src/components/book/BookFlow.tsx` |
 | «Кто печатает книгу?», форматы, допы, доставка, промокод, расчёт суммы на сервере | `src/components/book/Checkout.tsx`, `src/lib/pricing.ts`, `src/lib/orders.ts` |
 | Оплата: СБП-QR, перевод с подтверждением, ЮKassa (выкл.), чеки НПД | `src/lib/payments.ts`, `src/lib/npd.ts`, `src/app/zakaz` |
 | Генерация: текст (YandexGPT, имя не уходит наружу), иллюстрации (Qwen на своём GPU), PDF, аудио | `src/lib/gen/*`, `src/lib/pdf.ts`, `tools/gpu-server` |

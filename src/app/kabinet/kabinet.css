@@ -4,7 +4,7 @@
 .cab-h2 { font-size: var(--fs-lg); margin: 28px 0 12px; }
 
 .cab-hint { display: grid; grid-template-columns: auto 1fr; gap: 10px 14px; align-items: start; background: var(--gold-soft); border-radius: var(--r-ui); padding: 16px 18px; }
-.cab-hint__icon { color: #6b4a0e; width: 40px; height: 40px; border-radius: 50%; background: rgba(255, 255, 255, 0.6); display: grid; place-items: center; }
+.cab-hint__icon { color: var(--gold-ink); width: 40px; height: 40px; border-radius: 50%; background: rgba(255, 255, 255, 0.6); display: grid; place-items: center; }
 .cab-hint b { font-family: var(--font-head); color: var(--forest-deep); }
 .cab-hint p { margin: 2px 0 0; font-size: var(--fs-sm); }
 .cab-hint .btn { grid-column: 2; justify-self: start; }
@@ -22,7 +22,7 @@
 .shelf__line { margin: 0; color: var(--ink-soft); max-width: 36ch; }
 .shelf__add { display: grid; place-items: center; align-content: center; gap: 6px; aspect-ratio: 1; border: 2px dashed var(--line); border-radius: var(--r-book); color: var(--forest); font-weight: 700; text-decoration: none; }
 .shelf__add span { font: 800 2.2rem/1 var(--font-head); }
-.shelf__add:hover { border-color: var(--forest); background: var(--white); }
+.shelf__add:hover { border-color: var(--forest); background: var(--surface); }
 
 .cab-ref { margin-top: 32px; }
 

@@ -9,10 +9,11 @@ function clean(v: string) {
 
 function apply(name: string) {
   document.documentElement.style.setProperty("--hero-name", name ? `"${name}"` : '""');
+  document.documentElement.classList.toggle("has-name", Boolean(name));
 }
 
-// Единственная интерактивная деталь первого экрана: имя сразу появляется на всех обложках.
-export function NamePreview() {
+// Имя сразу появляется на обложках страницы (CSS-переменная --hero-name) и подставляется в анкету.
+export function NamePreview({ label = "Как зовут героя?", placeholder = "Например, Варя", hint }: { label?: string; placeholder?: string; hint?: string }) {
   const [name, setName] = useState("");
 
   useEffect(() => {
@@ -27,12 +28,12 @@ export function NamePreview() {
 
   return (
     <div className="namebox">
-      <label htmlFor="hero-name">Как зовут ребёнка?</label>
+      <label htmlFor="hero-name">{label}</label>
       <input
         id="hero-name"
         type="text"
         autoComplete="off"
-        placeholder="Например, Варя"
+        placeholder={placeholder}
         value={name}
         maxLength={20}
         onChange={(e) => {
@@ -44,6 +45,7 @@ export function NamePreview() {
           } catch {}
         }}
       />
+      {hint && <small className="muted">{hint}</small>}
     </div>
   );
 }

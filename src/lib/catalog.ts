@@ -207,13 +207,15 @@ export async function getApprovedReviews() {
 export function ageLabel(min: number, max: number, audience: AudienceKey = "CHILD") {
   if (audience === "ADULT") return "Для взрослых";
   if (audience === "PET") return "Собакам и кошкам";
-  return `Возраст ${min}–${max}`;
+  const n = max % 100;
+  const unit = n % 10 >= 2 && n % 10 <= 4 && (n < 12 || n > 14) ? "года" : "лет";
+  return `${min}–${max} ${unit}`;
 }
 
-const HERO_WORD: Record<AudienceKey, string> = { CHILD: "Ваш ребёнок", TEEN: "Ваш герой", ADULT: "Ваш герой", PET: "Ваш питомец" };
+export const HERO_WORD: Record<AudienceKey, string> = { CHILD: "Ваш ребёнок", TEEN: "Ваш герой", ADULT: "Ваш герой", PET: "Ваш питомец" };
 
 export function displayTitle(title: string, audience: AudienceKey = "CHILD") {
-  return title.replace("[Имя]", HERO_WORD[audience]);
+  return title.replace(/ о \[Имя\]/, audience === "PET" ? " о вашем питомце" : " о вашем герое").replace("[Имя]", HERO_WORD[audience]);
 }
 
-export const rub = (n: number) => `${n.toLocaleString("ru-RU").replace(/,/g, " ")} ₽`;
+export const rub = (n: number) => `${n.toLocaleString("ru-RU").replace(/[,\s]/g, "\u00a0")}\u00a0₽`;

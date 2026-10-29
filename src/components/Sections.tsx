@@ -44,7 +44,7 @@ export async function Reviews() {
   return (
     <section className="section section--sage">
       <div className="wrap">
-        <h2>Что говорят родители</h2>
+        <h2>Что говорят покупатели</h2>
         <div className="reviews">
           {reviews.map((r) => (
             <figure key={r.id} className="review" style={{ margin: 0 }}>

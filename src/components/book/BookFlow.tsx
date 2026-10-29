@@ -19,12 +19,45 @@ interface BookState {
   moodChanges: { preview: number; full: number };
   redrawsLeft: number;
   photos: { id: string; url: string }[];
+  consent?: { pd: boolean; photo: boolean };
 }
+
+type Audience = "CHILD" | "TEEN" | "ADULT" | "PET";
+
+/** Вторая галочка перед загрузкой фото — по аудитории книги (для питомца и взрослого — без слов о ребёнке). */
+const PHOTO_CONSENT: Record<Audience, { title: string; lead: string; label: React.ReactNode; tips: string }> = {
+  CHILD: {
+    title: "Добавим фото ребёнка?",
+    lead: "По фото нейросеть рисует героя похожим на себя. Без фото нарисуем по описанию из анкеты.",
+    label: <>Даю <Link href="/soglasie/foto" target="_blank">согласие на обработку фото ребёнка</Link> как его законный представитель</>,
+    tips: "1–3 фото: лицо крупно, хороший свет, без солнцезащитных очков и других людей в кадре.",
+  },
+  TEEN: {
+    title: "Добавим фото героя?",
+    lead: "По фото нейросеть рисует героя похожим на себя. Без фото нарисуем по описанию из анкеты.",
+    label: <>Даю <Link href="/soglasie/foto" target="_blank">согласие на обработку фото</Link> героя как его законный представитель (или это моё фото и мне есть 18)</>,
+    tips: "1–3 фото: лицо крупно, хороший свет, без других людей в кадре.",
+  },
+  ADULT: {
+    title: "Добавим фото?",
+    lead: "По фото нейросеть рисует героев похожими на себя. Без фото нарисуем по описанию из анкеты.",
+    label: <>Загружаю своё фото или фото людей, которые согласны на это, — <Link href="/soglasie/foto" target="_blank">согласие на обработку фото</Link></>,
+    tips: "1–3 фото героя: лицо крупно, хороший свет. Фото второй половинки и других героев — ниже, по желанию.",
+  },
+  PET: {
+    title: "Добавим фото питомца?",
+    lead: "По фото нейросеть нарисует окрас и приметы как в жизни. Без фото нарисуем по описанию из анкеты.",
+    label: <>Загружаю фото своего питомца; если в кадре есть люди — они согласны (<Link href="/soglasie/foto" target="_blank">согласие на обработку фото</Link>)</>,
+    tips: "1–3 фото: мордочка крупно, при дневном свете; хорошо, если виден окрас целиком.",
+  },
+};
 
 export interface MoodOption {
   id: string;
   title: string;
   oneLine: string;
+  /** Цвет-образец настроения (из демо-тонировки). */
+  swatch?: string;
 }
 
 export function BookFlow({
@@ -35,6 +68,7 @@ export function BookFlow({
   printEnabled,
   moods = [],
   moodChangesPreview = 2,
+  audience = "CHILD",
 }: {
   bookId: string;
   photoEnabled: boolean;
@@ -43,6 +77,7 @@ export function BookFlow({
   printEnabled: boolean;
   moods?: MoodOption[];
   moodChangesPreview?: number;
+  audience?: Audience;
 }) {
   const [b, setB] = useState<BookState | null>(null);
   const [error, setError] = useState("");
@@ -52,7 +87,7 @@ export function BookFlow({
   const [pd, setPd] = useState(false);
   const [photoOk, setPhotoOk] = useState(false);
   const [withPhoto, setWithPhoto] = useState(true);
-  const [marketing, setMarketing] = useState(false);
+  const [pdNow, setPdNow] = useState(false);
   const [hints, setHints] = useState<string[]>([]);
   const [exitShown, setExitShown] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
@@ -145,6 +180,10 @@ export function BookFlow({
 
   if (!b) return <div className="flow"><div className="spinner" style={{ margin: "60px auto" }} /></div>;
 
+  const copy = PHOTO_CONSENT[audience];
+  const moodLeft = Math.max(0, moodChangesPreview - b.moodChanges.preview);
+  const consentDone = Boolean(b.consent?.pd && b.consent?.photo);
+
   const generating = (label: string, sub: string) => (
     <div style={{ textAlign: "center", padding: "40px 0" }}>
       <div className="spinner" style={{ margin: "0 auto 18px" }} />
@@ -209,36 +248,53 @@ export function BookFlow({
         <section>
           {photoStep === "consent" && (
             <>
-              <h1>Добавим фото?</h1>
-              <p>По фото иллюстрации получаются узнаваемыми. Без фото нарисуем по описанию из анкеты.</p>
+              <h1>{copy.title}</h1>
+              <p>{copy.lead}</p>
               {photoEnabled ? (
-                <div className="panel">
-                  <p className="small">Перед загрузкой — два отдельных согласия. Фото используется только для иллюстраций, без идентификации личности, хранится в России и удаляется через 7 дней.</p>
-                  <label className="check">
-                    <input type="checkbox" checked={pd} onChange={(e) => setPd(e.target.checked)} />
-                    <span>Даю <Link href="/soglasie/pd" target="_blank">согласие на обработку персональных данных</Link></span>
-                  </label>
-                  <label className="check">
-                    <input type="checkbox" checked={photoOk} onChange={(e) => setPhotoOk(e.target.checked)} />
-                    <span>Даю <Link href="/soglasie/foto" target="_blank">согласие на обработку фото ребёнка</Link> как его законный представитель</span>
-                  </label>
-                  <button className="btn btn--primary" disabled={!pd || !photoOk || busy} onClick={async () => { if (await act({ action: "consent", pd: true, photo: true })) setPhotoStep("upload"); }}>
-                    Перейти к загрузке фото
+                <div className="panel consent-panel">
+                  {consentDone ? (
+                    <p className="consent-done">
+                      <span aria-hidden="true">✓</span> Согласия на обработку данных и фото даны. <Link href="/soglasie/foto" target="_blank">Текст согласия</Link>
+                    </p>
+                  ) : (
+                    <>
+                      <p className="small muted">Перед загрузкой — два отдельных согласия. Фото нужно только для иллюстраций: без идентификации личности, хранится в России и удаляется через 7 дней.</p>
+                      {!b.consent?.pd && (
+                        <label className="check">
+                          <input type="checkbox" name="consent-pd" checked={pd} onChange={(e) => setPd(e.target.checked)} />
+                          <span>Даю <Link href="/soglasie/pd" target="_blank">согласие на обработку персональных данных</Link></span>
+                        </label>
+                      )}
+                      <label className="check">
+                        <input type="checkbox" name="consent-photo" checked={photoOk} onChange={(e) => setPhotoOk(e.target.checked)} />
+                        <span>{copy.label}</span>
+                      </label>
+                    </>
+                  )}
+                  <button
+                    className="btn btn--primary btn--block"
+                    disabled={busy || (!consentDone && (!(pd || b.consent?.pd) || !photoOk))}
+                    onClick={async () => {
+                      if (consentDone || (await act({ action: "consent", pd: true, photo: true }))) setPhotoStep("upload");
+                    }}
+                  >
+                    Загрузить фото
                   </button>
                 </div>
               ) : (
                 <p className="muted-panel small">Загрузка фото пока выключена — иллюстрации будут по описанию.</p>
               )}
-              <p style={{ marginTop: 16 }}>
-                <button className="link-btn" onClick={() => { setWithPhoto(false); setPhotoStep("contact"); }}>Без фото — нарисовать по описанию</button>
-              </p>
+              <button className="btn btn--ghost btn--block" style={{ marginTop: 12 }} onClick={() => { setWithPhoto(false); setPhotoStep("contact"); }}>
+                Без фото — нарисовать по описанию
+              </button>
+              {error && <p className="error" role="alert">{error}</p>}
             </>
           )}
 
           {photoStep === "upload" && (
             <>
-              <h1>Фото героя</h1>
-              <p className="muted">1–3 фото: лицо крупно, хороший свет, без солнцезащитных очков и других людей в кадре.</p>
+              <h1>{audience === "PET" ? "Фото питомца" : "Фото героя"}</h1>
+              <p className="muted">{copy.tips}</p>
               <div className="photos" style={{ marginBottom: 12 }}>
                 {b.photos.map((p) => (
                   <div className="photo" key={p.id}>
@@ -279,24 +335,31 @@ export function BookFlow({
 
           {photoStep === "contact" && (
             <>
-              <h1>Куда прислать превью?</h1>
-              <p className="muted">Превью — обложка и два разворота — будет готово за 2–5 минут. Пришлём ссылку, а книга сохранится в личном кабинете.</p>
+              <h1>{b.loggedIn ? "Рисуем превью?" : "Куда прислать превью?"}</h1>
+              <p className="muted">
+                Обложка и два разворота будут готовы за <span style={{ whiteSpace: "nowrap" }}>2–5 минут</span>. {b.loggedIn ? "Пришлём ссылку на почту" : "Войдите по коду — пришлём ссылку, а книга сохранится в личном кабинете"}.
+              </p>
               {!b.loggedIn ? (
                 <div className="panel">
-                  <OtpForm submitLabel="Получить код" onDone={() => load()} />
+                  <OtpForm submitLabel="Получить код на почту" consentGiven={Boolean(b.consent?.pd)} onDone={() => load()} />
                 </div>
               ) : (
                 <div className="panel">
-                  <label className="check">
-                    <input type="checkbox" checked={marketing} onChange={(e) => setMarketing(e.target.checked)} />
-                    <span>Хочу получать новости и скидки (<Link href="/soglasie/rassylka" target="_blank">согласие на рассылку</Link>). Можно отписаться в один клик.</span>
-                  </label>
-                  <button className="btn btn--primary" disabled={busy} onClick={() => act({ action: "preview", withPhoto, marketing })}>
-                    Нарисовать превью
+                  {!b.consent?.pd && (
+                    <label className="check">
+                      <input type="checkbox" name="consent-pd" checked={pdNow} onChange={(e) => setPdNow(e.target.checked)} />
+                      <span>Даю <Link href="/soglasie/pd" target="_blank">согласие на обработку персональных данных</Link></span>
+                    </label>
+                  )}
+                  <button className="btn btn--primary btn--block" disabled={busy || (!b.consent?.pd && !pdNow)} onClick={() => act({ action: "preview", withPhoto, ...(pdNow ? { pd: true } : {}) })}>
+                    {withPhoto ? "Нарисовать превью по фото" : "Нарисовать превью по описанию"}
                   </button>
                 </div>
               )}
-              {error && <p className="error">{error}</p>}
+              <p style={{ marginTop: 12 }}>
+                <button className="link-btn" onClick={() => setPhotoStep(withPhoto ? "upload" : "consent")}>← Назад</button>
+              </p>
+              {error && <p className="error" role="alert">{error}</p>}
             </>
           )}
         </section>
@@ -322,26 +385,41 @@ export function BookFlow({
             ))}
           </div>
           {moods.length > 1 && (b.status === "PREVIEW_READY" || b.status === "FULL_READY") && (
-            <div className="panel" style={{ marginTop: 20 }} data-mood-panel>
-              <label className="field">
-                <span>Настроение иллюстраций</span>
-                <select className="input" name="mood" value={b.mood || "as-drawn"} disabled={busy} onChange={(e) => act({ action: "mood", mood: e.target.value })}>
-                  {moods.map((m) => (
-                    <option key={m.id} value={m.id}>
-                      {m.title} — {m.oneLine}
-                    </option>
-                  ))}
-                </select>
-                <small>
-                  {b.paid
-                    ? b.moodChanges.full === 0
-                      ? "Перерисуем всю книгу в новом настроении — один раз бесплатно."
-                      : `Каждая следующая смена — одна перерисовка из бесплатных (осталось ${b.redrawsLeft}).`
-                    : `До оплаты — бесплатно, осталось ${Math.max(0, moodChangesPreview - b.moodChanges.preview)}.`}
-                </small>
-              </label>
-              {error && <p className="error">{error}</p>}
-            </div>
+            <section className="panel mood-panel" style={{ marginTop: 20 }} data-mood-panel aria-labelledby="mood-h">
+              <h2 id="mood-h" className="mood-panel__h">Настроение иллюстраций</h2>
+              <p className="small muted" style={{ margin: "0 0 10px" }}>
+                {b.paid
+                  ? b.moodChanges.full === 0
+                    ? "Перерисуем всю книгу в новом настроении — один раз бесплатно."
+                    : `Каждая следующая смена — одна перерисовка из бесплатных (осталось ${b.redrawsLeft}).`
+                  : moodLeft > 0
+                    ? `Перерисуем обложку и развороты превью — бесплатно, осталось ${moodLeft} ${moodLeft === 1 ? "смена" : "смены"}.`
+                    : "Бесплатные смены до оплаты закончились — после покупки можно сменить ещё раз для всей книги."}
+              </p>
+              <div className="moods" role="radiogroup" aria-label="Настроение иллюстраций">
+                {moods.map((m) => {
+                  const on = (b.mood || "as-drawn") === m.id;
+                  return (
+                    <button
+                      key={m.id}
+                      type="button"
+                      role="radio"
+                      aria-checked={on}
+                      className="mood"
+                      name="mood"
+                      data-mood={m.id}
+                      disabled={busy || (!on && !b.paid && moodLeft <= 0)}
+                      onClick={() => !on && act({ action: "mood", mood: m.id })}
+                    >
+                      <i style={{ background: m.swatch ?? "var(--sage)" }} aria-hidden="true" />
+                      <b>{m.title}</b>
+                      <span>{m.oneLine}</span>
+                    </button>
+                  );
+                })}
+              </div>
+              {error && <p className="error" role="alert">{error}</p>}
+            </section>
           )}
           {b.status === "PREVIEW_READY" && (
             <>

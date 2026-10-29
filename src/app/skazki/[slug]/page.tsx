@@ -3,14 +3,19 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Cover } from "@/components/Cover";
 import { Breadcrumbs, JsonLd, StickyCta } from "@/components/Layout";
+import { NamePreview } from "@/components/NamePreview";
 import { Faq } from "@/components/Sections";
-import { ageLabel, displayTitle, getMinPrice, getOccasions, getStories, getStory, rub } from "@/lib/catalog";
+import { ageLabel, displayTitle, getPriceTable, getStories, getStory, HERO_WORD, rub } from "@/lib/catalog";
 import { FAQ } from "@/lib/catalog-defaults";
+import { sampleUrl } from "@/lib/obrazec";
+import { getSeason, segmentTitle, SVOYA_IDEYA } from "@/lib/storefront";
+import { EXTRA_ROLE_LABELS } from "@/lib/quiz";
+import { ART_STYLE_IDS, OCCASIONS as OCCASION_KEYS, TEXT_STYLE_IDS } from "@/content/profiles";
 
 export const revalidate = 300;
 
 export async function generateStaticParams() {
-  return (await getStories()).map((s) => ({ slug: s.slug }));
+  return (await getStories()).filter((s) => s.slug !== SVOYA_IDEYA).map((s) => ({ slug: s.slug }));
 }
 
 export async function generateMetadata({ params }: { params: Promise<{ slug: string }> }): Promise<Metadata> {
@@ -22,17 +27,35 @@ export async function generateMetadata({ params }: { params: Promise<{ slug: str
   return { title, description, alternates: { canonical: `/skazki/${s.slug}` }, openGraph: { title, description } };
 }
 
+const NAME_LABEL = { CHILD: "Как зовут ребёнка?", TEEN: "Как зовут героя?", ADULT: "Как зовут героя книги?", PET: "Как зовут питомца?" } as const;
+const NAME_PH = { CHILD: "Например, Варя", TEEN: "Например, Миша", ADULT: "Например, Анна", PET: "Например, Пушок" } as const;
+/** Развороты-примеры: начало, середина, финал. */
+const SAMPLE_SPREADS = [1, 6, 12];
+
+// Страница книги как у Wonderbly: живая обложка (имя появляется, пока вы печатаете), 3 разворота-примера,
+// голос и стили, для кого, цены из каталога, сроки печати к сезону, «Создать» → анкета с выбранной книгой.
 export default async function Page({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params;
-  const [story, minPrice, occasions] = await Promise.all([getStory(slug), getMinPrice(), getOccasions()]);
-  if (!story) notFound();
+  const [story, prices, season] = await Promise.all([getStory(slug), getPriceTable(), getSeason()]);
+  if (!story || story.slug === SVOYA_IDEYA) notFound();
   const title = displayTitle(story.title, story.audience);
-  const occasion = occasions.find((o) => o.slug === story.occasionSlug);
+  const pdf = prices.find((r) => r.kind === "PDF");
+  const print = prices.filter((r) => r.kind === "PRINT").sort((a, b) => a.priceRub - b.priceRub);
+  const minPrice = Math.min(...prices.map((p) => p.priceRub));
+  const maxPrice = Math.max(...prices.map((p) => p.priceRub));
+  const voice = TEXT_STYLE_IDS.find((t) => t.id === story.textStyle);
+  const styles = story.artStyles.map((id) => ART_STYLE_IDS.find((s) => s.id === id)).filter(Boolean).slice(0, 3) as { id: string; title: string; oneLine: string }[];
+  const occasionLabels = story.occasions.filter((o) => o !== "bez").map((o) => OCCASION_KEYS.find((x) => x.key === o)?.label).filter(Boolean).slice(0, 4);
+  const seasonFits = season && story.occasions.includes(season.occasion);
+  const extrasLine =
+    story.extras.note ??
+    (story.extras.max > 0 ? `Можно добавить до ${story.extras.max} героев: ${story.extras.roles.slice(0, 4).map((r) => (EXTRA_ROLE_LABELS[r] ?? r).toLowerCase()).join(", ")} или свой вариант` : null);
+  const create = `/sozdat?skazka=${story.slug}${seasonFits ? `&povod=${season!.occasion}` : ""}`;
   const domain = process.env.DOMAIN ?? "bookimi.ru";
 
   return (
     <>
-      <Breadcrumbs items={[{ href: "/", label: "Главная" }, { href: "/skazki", label: "Сказки" }, { label: title }]} />
+      <Breadcrumbs items={[{ href: "/", label: "Главная" }, { href: "/skazki", label: "Книги" }, { label: title }]} />
       <JsonLd
         data={[
           {
@@ -41,41 +64,111 @@ export default async function Page({ params }: { params: Promise<{ slug: string 
             name: title,
             description: story.description,
             brand: { "@type": "Brand", name: "БУКИМИ" },
-            offers: { "@type": "AggregateOffer", priceCurrency: "RUB", lowPrice: minPrice, highPrice: 5490, availability: "https://schema.org/InStock", url: `https://${domain}/skazki/${story.slug}` },
+            offers: { "@type": "AggregateOffer", priceCurrency: "RUB", lowPrice: minPrice, highPrice: maxPrice, availability: "https://schema.org/InStock", url: `https://${domain}/skazki/${story.slug}` },
           },
           {
             "@context": "https://schema.org",
             "@type": "BreadcrumbList",
             itemListElement: [
               { "@type": "ListItem", position: 1, name: "Главная", item: `https://${domain}/` },
-              { "@type": "ListItem", position: 2, name: "Сказки", item: `https://${domain}/skazki` },
+              { "@type": "ListItem", position: 2, name: "Книги", item: `https://${domain}/skazki` },
               { "@type": "ListItem", position: 3, name: title },
             ],
           },
         ]}
       />
-      <div className="wrap story">
-        <Cover theme={story.coverTheme} title={title} coverUrl={story.coverUrl} colors={story.coverColors} />
-        <div>
-          <h1 style={{ fontSize: "var(--fs-2xl)" }}>{title}</h1>
-          <p className="lead">{story.description}</p>
-          <ul className="facts">
-            <li>{ageLabel(story.ageMin, story.ageMax, story.audience)}{story.audience === "CHILD" || story.audience === "TEEN" ? " лет" : ""}</li>
-            <li>24 страницы, 12 иллюстрированных разворотов</li>
-            <li>{story.extras.note ?? `Можно добавить до ${story.extras.max} героев`}</li>
-            <li>{story.artStyles.length} стиля иллюстраций на выбор и посвящение от вас на первой странице</li>
-            {occasion && <li>Повод: {occasion.title.toLowerCase()}</li>}
-          </ul>
-          <p>
-            <strong>от {rub(minPrice)}</strong> <span className="muted">· превью бесплатно</span>
-          </p>
-          <Link href={`/sozdat?skazka=${story.slug}`} className="btn btn--primary">
-            Создать эту книгу
+      <div className="wrap product">
+        <div className="product__media">
+          <Cover theme={story.coverTheme} title={title} coverUrl={story.coverUrl} colors={story.coverColors} sample={sampleUrl({ slug: story.slug })} rawTitle={story.title} heroWord={HERO_WORD[story.audience]} eager />
+          <p className="product__tag small muted">Обложка-пример. В вашей книге герой будет похож на себя — по фото или описанию.</p>
+        </div>
+        <div className="product__info">
+          <p className="eyebrow">{ageLabel(story.ageMin, story.ageMax, story.audience)}</p>
+          <h1>{title}</h1>
+          <p className="lead">{story.tagline}</p>
+          <NamePreview label={NAME_LABEL[story.audience]} placeholder={NAME_PH[story.audience]} hint="Имя сразу появится на обложке" />
+          <div className="product__price">
+            <div>
+              <b>{pdf ? rub(pdf.priceRub) : rub(minPrice)}</b>
+              <span>PDF сразу после оплаты</span>
+            </div>
+            {print[0] && (
+              <div>
+                <b>от {rub(print[0].priceRub)}</b>
+                <span>печатная книга, PDF в подарок</span>
+              </div>
+            )}
+          </div>
+          {season?.printLine && seasonFits && <p className="deadline">{season.printLine}</p>}
+          <Link href={create} className="btn btn--primary btn--lg btn--block product__cta">
+            Создать книгу
           </Link>
+          <p className="small muted" style={{ textAlign: "center" }}>Превью бесплатно — платите, только если понравится</p>
+
+          <dl className="specs">
+            <div>
+              <dt>Для кого</dt>
+              <dd>{story.segments.map(segmentTitle).join(" · ")}</dd>
+            </div>
+            {voice && (
+              <div>
+                <dt>Голос книги</dt>
+                <dd>
+                  <b>{voice.title}.</b> {voice.oneLine}
+                </dd>
+              </div>
+            )}
+            {styles.length > 0 && (
+              <div>
+                <dt>Иллюстрации</dt>
+                <dd>
+                  Лучше всего: {styles.map((s) => `«${s.title}»`).join(", ")}. Стиль и настроение выберете в анкете.
+                </dd>
+              </div>
+            )}
+            {extrasLine && (
+              <div>
+                <dt>Кто ещё в книге</dt>
+                <dd>{extrasLine}</dd>
+              </div>
+            )}
+            {occasionLabels.length > 0 && (
+              <div>
+                <dt>Подходит к поводам</dt>
+                <dd>{occasionLabels.join(", ")} — или к любому вашему</dd>
+              </div>
+            )}
+            <div>
+              <dt>Книга</dt>
+              <dd>24 страницы, 12 иллюстрированных разворотов, посвящение от вас на первой странице</dd>
+            </div>
+          </dl>
         </div>
       </div>
+
+      <section className="section section--sage" aria-labelledby="pages-h">
+        <div className="wrap">
+          <h2 id="pages-h">Как выглядят страницы</h2>
+          <p className="muted">Демо-развороты в стиле «{styles[0]?.title ?? "по умолчанию"}» — пример. В вашей книге будут ваш герой, его имя и ваши детали.</p>
+          <div className="spreads">
+            {SAMPLE_SPREADS.map((i) => (
+              <figure key={i} className="spreads__item">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src={sampleUrl({ slug: story.slug, index: i })} alt={`Пример разворота ${i}`} loading="lazy" decoding="async" width={800} height={400} />
+                <figcaption>
+                  <span className="badge">пример</span> Разворот {i} из 12
+                </figcaption>
+              </figure>
+            ))}
+          </div>
+          <div className="about-book">
+            <h2>О книге</h2>
+            <p>{story.description}</p>
+          </div>
+        </div>
+      </section>
       <Faq items={FAQ.slice(0, 4)} />
-      <StickyCta href={`/sozdat?skazka=${story.slug}`} label="Создать эту книгу" />
+      <StickyCta href={create} label="Создать книгу" />
     </>
   );
 }

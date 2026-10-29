@@ -4,6 +4,8 @@ import { body, err, json, ownBook } from "@/lib/api";
 import { signedUrl } from "@/lib/storage";
 import { checkText } from "@/lib/moderation";
 import type { StoryText } from "@/lib/gen/text";
+import { anonId } from "@/lib/auth";
+import { consentState } from "@/lib/consent";
 
 export const dynamic = "force-dynamic";
 
@@ -19,6 +21,7 @@ export async function GET(_: Request, { params }: { params: Promise<{ id: string
     select: { id: true, heroId: true, storageKey: true, moderation: true },
   });
   const full = book.paidFull && book.status === "FULL_READY";
+  const consent = await consentState({ userId: own.user?.id, anonId: await anonId() });
   return json({
     id: book.id,
     status: book.status,
@@ -32,6 +35,7 @@ export async function GET(_: Request, { params }: { params: Promise<{ id: string
     withPhoto: book.withPhoto,
     paid: book.paidFull,
     loggedIn: Boolean(own.user),
+    consent,
     pages: await Promise.all(
       pages.map(async (p) => ({
         index: p.index,

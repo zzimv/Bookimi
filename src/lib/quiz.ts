@@ -3,6 +3,7 @@
 // (style → artStyle, роли доп. героев сохраняются). Модуль безопасен для клиента: без промптов и планов сюжетов.
 import { AnswersV2, heroKindFor, type AnswersV2T } from "../content/answers";
 import { OCCASIONS, SEGMENTS, type AudienceKey } from "../content/profiles";
+import { dedicationsFor } from "./dedications";
 
 export { AnswersV2, ContactV2, normalizePhone, extraGender } from "../content/answers";
 
@@ -36,6 +37,25 @@ export const INTERESTS = [
   { key: "море", hint: "ракушки, волны и маяк" },
 ];
 
+/** Увлечения подростков — свой список, без «принцесс и машинок». */
+export const TEEN_INTERESTS = ["игры", "музыка", "спорт", "рисование", "космос", "детективы", "кино и сериалы", "программирование", "животные", "путешествия"];
+
+/** Возрастные группы взрослых → возраст числом (для сегмента и рисунка). */
+export const ADULT_AGES = [
+  { key: "25", label: "до 30" },
+  { key: "38", label: "30–45" },
+  { key: "52", label: "45–60" },
+  { key: "67", label: "60+" },
+] as const;
+
+/** Роли доп. героев по аудитории (после ролей сюжета); «свой вариант» — всегда. */
+export const AUDIENCE_EXTRA_ROLES: Record<AudienceKey, string[]> = {
+  CHILD: ["sibling", "mom", "dad", "grandma", "grandpa", "friend", "pet", "toy", "custom"],
+  TEEN: ["friend", "sibling", "mom", "dad", "grandma", "grandpa", "pet", "custom"],
+  ADULT: ["partner", "child", "grandchild", "friend", "colleague", "pet", "custom"],
+  PET: ["owner", "pet", "child", "custom"],
+};
+
 /** Поводы для аудитории (из profiles.ts), «свой» и «без повода» — в конце. */
 export function occasionChips(audience: AudienceKey = "CHILD") {
   return OCCASIONS.filter((o) => o.audiences.includes(audience)).map((o) => ({ key: o.key, label: o.label }));
@@ -51,7 +71,7 @@ export const EXTRA_ROLE_LABELS: Record<string, string> = {
   grandpa: "Дедушка",
   pet: "Питомец",
   partner: "Вторая половинка",
-  friend: "Друг или подруга",
+  friend: "Друг или подружка",
   toy: "Любимая игрушка",
   child: "Ребёнок",
   grandchild: "Внук или внучка",
@@ -63,33 +83,9 @@ export const EXTRA_ROLE_LABELS: Record<string, string> = {
 export const EXTRA_ROLES = ["sibling", "mom", "dad", "grandma", "grandpa", "pet"].map((key) => ({ key, label: EXTRA_ROLE_LABELS[key] }));
 export const extraRoleItems = (roles: string[]) => roles.map((key) => ({ key, label: EXTRA_ROLE_LABELS[key] ?? key }));
 
-// {Р:мужская|женская} — форма по полу героя
-const DEDICATIONS_BY: Record<AudienceKey, string[]> = {
-  CHILD: [
-    "{Р:Самому смелому|Самой смелой} {ЛАСКОВО.дат} на свете — с любовью.",
-    "С днём рождения, {ЛАСКОВО.им}! Пусть каждый день будет сказкой.",
-    "{ЛАСКОВО.дат}, {Р:который|которая} умеет удивлять. Мы тобой гордимся.",
-    "Нашему солнышку {ЛАСКОВО.дат} — чтобы читать вместе перед сном.",
-    "С Новым годом, {ЛАСКОВО.им}! Пусть сбываются самые добрые желания.",
-  ],
-  TEEN: [
-    "{ЛАСКОВО.дат} — {Р:тому, кто|той, кто} пишет свою историю {Р:сам|сама}.",
-    "С днём рождения, {ЛАСКОВО.им}! Пусть впереди будет много интересных уровней.",
-    "{ЛАСКОВО.дат} — мы в тебя верим. Всегда.",
-  ],
-  ADULT: [
-    "{ЛАСКОВО.дат} — с любовью и благодарностью за каждый день.",
-    "С праздником, {ЛАСКОВО.им}! Эта книга — о тебе и для тебя.",
-    "{ЛАСКОВО.дат}, {Р:который|которая} делает мир теплее.",
-  ],
-  PET: [
-    "{ЛАСКОВО.дат} — самому пушистому члену семьи.",
-    "Нашему {ЛАСКОВО.дат} — за каждое утро, начатое с радости.",
-    "{ЛАСКОВО.им}, без тебя дом был бы просто квартирой.",
-  ],
-};
-export const dedicationsFor = (audience: AudienceKey = "CHILD") => DEDICATIONS_BY[audience];
-export const DEDICATIONS = DEDICATIONS_BY.CHILD;
+// Посвящения — по аудитории и поводу, с формами рода ({Р:м|ж}): src/lib/dedications.ts
+export { dedicationsFor } from "./dedications";
+export const DEDICATIONS = dedicationsFor("CHILD");
 
 const DEFAULT_AGE: Record<AudienceKey, number> = { CHILD: 5, TEEN: 14, ADULT: 35, PET: 3 };
 

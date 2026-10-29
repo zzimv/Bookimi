@@ -5,7 +5,7 @@
 .journey__step::after { content: ""; position: absolute; left: 13px; top: 28px; bottom: 2px; width: 2px; background: var(--line); }
 .journey__step:last-child::after { display: none; }
 .journey__step.is-done::after { background: var(--forest); }
-.journey__dot { width: 28px; height: 28px; border-radius: 50%; display: grid; place-items: center; font: 800 14px/1 var(--font-body); background: var(--white); border: 2px solid var(--line); color: var(--white); z-index: 1; }
+.journey__dot { width: 28px; height: 28px; border-radius: 50%; display: grid; place-items: center; font: 800 14px/1 var(--font-body); background: var(--surface); border: 2px solid var(--line); color: var(--white); z-index: 1; }
 .journey__step.is-done .journey__dot { background: var(--forest); border-color: var(--forest); }
 .journey__step.is-current .journey__dot { border-color: var(--gold); background: var(--gold-soft); box-shadow: 0 0 0 4px rgba(200, 149, 47, 0.18); }
 .journey__step.is-current .journey__dot::before { content: ""; width: 10px; height: 10px; border-radius: 50%; background: var(--gold); }
