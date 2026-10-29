@@ -11,6 +11,7 @@ import { spentTodayRub } from "@/lib/limits";
 import { AnswersV2, heroAge } from "@/lib/quiz";
 import { moodsFor } from "@/content/moods";
 import { hasConsent } from "@/lib/consent";
+import { takeFullMood, takePreviewMood, takeRedraw, takeRewrite } from "@/lib/book-limits";
 
 const Input = z.discriminatedUnion("action", [
   z.object({ action: z.literal("rewrite") }),
@@ -39,7 +40,8 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     case "rewrite": {
       if (book.rewritesLeft <= 0) return err("Сказку можно переписать не больше двух раз. Поправьте текст вручную.");
       if (!["TEXT_READY", "TEXT_APPROVED"].includes(book.status)) return err("Сейчас переписать нельзя");
-      await db.book.update({ where: { id }, data: { rewritesLeft: { decrement: 1 }, status: "TEXT_QUEUED", progress: 0 } });
+      // Атомарно: параллельный запрос не спишет лишнее и не поставит вторую задачу
+      if (!(await takeRewrite(id))) return err("Сейчас переписать нельзя", 409);
       await enqueue(QUEUES.generateText, { bookId: id });
       return json({ ok: true });
     }
@@ -97,9 +99,10 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       if (!book.paidFull) return err("Перерисовка доступна после покупки");
       const limits = await cfg("limits");
       if (book.redrawsLeft <= 0) return err(`Бесплатные перерисовки закончились. Следующая — ${limits.redrawPriceRub} ₽ (через поддержку).`, 402);
-      await db.book.update({ where: { id }, data: { redrawsLeft: { decrement: 1 } } });
+      if (!(await takeRedraw(id))) return err(`Бесплатные перерисовки закончились. Следующая — ${limits.redrawPriceRub} ₽ (через поддержку).`, 402);
       await enqueue(QUEUES.redraw, { bookId: id, index: b.index });
-      return json({ ok: true, redrawsLeft: book.redrawsLeft - 1 });
+      const left = (await db.book.findUnique({ where: { id }, select: { redrawsLeft: true } }))?.redrawsLeft ?? 0;
+      return json({ ok: true, redrawsLeft: left });
     }
     case "mood": {
       const a = AnswersV2.safeParse(book.params);
@@ -117,16 +120,16 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
         if (book.status !== "PREVIEW_READY") return err("Подождите, пока превью дорисуется");
         if (book.moodChangesPreview >= limits.moodChangesPreview) return err(`До оплаты настроение можно сменить ${limits.moodChangesPreview} раза. После покупки — ещё раз бесплатно для всей книги.`, 429);
         if ((await spentTodayRub()) >= limits.dailySpendRub) return err("Сейчас много заказов — попробуйте сменить настроение чуть позже", 429);
-        await db.book.update({ where: { id }, data: { mood: moodId || null, moodChangesPreview: { increment: 1 }, status: "PREVIEW_QUEUED", progress: 0 } });
+        // Атомарно: счётчик < лимита и превью готово — иначе параллельный запрос уже занял попытку
+        if (!(await takePreviewMood(id, moodId || null, limits.moodChangesPreview))) {
+          return err(`До оплаты настроение можно сменить ${limits.moodChangesPreview} раза. После покупки — ещё раз бесплатно для всей книги.`, 429);
+        }
       } else {
         if (book.status !== "FULL_READY") return err("Подождите, пока книга будет готова");
         // Первая смена после оплаты — бесплатно (вся книга), дальше — одна перерисовка из лимита за смену
         const free = book.moodChangesFull === 0;
         if (!free && book.redrawsLeft <= 0) return err(`Бесплатные перерисовки закончились. Смена настроения — ${limits.redrawPriceRub} ₽ (через поддержку).`, 402);
-        await db.book.update({
-          where: { id },
-          data: { mood: moodId || null, moodChangesFull: { increment: 1 }, ...(free ? {} : { redrawsLeft: { decrement: 1 } }), status: "FULL_QUEUED", progress: 0 },
-        });
+        if (!(await takeFullMood(id, moodId || null, free))) return err("Настроение уже меняется — подождите, пока книга будет готова", 409);
       }
       await enqueue(QUEUES.mood, { bookId: id }, { singletonKey: `mood-${id}` });
       await track("mood_change", { anonId: anon, userId: own.user?.id, props: { bookId: id, mood: moodId || "as-drawn" } });

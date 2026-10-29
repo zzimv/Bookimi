@@ -2,7 +2,7 @@
 import type { Order, OrderStatus, PrismaClient } from "@prisma/client";
 import { db } from "./db";
 import { cfg, canAcceptPayments } from "./settings";
-import { quote, type CatalogAddon, type CatalogFormat, type QuoteInput, etaDate, ruDate } from "./pricing";
+import { pickDiscount, type CatalogAddon, type CatalogFormat, etaDate, ruDate } from "./pricing";
 import { SbpQrProvider, TransferProvider, YooKassaProvider, idempotencyKey, type PaymentProvider, type PaymentView } from "./payments";
 import { issueReceipt, cancelReceipts } from "./npd";
 import { newbieDiscountPct, onOrderPaid } from "./referral";
@@ -38,6 +38,18 @@ export async function findPromo(code: string, userId?: string) {
   return p;
 }
 
+/**
+ * Засчитать использование промокода: +1 к usedCount, только если лимит не исчерпан (одним условным UPDATE).
+ * false — лимит уже исчерпан (счётчик не меняется).
+ */
+export async function usePromo(promoId: string, client: Pick<PrismaClient, "promoCode"> = db) {
+  const r = await client.promoCode.updateMany({
+    where: { id: promoId, OR: [{ maxUses: null }, { usedCount: { lt: client.promoCode.fields.maxUses } }] },
+    data: { usedCount: { increment: 1 } },
+  });
+  return r.count > 0;
+}
+
 /** Сколько уже заплачено за PDF этой книги (для зачёта при заказе печати). */
 export async function pdfPaidFor(bookId: string, userId: string) {
   const items = await db.orderItem.findMany({
@@ -69,8 +81,8 @@ export async function priceCheckout(userId: string, input: CheckoutInput) {
   }
   const promo = input.promo ? await findPromo(input.promo, userId) : null;
   const newbie = await newbieDiscountPct(userId);
-  const promoPct = promo?.percentOff ?? 0;
-  const q = quote(
+  // Промокод и скидка новичка не суммируются — побеждает большая в рублях (pickDiscount)
+  const picked = pickDiscount(
     {
       whoPrints: input.whoPrints,
       formatKey: input.formatKey,
@@ -78,21 +90,22 @@ export async function priceCheckout(userId: string, input: CheckoutInput) {
       shippingMethod: input.shipping?.method,
       shippingRub,
       pdfPaidRub: input.whoPrints === "bookimi" ? await pdfPaidFor(input.bookId, userId) : 0,
-      discountPct: Math.max(promoPct, newbie), // не суммируются — берётся большая
-      discountRub: promo?.amountOffRub ?? 0,
       freeShippingBooks: ship.freeShippingBooks,
-    } satisfies QuoteInput,
+    },
+    promo,
+    newbie,
     formats,
     addons,
   );
+  const q = picked.quote;
   const printHouse = await db.printHouse.findFirst({ where: { isActive: true } });
   const urgent = input.addons.includes("urgent");
   const eta =
     input.whoPrints === "bookimi" ? etaDate(new Date(), printHouse?.leadDaysMax ?? 5, shipInfo?.daysMax ?? 0, urgent) : null;
   return {
     quote: q,
-    promo: promo && promoPct >= newbie ? promo : null,
-    newbieApplied: newbie > promoPct && newbie > 0,
+    promo: picked.promoApplied ? promo : null,
+    newbieApplied: picked.newbieApplied,
     ship: shipInfo,
     eta: eta ? { ready: eta.ready, eta: eta.eta, readyText: ruDate(eta.ready), etaText: ruDate(eta.eta) } : null,
   };
@@ -199,11 +212,15 @@ export async function markPaid(paymentId: string, opts: { receiptUrl?: string; c
     await tx.payment.update({ where: { id: p.id }, data: { status: "succeeded", confirmedById: opts.confirmedBy } });
     if (!["PENDING_PAYMENT", "AWAITING_CONFIRMATION", "CANCELLED"].includes(p.order.status)) return { already: true, order: p.order };
     const order = await tx.order.update({ where: { id: p.orderId }, data: { status: "PAID", paidAt: new Date() } });
-    if (order.promoCodeId) await tx.promoCode.update({ where: { id: order.promoCodeId }, data: { usedCount: { increment: 1 } } });
-    return { already: false, order };
+    // Промокод засчитывается атомарно и не сверх maxUses (два заказа с одним промокодом оплачены одновременно)
+    const promoOverLimit = order.promoCodeId ? !(await usePromo(order.promoCodeId, tx)) : false;
+    return { already: false, order, promoOverLimit };
   });
   if (res.already) return res.order;
   const order = res.order;
+  if ("promoOverLimit" in res && res.promoOverLimit) {
+    await alertOwner("Промокод сверх лимита", `Заказ ${order.publicCode} оплачен со скидкой по промокоду, у которого уже исчерпан лимит использований.`);
+  }
   const receipt = await issueReceipt(order.id, { urlFromPayment: opts.receiptUrl });
   await notifyUser(order.userId, "payment_received", { code: order.publicCode, orderId: order.id, whoPrints: order.whoPrints, heroAcc: await orderHeroAcc(order.id) });
   if (receipt?.url) await notifyUser(order.userId, "receipt", { code: order.publicCode, url: receipt.url });

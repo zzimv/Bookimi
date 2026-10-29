@@ -65,6 +65,7 @@ const SECTIONS: { key: SettingKey; title: string; note?: string; fields: Field[]
       { p: "dailySpendRub", label: "Расходы на генерацию в сутки, ₽", t: "number", hint: "Ограничивает только бесплатные превью. Оплаченные книги генерируются всегда." },
       { p: "previewsPerContact", label: "Превью в сутки на телефон/email", t: "number" },
       { p: "textsPerDevice", label: "Сказок в сутки с устройства", t: "number" },
+      { p: "textsPerIp", label: "Сказок в сутки с одной сети (IP /24)", t: "number", hint: "Защита от сброса cookie; выше лимита устройства — соседи по сети делят его." },
       { p: "rewrites", label: "Переписать сказку, раз", t: "number" },
       { p: "freeRedraws", label: "Бесплатных перерисовок после покупки", t: "number" },
       { p: "redrawPriceRub", label: "Цена перерисовки сверх лимита, ₽", t: "number" },
@@ -154,6 +155,14 @@ const SECTIONS: { key: SettingKey; title: string; note?: string; fields: Field[]
       { p: "newbiePct", label: "Скидка новичку, %", t: "number" },
       { p: "bonusPct", label: "Бонус приглашающему, %", t: "number" },
       { p: "delayDays", label: "Бонус через, дней", t: "number" },
+    ],
+  },
+  {
+    key: "auth",
+    title: "Вход",
+    fields: [
+      { p: "phoneRequired", label: "Телефон обязателен при входе", t: "bool" },
+      { p: "smsLogin", label: "Вход по SMS-коду на телефон", t: "bool", hint: "Нужен SMS_PROVIDER. Выключено — код только на почту." },
     ],
   },
   { key: "promoBar", title: "Полоса промо сверху", fields: [{ p: "enabled", label: "Показывать", t: "bool" }, { p: "text", label: "Текст" }] },

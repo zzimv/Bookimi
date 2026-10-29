@@ -187,7 +187,7 @@ export const ADULT_PLOTS: Plot[] = [
         scene: "a festive night on the tiny planet, paper lanterns in the garden, stars with little faces gathered around like curious guests, the hero laughing",
       },
       {
-        text: "Я не умею говорить\nкрасиво — да и ни к чему.\nЯ буду просто чай варить\nи ждать тебя. И потому\nскажу, {ЛАСКОВО.им}, как есть:\nлюблю. Ты — здесь.",
+        text: "Я не умею говорить\nкрасиво — да и ни к чему.\nЯ буду просто чай варить\nи ждать тебя. И потому\nскажу как есть — совсем простое.\n{ЛАСКОВО.им}.\nЛюблю. Ты — здесь. Нас — двое.",
         scene: "the hero and the partner sitting close on the edge of their tiny planet, legs dangling over the starry sky, two mugs of tea, a calm sleeping cat",
       },
     ],
@@ -205,8 +205,8 @@ export const ADULT_PLOTS: Plot[] = [
         closingScene: "a lantern glowing by the door of the little house, paper hearts around",
       },
       default: {
-        opening: "Сегодня — {ПОВОД}. Вот рассказ\nо том, как всё нашлось у нас.",
-        closing: "Сегодня — {ПОВОД}. Пусть горит\nфонарь над нашею планетой\nи пусть он тихо говорит,\nчто мы ещё в начале лета.",
+        opening: "{ПОВОД}.\nА вот — рассказ\nо том, как всё нашлось у нас.",
+        closing: "{ПОВОД}.\nИ пусть горит\nфонарь над нашею планетой,\nи пусть он тихо говорит,\nчто мы ещё в начале лета.",
       },
     },
   },
@@ -312,7 +312,7 @@ export const ADULT_PLOTS: Plot[] = [
       },
       default: {
         opening: "Было то в день особенный — {ПОВОД}, — и сложили мы о {ГЕРОЙ.пр} былину.",
-        closing: "Пусть {ПОВОД} будет таким же славным, как все твои подвиги, {ЛАСКОВО.им}!",
+        closing: "Пусть этот праздник — {ПОВОД} — будет таким же славным, как все твои подвиги, {ЛАСКОВО.им}!",
       },
     },
   },
@@ -325,7 +325,7 @@ export const ADULT_PLOTS: Plot[] = [
     title: "Двенадцать твоих уроков",
     tagline: "Не бояться темноты, завязывать шнурки, смеяться над собой — всему этому нас научил один человек.",
     description:
-      "Книга в стихах от выросших (или растущих) детей маме или папе: двенадцать маленьких уроков, которые не задают в школе. Свет в двери, кролик вокруг пенька, мандарин на всех, зонт вверх тормашками — простые сцены, от которых щиплет в носу.",
+      "Книга в стихах от выросших (или растущих) детей маме или папе: двенадцать маленьких уроков, которые не задают в школе. Щёлка света в двери, кролик вокруг пенька, мандарин на всех, зонт вверх тормашками — простые сцены, от которых щиплет в носу.",
     occasions: ["den-materi", "den-otca", "den-rozhdeniya", "yubilej", "8-marta", "23-fevralya"],
     textStyle: "lyrical-verse",
     artStyles: ["naive-watercolor", "kind-classic", "pen-ink-1920s"],
@@ -337,7 +337,7 @@ export const ADULT_PLOTS: Plot[] = [
       "the hero sitting on a cozy sofa with children of different ages around, an old photo album open, a bowl of tangerines, warm lamplight",
     spreads: [
       {
-        text: "Урок один: не бойся ночи.\nТы оставляешь свет в двери,\nи шкаф, большой и тёмный очень,\nопять лишь шкаф. Ну, посмотри.",
+        text: "Урок один: не бойся ночи.\nТы оставляешь щёлку света —\nи шкаф, большой и тёмный очень,\nвсего лишь шкаф. И страха нету.",
         scene: "a child's bedroom at night, a strip of warm light from a half-open door, the hero peeking in, a big wardrobe that looks friendly in the light",
       },
       {
@@ -381,7 +381,7 @@ export const ADULT_PLOTS: Plot[] = [
         scene: "grown-up children gathered around the hero at a festive family table, raising cups of tea, the hero touched and smiling",
       },
       {
-        text: "Спасибо, {ЛАСКОВО.им}, за уроки,\nза мандарины, за дожди,\nза все шнурки и все дороги.\nМы любим. Столько впереди.",
+        text: "{ЛАСКОВО.им}!\nСпасибо за твои уроки,\nза мандарины, за дожди,\nза все шнурки и все дороги.\nМы любим. Столько впереди.",
         scene: "the hero holding an open album of old photos, the children hugging from both sides, a bowl of tangerines and a small paper snowflake on the table",
       },
     ],
@@ -399,8 +399,8 @@ export const ADULT_PLOTS: Plot[] = [
         closingScene: "a handmade card and autumn leaves",
       },
       default: {
-        opening: "Сегодня — {ПОВОД}. И снова\nмы вспоминаем — слово в слово.",
-        closing: "Сегодня — {ПОВОД}. Мы знаем,\nза что спасибо. Обнимаем.",
+        opening: "{ПОВОД}.\nСегодня снова\nмы вспоминаем — слово в слово.",
+        closing: "{ПОВОД}.\nИ мы-то знаем,\nза что спасибо. Обнимаем.",
       },
     },
   },
@@ -425,11 +425,11 @@ export const ADULT_PLOTS: Plot[] = [
       "the grandparent in a fairy-tale Russian village garden with a starling on the shoulder, grandchildren around, a carved wooden house and a distant tsar's palace with onion domes",
     spreads: [
       {
-        text: "За лесами, за горами,\nЗа высокими холмами,\nВозле речки, у дубравы,\nДом стоит — резной, на славу.\nТам живёт, на радость людям,\n{ГЕРОЙ.им}. О том и будет\nСказка наша — не простая,\nА с намёком, золотая.",
+        text: "За лесами, за горами,\nЗа высокими холмами,\nВозле речки, у дубравы,\nДом стоит — резной, на славу.\nКто живёт там? Угадай!\n— {ГЕРОЙ.им}!\nСказку слушай, не зевай:\nНе простую — золотую,\nС добрым словом, не пустую.",
         scene: "a carved wooden house by a river next to an oak grove, fairy-tale countryside, the grandparent on the porch in morning light",
       },
       {
-        text: "Руки — золото, не руки,\nНи минуты нет для скуки:\nСад цветёт, скрипит крылечко,\nПироги пыхтят на печке.\nА к крыльцу со всей округи\nХодят за советом други.\nА {ДОПЫ.им} — с утра\nТут как тут: {МН:кричит|кричат} «Ура!»",
+        text: "Руки — золото, не руки,\nНи минуты нет для скуки:\nСад цветёт, скрипит крылечко,\nПироги пыхтят на печке.\nА к крыльцу со всей округи\nХодят за советом други.\n{МН:Непоседа|Непоседы} — тут с утра,\nИ в саду звенит: «Ура!»",
         scene: "the grandparent working in a blooming garden by the carved porch, neighbors coming for advice, grandchildren running through the gate cheering",
       },
       {
@@ -437,7 +437,7 @@ export const ADULT_PLOTS: Plot[] = [
         scene: "a gloomy tsar on a throne in an ornate palace chamber, chin on hand, a herald reading a decree from a scroll, messengers riding out",
       },
       {
-        text: "{ДОПЫ.им} — с вестью этой\n{МН:Прибегает|Прибегают} с рассветом:\n«Царь грустит! Такой указ!»\nМолвит {Р:дедушка|бабушка}: «Сейчас!\nТолько сумку соберём\nДа краюшку — и пойдём».",
+        text: "Только солнышко встаёт —\nСлышен топот у ворот:\n«Царь грустит! Такой указ!»\nМолвит {Р:дедушка|бабушка}: «Сейчас!\nТолько сумку соберём\nДа краюшку — и пойдём».",
         scene: "grandchildren bursting into the cozy house at dawn waving a decree, the grandparent calmly packing a cloth bag with a loaf of bread",
       },
       {
@@ -461,15 +461,15 @@ export const ADULT_PLOTS: Plot[] = [
         scene: "the tsar sighing on his throne, the grandparent by the palace window with the starling perched on the sill, the bird looking wise and amused",
       },
       {
-        text: "{Р:Дедушка|Бабушка} к царю садится,\nПро {ДОПЫ.вин} речь струится:\nКак в саду искали клад,\nА нашли — сто лягушат,\nКак варенье пропадало\nИ с усов кота свисало…\nЦарь сперва молчит, потом\nУлыбается тайком,\nА потом как засмеётся —\nАж корона набок гнётся!",
+        text: "{Р:Дедушка|Бабушка} к царю садится,\nПро своих рассказ струится:\nКак в саду искали клад,\nА нашли — сто лягушат,\nКак варенье пропадало\nИ с усов кота свисало…\nЦарь сперва молчит, потом\nУлыбается тайком,\nА потом как засмеётся —\nАж корона набок гнётся!",
         scene: "the grandparent sitting beside the tsar telling a story with lively gestures, little scenes of frogs and a cat with jam on its whiskers floating above, the tsar laughing so hard his crown tilts",
       },
       {
-        text: "Тут и песни зазвенели,\nСказки в царство прилетели,\nПир — на весь честной народ:\nПироги, кисель и мёд!\n{Р:Дедушка|Бабушка} — в большом почёте,\nЦарь с {ДОПЫ.тв} — в хороводе,\nА скворец, лихой певец,\nСвищет песни во дворец.",
+        text: "Тут и песни зазвенели,\nСказки в царство прилетели,\nПир — на весь честной народ:\nПироги, кисель и мёд!\n{Р:Дедушка|Бабушка} — в большом почёте,\nЦарь — и тот уж в хороводе,\nА скворец, лихой певец,\nСвищет песни во дворец.",
         scene: "a joyful palace feast with long tables of pies, the grandparent seated in the place of honor, the tsar dancing in a round dance with the grandchildren, the starling singing on a chandelier",
       },
       {
-        text: "Тут и сказочке конец,\nА намёк — для всех сердец:\nНе богатство и не трон,\nА тепло, в котором дом,\nГде умеют слушать, ждать,\nСказкой горе прогонять.\nЭто, {ЛАСКОВО.им}, — ты:\nСад, и сказка, и цветы.",
+        text: "Тут и сказочке конец,\nА намёк — для всех сердец:\nНе богатство и не трон,\nА тепло, в котором дом,\nГде умеют слушать, ждать,\nСказкой горе прогонять.\nЭто — ты: и сад, и свет.\n— {ЛАСКОВО.им},\nНам тебя дороже нет!",
         scene: "evening at the carved wooden house by the river, the grandparent on the porch with the grandchildren snuggled close, the starling on the railing, the garden in bloom",
       },
     ],
@@ -493,8 +493,8 @@ export const ADULT_PLOTS: Plot[] = [
         closingScene: "a birthday pie with candles on the porch table",
       },
       default: {
-        opening: "Повод есть — {ПОВОД}, — и вот\nСказка в гости к нам идёт.",
-        closing: "С праздником! Пусть {ПОВОД} — светел,\nКак в саду весенний ветер.",
+        opening: "Нынче праздник у ворот:\n{ПОВОД}!\nСказка в гости к нам идёт.",
+        closing: "С праздником! Пусть день твой светел,\nКак в саду весенний ветер!",
       },
     },
   },

@@ -4,9 +4,9 @@ import { AnswersV2 } from "@/lib/quiz";
 import { plotBySlug } from "@/content/registry";
 import { moodsFor } from "@/content/moods";
 import { ART_STYLE_IDS } from "@/content/profiles";
-import { anonId, currentUser } from "@/lib/auth";
+import { anonId, clientIp, currentUser } from "@/lib/auth";
 import { body, deviceKey, err, json, throttle, utmCookie, verifyCaptcha } from "@/lib/api";
-import { hit } from "@/lib/limits";
+import { hit, ipSubnet } from "@/lib/limits";
 import { cfg } from "@/lib/settings";
 import { checkInputs } from "@/lib/moderation";
 import { enqueue, QUEUES } from "@/lib/queue";
@@ -52,6 +52,10 @@ export async function POST(req: Request) {
   const limits = await cfg("limits");
   if (!(await hit(await deviceKey(), "text", limits.textsPerDevice))) {
     return err(`Сегодня можно сочинить не больше ${limits.textsPerDevice} сказок. Возвращайтесь завтра — черновик сохранится.`, 429);
+  }
+  // Второй, более высокий лимит — по подсети IP: сброс cookie устройства его не обходит
+  if (!(await hit(`textip:${ipSubnet(await clientIp())}`, "text-ip", limits.textsPerIp))) {
+    return err(`Сегодня с вашей сети сочинили уже много сказок. Возвращайтесь завтра — черновик сохранится.`, 429);
   }
 
   const story = await db.story.findUnique({ where: { slug: a.story.slug || "svoya-ideya" } });

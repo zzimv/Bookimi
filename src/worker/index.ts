@@ -24,6 +24,11 @@ async function main() {
       try {
         await runText(j.data.bookId);
       } catch (e) {
+        if (e instanceof LimitReached) {
+          // Лимит расходов: сказка ждёт в очереди и повторится через 15 минут
+          await boss.send(QUEUES.generateText, j.data, { startAfter: 15 * 60, singletonKey: `text-${j.data.bookId}` });
+          return;
+        }
         await fail(j.data.bookId, e);
         throw e;
       }

@@ -135,29 +135,81 @@ export interface TagContext {
   hero: HeroNames;
   /** Доп. герои по порядку: ДОП1, ДОП2, ДОП3. */
   extras?: TagPerson[];
-  /** Название повода или текст «своего повода» — для {ПОВОД}. */
-  occasion?: string;
+  /**
+   * Повод для {ПОВОД} / {ПОВОД.падеж}: строка (одна форма на все падежи — «свой повод») или
+   * падежные формы (occasionWord из src/content/occasions.ts).
+   */
+  occasion?: string | Partial<Record<Case, string>>;
   /** Возраст героя — для {ВОЗРАСТ}. */
   age?: number;
 }
 
+function occasionForm(occ: TagContext["occasion"], c: Case): string {
+  if (!occ) return "";
+  if (typeof occ === "string") return occ;
+  return occ[c] ?? occ.им ?? "";
+}
+
 const joinRu = (xs: string[]) => (xs.length > 1 ? xs.slice(0, -1).join(", ") + " и " + xs.at(-1) : xs[0] ?? "");
+
+// Подставленные значения помечаются служебными символами, чтобы после подстановки поправить предлог
+// перед ними («о Ане» → «об Ане», «с Львом» → «со Львом») и поднять регистр в начале фразы.
+const OPEN = "\u0001";
+const CLOSE = "\u0002";
+const mark = (v: string) => (v ? OPEN + v + CLOSE : "");
+
+/** «о» → «об» перед а, о, у, э, и, ы (перед е, ё, ю, я — «о»: «о Юле», «о Яне»). */
+const OB_BEFORE = /^[аоуэиы]/i;
+/** «с» → «со» перед стечением согласных: «со Львом», «со Всеволодом», «со Святославом», «со Стасом», «со Звездой». */
+const SO_BEFORE = /^(?:[сзшжщ][бвгджзйклмнпрстфхцчшщ]|вс|вз|вт|льв|мн)/i;
+/** «к» → «ко» — только «ко Всеволоду», «ко Мне»-подобные стечения. */
+const KO_BEFORE = /^(?:вс|мн)/i;
+
+function fixPrepositions(text: string) {
+  return text.replace(
+    new RegExp(`(?<![А-Яа-яЁё])(об|обо|о|со|с|ко|к) ${OPEN}([^${CLOSE}]*)${CLOSE}`, "gi"),
+    (m, prep: string, value: string) => {
+      const low = prep.toLowerCase();
+      const up = prep[0] !== prep[0].toLowerCase();
+      let want = low;
+      if (low === "о" || low === "об") want = OB_BEFORE.test(value) ? "об" : "о";
+      else if (low === "с" || low === "со") want = SO_BEFORE.test(value) ? "со" : "с";
+      else if (low === "к" || low === "ко") want = KO_BEFORE.test(value) ? "ко" : "к";
+      else return m;
+      const p = up ? want[0].toUpperCase() + want.slice(1) : want;
+      return `${p} ${OPEN}${value}${CLOSE}`;
+    },
+  );
+}
+
+/** Значение метки в начале фразы, строки или цитаты — с заглавной («— Новоселье!», «Выход на пенсию — …»). */
+function capitalizeStarts(text: string) {
+  return text.replace(new RegExp(`(^|[.!?…]\\s+|\\n\\s*|[«"„]|^—\\s|\\n—\\s)${OPEN}(\\p{Ll})`, "gu"), (_m, pre: string, ch: string) => pre + OPEN + ch.toUpperCase());
+}
 
 /**
  * Полная подстановка меток (спецификация — docs/content/ARCHITECTURE.md):
  * {Р:м|ж(|ср)}, {Р1..3:…}, {МН:один|много}, {ДОПЫ.падеж}, {ПОВОД}, {ВОЗРАСТ},
  * {ГЕРОЙ.падеж}, {ЛАСКОВО.падеж}, {ДОП1..3.падеж}. Метки отсутствующих доп. героев удаляются.
+ * После подстановки: «о/с/к» перед именем по норме («об Ане», «со Львом»), значение в начале фразы — с заглавной.
  */
 export function fillTags(text: string, ctx: TagContext) {
   const extras = ctx.extras ?? [];
-  let out = applyGender(text, ctx.hero.gender);
+  const hero = ctx.hero;
+  let out = applyGender(text, hero.gender);
   out = out.replace(/\{Р([1-3]):([^}]*)\}/g, (_, n: string, forms: string) => pickForm(forms, extras[Number(n) - 1]?.gender));
   out = out.replace(/\{МН:([^|}]*)\|([^}]*)\}/g, (_, one: string, many: string) => (extras.length > 1 ? many : one));
-  out = out.replace(/\{ДОПЫ\.(им|род|дат|вин|тв|пр)\}/g, (_, c: Case) => joinRu(extras.map((e) => declineName(e.name, c, e.gender))));
-  out = out.replace(/\{ДОПЫ\}/g, joinRu(extras.map((e) => e.name)));
-  out = out.replace(/\{ПОВОД\}/g, ctx.occasion ?? "");
-  out = out.replace(/\{ВОЗРАСТ\}/g, ctx.age ? ageLabel(ctx.age) : "");
-  out = fillNames(out, ctx.hero, extras.map((e, i) => ({ key: `ДОП${i + 1}`, name: e.name, gender: e.gender })));
-  extras.forEach((e, i) => (out = out.replace(new RegExp(`\\{ДОП${i + 1}\\}`, "g"), e.name)));
-  return out.replace(/\{ДОП\d(\.(им|род|дат|вин|тв|пр))?\}/g, "").replace(/ {2,}/g, " ");
+  out = out.replace(/\{ДОПЫ\.(им|род|дат|вин|тв|пр)\}/g, (_, c: Case) => mark(joinRu(extras.map((e) => declineName(e.name, c, e.gender)))));
+  out = out.replace(/\{ДОПЫ\}/g, () => mark(joinRu(extras.map((e) => e.name))));
+  out = out.replace(/\{ПОВОД(?:\.(им|род|дат|вин|тв|пр))?\}/g, (_, c?: Case) => mark(occasionForm(ctx.occasion, c ?? "им")));
+  out = out.replace(/\{ВОЗРАСТ\}/g, () => mark(ctx.age ? ageLabel(ctx.age) : ""));
+  out = out.replace(/\{(ГЕРОЙ|ЛАСКОВО)(?:\.(им|род|дат|вин|тв|пр))?\}/g, (_, who: string, c?: Case) =>
+    mark(declineName(who === "ЛАСКОВО" ? hero.nickname || hero.name : hero.name, c ?? "им", hero.gender)),
+  );
+  out = out.replace(/\{ДОП([1-3])(?:\.(им|род|дат|вин|тв|пр))?\}/g, (_, n: string, c?: Case) => {
+    const e = extras[Number(n) - 1];
+    return e ? mark(declineName(e.name, c ?? "им", e.gender)) : "";
+  });
+  out = capitalizeStarts(fixPrepositions(out));
+  return out.replace(new RegExp(`[${OPEN}${CLOSE}]`, "g"), "").replace(/ {2,}/g, " ");
 }

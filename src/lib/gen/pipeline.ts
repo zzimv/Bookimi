@@ -24,6 +24,7 @@ import { spentTodayRub } from "../limits";
 import { alertOwner, notifyUser } from "../notify";
 import { track } from "../events";
 import { checkText } from "../moderation";
+import { personsOf, redactForImage } from "./redact";
 
 export class LimitReached extends Error {}
 
@@ -39,6 +40,14 @@ export async function runText(bookId: string) {
   const a = answersOf(book);
   const ai = await cfg("ai");
   const provider = textProvider(ai.text);
+  // Суточный лимит расходов — как у превью (демо-текст бесплатен, оплаченные книги — всегда)
+  if (provider.name !== "demo" && !book.paidFull) {
+    const limits = await cfg("limits");
+    if ((await spentTodayRub()) >= limits.dailySpendRub) {
+      await db.book.update({ where: { id: bookId }, data: { error: "limit" } });
+      throw new LimitReached("Суточный лимит расходов исчерпан");
+    }
+  }
   const variant = 2 - book.rewritesLeft;
   await db.book.update({ where: { id: bookId }, data: { status: "TEXT_QUEUED", progress: 20, error: null } });
   const r = await provider.write(a, plotForAnswers(a), Math.max(0, variant));
@@ -90,9 +99,12 @@ async function heroesFor(book: Book, a: QuizAnswers): Promise<HeroRef[]> {
   const refs: HeroRef[] = [];
   const mainPhotos = book.withPhoto && main ? await Promise.all(main.photos.slice(0, 3).map((p) => preparePhoto(p.storageKey).catch(() => null))) : [];
   const sheetKey = main?.characterSheetKey;
+  // Свободный текст анкеты в промпт картинок — без имён (→ «the hero», «the friend») и контактов
+  const persons = personsOf(a, (e) => extraGender(e as ExtraV2T, guessGender));
+  const clean = (t: string) => redactForImage(t, persons);
   refs.push({
     role: "main",
-    description: appearanceLine(a),
+    description: clean(appearanceLine(a)),
     photos: mainPhotos.filter(Boolean) as Buffer[],
     sheet: sheetKey ? await getFile("books", sheetKey).catch(() => null) : null,
     look: heroLook(a),
@@ -102,8 +114,8 @@ async function heroesFor(book: Book, a: QuizAnswers): Promise<HeroRef[]> {
     const row = rows.find((h) => h.role === e.role && h.name === e.name);
     const photos = book.withPhoto && row ? await Promise.all(row.photos.slice(0, 1).map((p) => preparePhoto(p.storageKey).catch(() => null))) : [];
     refs.push({
-      role: e.role === "custom" && e.what ? e.what : e.role,
-      description: [e.what, e.description].filter(Boolean).join(", "),
+      role: e.role === "custom" && e.what ? clean(e.what) || e.role : e.role,
+      description: clean([e.what, e.description].filter(Boolean).join(", ")),
       photos: photos.filter(Boolean) as Buffer[],
       look: extraLook(e, a),
       drawKind: extraDrawKind(e.role, kind),

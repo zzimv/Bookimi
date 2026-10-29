@@ -136,3 +136,24 @@ export function etaDate(now: Date, makeDaysMax: number, deliveryDaysMax: number,
 }
 
 export const ruDate = (d: Date) => d.toLocaleDateString("ru-RU", { day: "numeric", month: "long", timeZone: "Europe/Moscow" });
+
+/**
+ * Промокод или скидка новичка — не суммируются: побеждает та, что даёт больше рублей на этом заказе
+ * (фиксированный промокод «−300 ₽» против «−10%» новичка). При равенстве — скидка новичка (промокод не тратится).
+ */
+export function pickDiscount(
+  base: Omit<QuoteInput, "discountPct" | "discountRub">,
+  promo: { percentOff?: number | null; amountOffRub?: number | null } | null,
+  newbiePct: number,
+  formats: CatalogFormat[],
+  addons: CatalogAddon[],
+) {
+  const byNewbie = quote({ ...base, discountPct: newbiePct, discountRub: 0 }, formats, addons);
+  const byPromo = promo ? quote({ ...base, discountPct: promo.percentOff ?? 0, discountRub: promo.amountOffRub ?? 0 }, formats, addons) : null;
+  const promoWins = !!byPromo && byPromo.discountRub > 0 && byPromo.discountRub > byNewbie.discountRub;
+  return {
+    quote: promoWins ? byPromo! : byNewbie,
+    promoApplied: promoWins,
+    newbieApplied: !promoWins && newbiePct > 0 && byNewbie.discountRub > 0,
+  };
+}

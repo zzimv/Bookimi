@@ -117,7 +117,7 @@ export const PET_PLOTS: Plot[] = [
       },
       default: {
         opening: "Сегодня у моих людей особенный день: {ПОВОД}. Я не знаю точно, что это значит, но пахнет пирогом и все улыбаются.",
-        closing: "Вот такой у нас был {ПОВОД}. Если что — я рядом. Я всегда рядом.",
+        closing: "Вот такой у нас был праздник — {ПОВОД}. Если что — я рядом. Я всегда рядом.",
       },
     },
   },
@@ -211,7 +211,7 @@ export const PET_PLOTS: Plot[] = [
       },
       default: {
         opening: "В тот день в доме готовились к особенному дню: {ПОВОД}.",
-        closing: "Пусть {ПОВОД} будет таким же тёплым, как этот вечер, когда собака принесла свой первый подарок.",
+        closing: "Пусть этот праздник — {ПОВОД} — будет таким же тёплым, как этот вечер, когда собака принесла свой первый подарок.",
       },
     },
   },
@@ -236,11 +236,11 @@ export const PET_PLOTS: Plot[] = [
       "the dog peeking out from under a sofa with a striped sock in its mouth, a colorful pile of socks behind it, playful cartoon mood",
     spreads: [
       {
-        text: "Утром, ровно в семь часов,\nДом остался без носков.\nИщет {ДОП1.им} в комоде,\nПод кроватью и в проходе:\n«Был носок, а нынче — нет!\nГде носок? Пропал и след!»",
+        text: "Утром, ровно в семь часов,\nДом остался без носков.\nИщут все — в шкафу, в комоде,\nПод кроватью и в проходе:\n«Был носок, а нынче — нет!\nГде носок? Пропал и след!»",
         scene: "the owner in pajamas searching a chest of drawers and under the bed for a missing sock, morning light",
       },
       {
-        text: "Под столом, свернувшись в ком,\nДремлет {ГЕРОЙ.им} крепким сном.\nУхо дрогнет, хвост — тук-тук:\nВидно, снится лучший друг.",
+        text: "Под столом, свернувшись в ком,\nКто там дремлет сладким сном?\n— {ГЕРОЙ.им}!\nУхо дрогнет, хвост — тук-тук:\nВидно, снится лучший друг.",
         scene: "the dog curled up asleep under the kitchen table, one ear twitching, tail thumping, innocent face",
       },
       {
@@ -248,7 +248,7 @@ export const PET_PLOTS: Plot[] = [
         scene: "the family holding up single unmatched socks in dismay, an empty laundry basket, the dog watching from the corner",
       },
       {
-        text: "Начинается дознанье:\nЛупа, шляпа, расписанье.\nКто был дома? Кто не спал?\nКто последним убегал?\nТолько {ГЕРОЙ.им} у дверей\nСмотрит всех других честней.",
+        text: "Начинается дознанье:\nЛупа, шляпа, расписанье.\nКто был дома? Кто не спал?\nКто последним убегал?\nТолько кто-то у дверей\nСмотрит всех других честней.",
         scene: "the owner as a detective with a magnifying glass and a hat examining the floor, the dog sitting by the door with the most innocent expression",
       },
       {
@@ -260,7 +260,7 @@ export const PET_PLOTS: Plot[] = [
         scene: "the light switched on, the owner in the doorway, the dog frozen mid-step with two socks in its mouth and an innocent face",
       },
       {
-        text: "Все за {ГЕРОЙ.тв} — гуськом,\nПод диван — ползком, ползком.\nА под тем диваном — склад:\nВсе носки в рядок лежат!",
+        text: "Все за хвостиком — гуськом,\nПод диван — ползком, ползком.\nА под тем диваном — склад:\nВсе носки в рядок лежат!",
         scene: "the family crawling on the floor following the dog, lifting the edge of the sofa to discover rows of neatly arranged socks",
       },
       {
@@ -272,7 +272,7 @@ export const PET_PLOTS: Plot[] = [
         scene: "the dog alone at home during the day, lying peacefully with its nose in a sock, sunlight on the floor, the empty hallway",
       },
       {
-        text: "Засмеялась вся семья,\nДаже кактус и скамья!\n«Пусть лежит! Ведь ты, дружок,\nОхраняй и наш носок!»",
+        text: "Засмеялась вся семья,\nДаже кактус и скамья!\n«Пусть лежит! А ты, дружок,\nОхраняй и наш носок!»",
         scene: "the whole family laughing and hugging the dog, a potted cactus and a little bench drawn with smiling faces in a cartoon way",
       },
       {
@@ -280,7 +280,7 @@ export const PET_PLOTS: Plot[] = [
         scene: "family members leaving one sock each on the dog's blanket in the morning, the dog proudly guarding them",
       },
       {
-        text: "Все носки теперь на месте,\nДом смеётся, все мы вместе.\nА спроси: «Ну, где носок?» —\n{ГЕРОЙ.им} знает назубок!",
+        text: "Все носки теперь на месте,\nДом смеётся, все мы вместе.\nА спроси: «Ну, где носок?» —\nЗнает точно, назубок,\n— {ГЕРОЙ.им}!",
         scene: "the family relaxing together on the sofa, everyone wearing matching socks, the dog in the middle with one sock of its own",
       },
     ],
@@ -310,8 +310,8 @@ export const PET_PLOTS: Plot[] = [
         closingScene: "the dog with a festive bow surrounded by its family",
       },
       default: {
-        opening: "Дом готовился — ура! —\nПраздник: {ПОВОД} — с утра.",
-        closing: "Пусть же {ПОВОД} — для всех\nБудет праздник, свет и смех!",
+        opening: "Шум и гам — с утра, с утра:\nВ доме праздник! Ну, ура!\n— {ПОВОД}!",
+        closing: "Пусть же этот день для всех\nБудет — праздник, свет и смех!",
       },
     },
   },
@@ -405,7 +405,7 @@ export const PET_PLOTS: Plot[] = [
       },
       default: {
         opening: "А случилось то в день особенный, праздничный — {ПОВОД}, — когда пироги в печи румянились и весь дом ждал чуда.",
-        closing: "Слава {ГЕРОЙ.дат}, слава великая! И пусть {ПОВОД} будет таким же тёплым, как диван, на котором {Р:он|она} спит.",
+        closing: "Слава {ГЕРОЙ.дат}, слава великая! И пусть этот праздник — {ПОВОД} — будет таким же тёплым, как диван, на котором {Р:он|она} спит.",
       },
     },
   },
@@ -509,7 +509,7 @@ export const PET_PLOTS: Plot[] = [
     slug: "den-kogda-ty-poyavilsya",
     audience: "PET",
     segments: ["pet-dog", "pet-cat"],
-    title: "День, когда ты появился у нас",
+    title: "День, когда ты {Р:появился|появилась} у нас",
     tagline: "Нежная история о том дне, когда в доме появился питомец — и дом стал домом.",
     description:
       "Книга-письмо от семьи своему питомцу — собаке или кошке. Как мы готовились, как ты обнюхал каждый угол, как прошла первая ночь и как мы учились понимать друг друга. Тёплый подарок к годовщине появления питомца в семье — читать вслух и хранить.",
@@ -594,7 +594,7 @@ export const PET_PLOTS: Plot[] = [
       },
       default: {
         opening: "Сегодня у нас особенный день — {ПОВОД}. И это самый подходящий повод рассказать тебе одну историю.",
-        closing: "Пусть {ПОВОД} будет таким же тёплым, как тот самый первый день, когда ты {Р:пришёл|пришла} в наш дом.",
+        closing: "Пусть этот праздник — {ПОВОД} — будет таким же тёплым, как тот самый первый день, когда ты {Р:пришёл|пришла} в наш дом.",
       },
     },
   },

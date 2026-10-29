@@ -8,7 +8,8 @@ import { anonId } from "@/lib/auth";
 import { hasConsent } from "@/lib/consent";
 
 // Вход по коду. Новый формат: { email, phone } — телефон обязателен (настройка auth.phoneRequired),
-// код приходит на почту. Старый формат { target } (email или телефон) оставлен для совместимости.
+// код приходит на почту. Старый формат { target } оставлен для совместимости: email — всегда,
+// телефон — только при включённом входе по SMS (auth.smsLogin).
 const Input = z.object({
   target: z.string().max(120).optional(),
   email: z.string().trim().max(120).optional(),
@@ -23,6 +24,9 @@ export async function POST(req: Request) {
   const raw = b.email || b.target || "";
   const target = normalizeTarget(raw);
   if (!target) return err(b.email !== undefined ? "Проверьте адрес почты" : "Укажите email или телефон");
+  const auth = await cfg("auth");
+  // Код по SMS — только если вход по SMS включён в настройках; иначе телефон — контакт, код — на почту
+  if (target.kind === "phone" && !auth.smsLogin) return err("Укажите почту — код придёт на неё");
   let phone: string | null = null;
   if (b.phone) {
     phone = normalizePhone(b.phone);
@@ -32,7 +36,7 @@ export async function POST(req: Request) {
   if (target.kind === "email") {
     const existing = await db.user.findUnique({ where: { email: target.value }, select: { id: true, role: true, phone: true } });
     // Телефон обязателен для покупателей; сотрудникам и тем, у кого он уже сохранён, — нет
-    if ((await cfg("auth")).phoneRequired && !phone && !(existing && (existing.role !== "CUSTOMER" || existing.phone))) {
+    if (auth.phoneRequired && !phone && !(existing && (existing.role !== "CUSTOMER" || existing.phone))) {
       return err("Укажите мобильный телефон — он нужен для связи по заказу");
     }
     if (phone) {

@@ -3,6 +3,15 @@ import { NextResponse, type NextRequest } from "next/server";
 // 1) Анонимный идентификатор для черновика и превью без регистрации.
 // 2) Реферальный код (?ref=) и UTM-метки — в cookie на 30 дней.
 // 3) Защита от CSRF: POST/PUT/PATCH/DELETE к /api только с нашего домена (кроме вебхуков).
+/** Хост из заголовка Origin; «null» и мусор — null (не бросаем исключение → 403, а не 500). */
+export function originHost(origin: string): string | null {
+  try {
+    return new URL(origin).host || null;
+  } catch {
+    return null;
+  }
+}
+
 export function middleware(req: NextRequest) {
   const url = req.nextUrl;
   const method = req.method;
@@ -12,7 +21,8 @@ export function middleware(req: NextRequest) {
     if (!isWebhook) {
       const origin = req.headers.get("origin");
       const host = req.headers.get("x-forwarded-host") ?? req.headers.get("host");
-      if (!origin || new URL(origin).host !== host) {
+      const oh = origin ? originHost(origin) : null;
+      if (!oh || oh !== host) {
         return NextResponse.json({ error: "csrf" }, { status: 403 });
       }
     }

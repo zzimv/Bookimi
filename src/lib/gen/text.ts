@@ -4,11 +4,13 @@
 //  Demo      — заранее написанные развороты сюжета + крючки повода + доп. герои и увлечения.
 // Без Node API: модуль собирается и в демо-стенд (tools/demo).
 import { applyOccasion, getPlots, hooksFor, plotBySlug, textStyle } from "../../content/registry";
-import { occasionText } from "../../content/occasions";
+import { occasionWord } from "../../content/occasions";
+import { titleTemplate } from "../../content/title";
 import { OCCASIONS, type Segment } from "../../content/profiles";
 import type { Plot, TextStyle } from "../../content/types";
 import { appearanceLine, exactAge, extraGender, EXTRA_ROLE_LABELS, heroAge, segmentFor, type QuizAnswers } from "../quiz";
 import { fillTags, guessGender, type TagContext } from "../declension";
+import { personsOf, redactForText } from "./redact";
 
 export interface StoryText {
   title: string;
@@ -84,10 +86,11 @@ export class DemoTextProvider implements TextProvider {
       const names = a.extras.map((e, i) => `${EXTRA_WORD[e.role] ? EXTRA_WORD[e.role] + " " : ""}{ДОП${i + 1}.им}`.trim());
       const list = names.length > 1 ? names.slice(0, -1).join(", ") + " и " + names.at(-1) : names[0];
       spreads[0].text += ` Рядом, конечно, был${a.extras.length > 1 ? "и" : ""} ${list}.`;
-      spreads[10].text += ` И ${list} — тоже рядом.`;
+      // «И Облако, и Робот Бип — тоже рядом»: перечисление с повторяющимся «и» — через запятую
+      spreads[10].text += names.length > 1 ? ` И ${names.join(", и ")} — тоже рядом.` : ` И ${list} — тоже рядом.`;
     }
     if (variant > 0 && !verse) spreads[11].text = spreads[11].text + " Это была самая лучшая история.";
-    let title = base.title.replace("[Имя]", "{ГЕРОЙ.им}");
+    let title = titleTemplate(base.title);
     if (!plot) title = a.story.ideaChoice?.title ?? "История по вашей идее";
     return { raw: { title, spreads }, costKopecks: 0, provider: this.name };
   }
@@ -122,6 +125,9 @@ function segmentBlock(seg: Segment | undefined) {
 /** Бриф для YandexGPT: без имён — только метки, роли, возраст, детали анкеты. */
 export function brief(a: QuizAnswers, plot: Plot | null, style: TextStyle | null) {
   const seg = segmentFor(a, plot?.segments);
+  // Свободный текст покупателя: имена → метки, контакты и ссылки — прочь (redact.ts)
+  const persons = personsOf(a, (e) => extraGender(e as QuizAnswers["extras"][number], guessGender));
+  const clean = (t: string | undefined | null) => redactForText(t, persons);
   const g = GENDER_WORD[a.audience] ?? GENDER_WORD.CHILD;
   const lines: string[] = [...segmentBlock(seg)];
   lines.push(`Главный герой: {ГЕРОЙ.им}, ${a.hero.gender === "girl" ? g[1] : g[0]}.`);
@@ -129,37 +135,39 @@ export function brief(a: QuizAnswers, plot: Plot | null, style: TextStyle | null
   if (a.audience === "PET") {
     const sp = a.pet.species === "cat" ? "кошка" : a.pet.species === "dog" ? "собака" : "домашний питомец";
     lines.push(`Питомец: ${sp}${a.pet.breed ? `, порода: ${a.pet.breed}` : ""}${a.pet.furColor ? `, окрас: ${a.pet.furColor}` : ""}.`);
-    if (a.pet.traits) lines.push(`Характер и привычки: ${a.pet.traits}.`);
+    if (a.pet.traits) lines.push(`Характер и привычки: ${clean(a.pet.traits)}.`);
   }
   if (a.audience === "ADULT") {
     const d = a.adult;
-    if (d.profession) lines.push(`Чем занимается: ${d.profession}.`);
-    if (d.relation) lines.push(`Кем приходится дарителю: ${d.relation}.`);
-    if (d.howMet) lines.push(`Как познакомились: ${d.howMet}.`);
-    if (d.memories.length) lines.push(`Общие воспоминания: ${d.memories.join(" / ")}.`);
+    if (d.profession) lines.push(`Чем занимается: ${clean(d.profession)}.`);
+    if (d.relation) lines.push(`Кем приходится дарителю: ${clean(d.relation)}.`);
+    if (d.howMet) lines.push(`Как познакомились: ${clean(d.howMet)}.`);
+    if (d.memories.length) lines.push(`Общие воспоминания: ${d.memories.map(clean).join(" / ")}.`);
   }
-  const interests = [...a.interests, a.interestCustom].filter(Boolean);
+  const interests = [...a.interests, a.interestCustom].filter(Boolean).map(clean);
   if (interests.length) lines.push(`Увлечения: ${interests.join(", ")}.`);
-  const look = appearanceLine(a);
+  const look = clean(appearanceLine(a));
   if (look) lines.push(`Внешность (для описаний сцен): ${look}.`);
   lines.push(
     a.extras.length
-      ? `Дополнительные герои: ${a.extras.map((e, i) => `{ДОП${i + 1}} — ${EXTRA_ROLE_LABELS[e.role] ?? e.role}${e.what ? ` (${e.what})` : ""}${e.description ? `: ${e.description}` : ""}`).join("; ")}. Все вместе — {ДОПЫ}.`
+      ? `Дополнительные герои: ${a.extras.map((e, i) => `{ДОП${i + 1}} — ${EXTRA_ROLE_LABELS[e.role] ?? e.role}${e.what ? ` (${clean(e.what)})` : ""}${e.description ? `: ${clean(e.description)}` : ""}`).join("; ")}. Все вместе — {ДОПЫ}.`
       : "Дополнительных героев нет.",
   );
   const occ = OCCASIONS.find((o) => o.key === a.occasion.key);
   if (a.occasion.key && a.occasion.key !== "bez" && (a.occasion.key !== "svoj" || a.occasion.custom)) {
-    lines.push(`Повод: ${a.occasion.key === "svoj" ? a.occasion.custom : occ?.label}. В тексте повод — метка {ПОВОД}.`);
+    const w = occasionWord(a.occasion.key, a.occasion.key === "svoj" ? clean(a.occasion.custom) : "");
+    const grammar = w && a.occasion.key !== "svoj" ? ` (в тексте это слово «${w.им}», ${w.gender === "f" ? "женский" : w.gender === "n" ? "средний" : "мужской"} род; в падеже — {ПОВОД.род}, {ПОВОД.дат}…; не ставь рядом с меткой прилагательные по роду)` : "";
+    lines.push(`Повод: ${a.occasion.key === "svoj" ? clean(a.occasion.custom) : occ?.label}. В тексте повод — метка {ПОВОД}${grammar}.`);
     const h = plot ? hooksFor(plot, a.occasion.key, a.occasion.custom) : null;
-    if (h && (h.opening || h.closing)) lines.push(`Заготовки повода (перепиши своим голосом): начало — «${h.opening}»; финал — «${h.closing}».`);
+    if (h && (h.opening || h.closing)) lines.push(`Заготовки повода (перепиши своим голосом): начало — «${h.opening.replace(/\n/g, " / ")}»; финал — «${h.closing.replace(/\n/g, " / ")}».`);
   } else lines.push("Повода нет.");
   if (style) lines.push(`Голос книги: «${style.title}»${style.verse ? " (стихи)" : ""}.`);
   if (plot) {
-    lines.push(`Сюжет «${plot.title.replace("[Имя]", "{ГЕРОЙ.им}")}». Следуй плану по разворотам (можно менять детали и формулировки, сохраняя ход событий):`);
+    lines.push(`Сюжет «${titleTemplate(plot.title)}». Следуй плану по разворотам (можно менять детали и формулировки, сохраняя ход событий):`);
     applyOccasion(plot, a.occasion.key, a.occasion.custom).forEach((s, i) => lines.push(`${i + 1}. ${s.text.replace(/\n/g, " / ")}`));
   } else {
     const idea = a.story.ideaChoice ? `${a.story.ideaChoice.title}: ${a.story.ideaChoice.summary}` : a.story.idea;
-    lines.push(`Сюжет по идее покупателя: ${idea}`);
+    lines.push(`Сюжет по идее покупателя: ${clean(idea)}`);
   }
   return lines.join("\n");
 }
@@ -203,7 +211,7 @@ export class YandexGptProvider implements TextProvider {
     // Для готовых сюжетов — проверенные описания сцен (с реквизитом повода)
     const planned = plot ? applyOccasion(plot, a.occasion.key, a.occasion.custom) : null;
     const spreads = parsed.spreads.slice(0, 12).map((s, i) => ({ index: i + 1, text: s.text, scene: planned?.[i]?.scene ?? s.scene }));
-    return { raw: { title: plot ? plot.title.replace("[Имя]", "{ГЕРОЙ.им}") : parsed.title, spreads }, costKopecks, provider: this.name };
+    return { raw: { title: plot ? titleTemplate(plot.title) : parsed.title, spreads }, costKopecks, provider: this.name };
   }
 
   async ideas(idea: string, a: QuizAnswers) {
@@ -211,11 +219,16 @@ export class YandexGptProvider implements TextProvider {
     const who = { CHILD: "ребёнок", TEEN: "подросток", ADULT: "взрослый близкий человек", PET: "домашний питомец" }[a.audience];
     const { text } = await this.complete(
       "Ты — автор персональных иллюстрированных книг. Предложи 3 разных сюжета для персональной книги. Ответ — только JSON: [{\"title\":\"...\",\"summary\":\"...\"}]. Без имён, без страшного, без брендов и чужих персонажей.",
-      `Идея покупателя: ${idea}\nГлавный герой: ${who}${a.audience === "CHILD" || a.audience === "TEEN" ? `, возраст ${heroAge(a)}` : ""}. ${seg ? `Сегмент: ${seg.title}. Запреты: ${seg.taboo.join("; ")}.` : ""}`,
+      `Идея покупателя: ${ideaForModel(idea, a)}\nГлавный герой: ${who}${a.audience === "CHILD" || a.audience === "TEEN" ? `, возраст ${heroAge(a)}` : ""}. ${seg ? `Сегмент: ${seg.title}. Запреты: ${seg.taboo.join("; ")}.` : ""}`,
       0.9,
     );
     return (JSON.parse(text.slice(text.indexOf("["), text.lastIndexOf("]") + 1)) as { title: string; summary: string }[]).slice(0, 3);
   }
+}
+
+/** Идея «своей истории» для модели: имена → метки, контакты прочь. */
+export function ideaForModel(idea: string, a: QuizAnswers) {
+  return redactForText(idea, personsOf(a, (e) => extraGender(e as QuizAnswers["extras"][number], guessGender)));
 }
 
 export function textProvider(name: string): TextProvider {
@@ -227,7 +240,7 @@ export function tagContext(a: QuizAnswers): TagContext {
   return {
     hero: { name: a.hero.name, nickname: a.hero.nickname || a.hero.name, gender: a.hero.gender },
     extras: a.extras.map((e) => ({ name: e.name, gender: extraGender(e, guessGender) })),
-    occasion: occasionText(a.occasion.key, a.occasion.custom),
+    occasion: occasionWord(a.occasion.key, a.occasion.custom) ?? "",
     age: exactAge(a),
   };
 }
@@ -235,7 +248,7 @@ export function tagContext(a: QuizAnswers): TagContext {
 /** Подстановка имён, рода, повода и возраста — финальный текст для показа покупателю. */
 export function personalize(raw: StoryText, a: QuizAnswers): StoryText {
   const ctx = tagContext(a);
-  const f = (t: string) => fillTags(t, ctx).replace(/\[Имя\]/g, a.hero.name);
+  const f = (t: string) => fillTags(titleTemplate(t), ctx);
   return { title: f(raw.title), spreads: raw.spreads.map((s) => ({ ...s, text: f(s.text) })) };
 }
 

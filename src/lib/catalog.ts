@@ -5,6 +5,7 @@ export { plotAges };
 import { PLOTS } from "../content/registry";
 import { themeFor } from "../content/art/index";
 import type { AudienceKey } from "../content/profiles";
+import { titleForCatalog } from "../content/title";
 import type { HeroKind, Plot, PlotExtras } from "../content/types";
 
 // Публичный срез каталога: без шаблонов текста, системных промптов и планов сцен (они остаются на сервере).
@@ -214,8 +215,9 @@ export function ageLabel(min: number, max: number, audience: AudienceKey = "CHIL
 
 export const HERO_WORD: Record<AudienceKey, string> = { CHILD: "Ваш ребёнок", TEEN: "Ваш герой", ADULT: "Ваш герой", PET: "Ваш питомец" };
 
+/** Название для витрины без имени — общий помощник src/content/title.ts (падеж по предлогу). */
 export function displayTitle(title: string, audience: AudienceKey = "CHILD") {
-  return title.replace(/ о \[Имя\]/, audience === "PET" ? " о вашем питомце" : " о вашем герое").replace("[Имя]", HERO_WORD[audience]);
+  return titleForCatalog(title, audience);
 }
 
 export const rub = (n: number) => `${n.toLocaleString("ru-RU").replace(/[,\s]/g, "\u00a0")}\u00a0₽`;

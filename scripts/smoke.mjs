@@ -41,6 +41,8 @@ ok(Boolean(h.headers.get("strict-transport-security")), "HSTS");
 // CSRF: POST без своего Origin
 const csrf = await a.f("/api/books", { method: "POST", json: {}, origin: false, headers: { origin: "https://evil.example" } });
 ok(csrf.status === 403, "POST с чужого сайта → 403 (CSRF)");
+const csrfNull = await a.f("/api/books", { method: "POST", json: {}, origin: false, headers: { origin: "null" } });
+ok(csrfNull.status === 403, "POST с Origin: null → 403, а не 500");
 
 // Книга: создать, дождаться текста
 const answers = { hero: { name: "Тест", gender: "girl", ageGroup: "4-5" }, story: { slug: "sonnaya-strana" }, style: "watercolor-air" };
@@ -72,6 +74,10 @@ for (let i = 0; i < 40; i++) { const s = await (await a.f(`/api/books/${b2}`)).j
 await a.f(`/api/books/${b2}/action`, { method: "POST", json: { action: "approve" } });
 const p2 = await a.f(`/api/books/${b2}/action`, { method: "POST", json: { action: "preview", withPhoto: false } });
 ok(p2.status === 429, "второе превью за сутки → 429");
+
+// Вход только по почте: телефон как цель кода — нет (вход по SMS выключен по умолчанию)
+const ph = await jar().f("/api/auth/request", { method: "POST", json: { target: "+79001234567" } });
+ok(ph.status === 400, "код на телефон без включённого входа по SMS → 400");
 
 // Перебор кодов входа
 const c = jar();

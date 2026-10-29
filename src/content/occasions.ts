@@ -144,13 +144,67 @@ export const GENERIC_HOOKS: Record<string, OccasionHook> = {
   },
 };
 
-/** Поводы-имена собственные: в середине фразы пишутся с заглавной. */
-const PROPER = new Set(["novyj-god", "8-marta", "23-fevralya", "den-vlyublennyh", "den-semi", "den-materi", "den-otca", "den-babushek-i-dedushek", "den-pitomca", "den-koshek"]);
+/** Повод в тексте книги: падежные формы, род и число (для {ПОВОД}, {ПОВОД.род}… и подсказки модели). */
+export interface OccasionWord {
+  им: string;
+  род: string;
+  дат: string;
+  вин: string;
+  тв: string;
+  пр: string;
+  /** Грамматический род: м / ж / ср; plural — множественное число. */
+  gender: "m" | "f" | "n";
+  plural?: boolean;
+}
 
-/** Текст для {ПОВОД}: свой повод как есть, иначе название в середине фразы («день рождения», «Новый год»). */
-export function occasionText(key: string, custom?: string): string {
-  if (key === "svoj" && custom?.trim()) return custom.trim();
+/** «день X» → все падежи (X не меняется). */
+const den = (rest: string, cap = true): OccasionWord => {
+  const d = cap ? "Д" : "д";
+  return { им: `${d}ень ${rest}`, род: `${d}ня ${rest}`, дат: `${d}ню ${rest}`, вин: `${d}ень ${rest}`, тв: `${d}нём ${rest}`, пр: `${d}не ${rest}`, gender: "m" };
+};
+/** Несклоняемое («8 Марта»). */
+const fixed = (w: string, gender: OccasionWord["gender"] = "n"): OccasionWord => ({ им: w, род: w, дат: w, вин: w, тв: w, пр: w, gender });
+
+/**
+ * Короткая форма повода для текста книги: не название раздела сайта («Переезд, новоселье»), а слово,
+ * которое встаёт во фразу: «новоселье», «годовщина», «выход на пенсию». Имена собственные — с заглавной.
+ */
+export const OCCASION_WORDS: Record<string, OccasionWord> = {
+  "den-rozhdeniya": den("рождения", false),
+  "novyj-god": { им: "Новый год", род: "Нового года", дат: "Новому году", вин: "Новый год", тв: "Новым годом", пр: "Новом году", gender: "m" },
+  "vypusknoj-v-sadu": { им: "выпускной в детском саду", род: "выпускного в детском саду", дат: "выпускному в детском саду", вин: "выпускной в детском саду", тв: "выпускным в детском саду", пр: "выпускном в детском саду", gender: "m" },
+  "pervyj-klass": { им: "первое сентября", род: "первого сентября", дат: "первому сентября", вин: "первое сентября", тв: "первым сентября", пр: "первом сентября", gender: "n" },
+  "rozhdenie-brata-ili-sestry": { им: "рождение братика или сестрёнки", род: "рождения братика или сестрёнки", дат: "рождению братика или сестрёнки", вин: "рождение братика или сестрёнки", тв: "рождением братика или сестрёнки", пр: "рождении братика или сестрёнки", gender: "n" },
+  "vypusknoj-v-shkole": { им: "выпускной", род: "выпускного", дат: "выпускному", вин: "выпускной", тв: "выпускным", пр: "выпускном", gender: "m" },
+  "8-marta": fixed("8 Марта"),
+  "23-fevralya": fixed("23 Февраля"),
+  "den-vlyublennyh": den("всех влюблённых"),
+  "den-semi": den("семьи, любви и верности"),
+  godovshchina: { им: "годовщина", род: "годовщины", дат: "годовщине", вин: "годовщину", тв: "годовщиной", пр: "годовщине", gender: "f" },
+  svadba: { им: "свадьба", род: "свадьбы", дат: "свадьбе", вин: "свадьбу", тв: "свадьбой", пр: "свадьбе", gender: "f" },
+  "den-materi": den("матери"),
+  "den-otca": den("отца"),
+  "den-babushek-i-dedushek": den("бабушек и дедушек"),
+  yubilej: { им: "юбилей", род: "юбилея", дат: "юбилею", вин: "юбилей", тв: "юбилеем", пр: "юбилее", gender: "m" },
+  pensiya: { им: "выход на пенсию", род: "выхода на пенсию", дат: "выходу на пенсию", вин: "выход на пенсию", тв: "выходом на пенсию", пр: "выходе на пенсию", gender: "m" },
+  "novaya-rabota": { им: "новая работа", род: "новой работы", дат: "новой работе", вин: "новую работу", тв: "новой работой", пр: "новой работе", gender: "f" },
+  pereezd: { им: "новоселье", род: "новоселья", дат: "новоселью", вин: "новоселье", тв: "новосельем", пр: "новоселье", gender: "n" },
+  "den-pitomca": den("домашних животных"),
+  "den-koshek": den("кошек"),
+  "poyavlenie-pitomca": { им: "годовщина появления в семье", род: "годовщины появления в семье", дат: "годовщине появления в семье", вин: "годовщину появления в семье", тв: "годовщиной появления в семье", пр: "годовщине появления в семье", gender: "f" },
+};
+
+/** Формы повода для {ПОВОД.падеж}: свой повод не склоняем (текст покупателя как есть), без повода — null. */
+export function occasionWord(key: string, custom?: string): OccasionWord | null {
+  if (key === "svoj" && custom?.trim()) return fixed(custom.trim());
+  if (!key || key === "bez" || key === "svoj") return null;
+  const w = OCCASION_WORDS[key];
+  if (w) return w;
   const o = OCCASIONS.find((x) => x.key === key);
-  if (!o || key === "bez" || key === "svoj") return "";
-  return PROPER.has(key) ? o.label : o.label[0].toLowerCase() + o.label.slice(1);
+  return o ? fixed(o.label[0].toLowerCase() + o.label.slice(1), "m") : null;
+}
+
+/** Текст для {ПОВОД}: свой повод как есть, иначе короткая форма повода в середине фразы («новоселье», «Новый год»). */
+export function occasionText(key: string, custom?: string): string {
+  return occasionWord(key, custom)?.им ?? "";
 }

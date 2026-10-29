@@ -44,10 +44,14 @@ export const DEFAULTS = {
     photoTtlDays: 7,
     /** Сколько раз можно бесплатно сменить настроение превью до оплаты (перерисовка обложки и 2 разворотов). */
     moodChangesPreview: 2,
+    /** Бесплатных сказок в сутки с одного IP (IPv4 — по подсети /24): защита от сброса cookie устройства. */
+    textsPerIp: 10,
   },
   auth: {
     /** Телефон обязателен при входе (+7…); код приходит на почту. */
     phoneRequired: true,
+    /** Вход по SMS-коду на телефон (нужен SMS_PROVIDER). Выключено — код только на почту, телефон — контакт. */
+    smsLogin: false,
   },
   gpu: {
     mode: "on_demand" as "on_demand" | "schedule" | "always",

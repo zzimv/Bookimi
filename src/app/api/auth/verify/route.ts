@@ -7,6 +7,7 @@ import { subjectHash } from "@/lib/crypto";
 import { db } from "@/lib/db";
 import { DOC_VERSION } from "@/lib/legal";
 import { normalizePhone } from "@/lib/quiz";
+import { cfg } from "@/lib/settings";
 
 export async function POST(req: Request) {
   const t = await throttle("otp-verify", 10, 60_000);
@@ -28,7 +29,20 @@ export async function POST(req: Request) {
   // Проверяем до кода, чтобы не «сжечь» его. Сотрудникам согласие покупателя не нужно.
   const anon = await anonId();
   const t0 = normalizeTarget(b.email || b.target!);
-  const existing = t0 ? await db.user.findUnique({ where: t0.kind === "email" ? { email: t0.value } : { phone: t0.value }, select: { id: true, role: true } }) : null;
+  if (!t0) return err("Проверьте адрес почты");
+  const auth = await cfg("auth");
+  if (t0.kind === "phone" && !auth.smsLogin) return err("Укажите почту — код придёт на неё");
+  const existing = await db.user.findUnique({ where: t0.kind === "email" ? { email: t0.value } : { phone: t0.value }, select: { id: true, role: true, phone: true } });
+  // Телефон обязателен покупателю без сохранённого телефона (как на шаге запроса кода) — проверяем до кода
+  const phone = b.phone ? normalizePhone(b.phone) : null;
+  if (b.phone && !phone) return err("Укажите мобильный номер: +7 9XX XXX-XX-XX");
+  if (auth.phoneRequired && t0.kind === "email" && !phone && !(existing && (existing.role !== "CUSTOMER" || existing.phone))) {
+    return err("Укажите мобильный телефон — он нужен для связи по заказу");
+  }
+  if (phone) {
+    const owner = await db.user.findUnique({ where: { phone }, select: { id: true } });
+    if (owner && owner.id !== existing?.id) return err("Этот телефон уже привязан к другому аккаунту. Войдите с почтой того аккаунта или напишите в поддержку.");
+  }
   const pdGiven = await hasConsent("PERSONAL_DATA", { userId: existing?.id, anonId: anon });
   if (!b.consentPd && !pdGiven && !(existing && existing.role !== "CUSTOMER")) {
     return err("Отметьте согласие на обработку персональных данных");
@@ -36,8 +50,7 @@ export async function POST(req: Request) {
   const ref = (await cookies()).get("bk_ref")?.value;
   const r = await verifyOtp(b.email || b.target!, b.code, { referral: ref, device: subjectHash(await deviceKey()) });
   if (!r.ok) return err(r.error);
-  // Телефон из формы входа — в профиль (если он ещё ни за кем не закреплён)
-  const phone = b.phone ? normalizePhone(b.phone) : null;
+  // Телефон из формы входа — в профиль (за другим аккаунтом он не закреплён — проверено выше)
   if (phone && r.user.phone !== phone) {
     const owner = await db.user.findUnique({ where: { phone }, select: { id: true } });
     if (!owner) r.user = await db.user.update({ where: { id: r.user.id }, data: { phone } });

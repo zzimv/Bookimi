@@ -13,6 +13,8 @@ import {
   type QuizAnswers,
 } from "@/lib/quiz";
 import { fillTags } from "@/lib/declension";
+import { occasionWord } from "@/content/occasions";
+import { titleForCatalog, titleTemplate } from "@/content/title";
 import { sampleUrl } from "@/lib/obrazec";
 import type { AudienceKey } from "@/content/profiles";
 import { Captcha } from "@/components/Captcha";
@@ -96,6 +98,9 @@ const GENDER: Record<AudienceKey, [string, string]> = {
   PET: ["Мальчик", "Девочка"],
 };
 const FALLBACK_SLUG: Record<AudienceKey, string> = { CHILD: "imya-i-zvyozdnyj-drakonchik", TEEN: "stazher-orbity", ADULT: "nasha-istoriya", PET: "moj-chelovek" };
+/** Подсказка под полями свободного текста: имена в ИИ не уходят (src/lib/gen/redact.ts). */
+const NAMES_HINT = "Имена здесь не нужны — мы подставим их сами";
+
 const HERO_WORD: Record<AudienceKey, string> = { CHILD: "Ваш ребёнок", TEEN: "Ваш герой", ADULT: "Ваш герой", PET: "Ваш питомец" };
 const HUMAN_ROLES = ["mom", "dad", "grandma", "grandpa"];
 
@@ -229,8 +234,8 @@ export function QuizWizard({
   const story = stories.find((s) => s.slug === a.story.slug && s.audience === aud) ?? null;
   const fill = useMemo(() => {
     const h = { name: a.hero.name || "Имя", nickname: a.hero.nickname || a.hero.name || "Имя", gender: a.hero.gender };
-    return (t: string) => fillTags(t, { hero: h, extras: a.extras.map((e) => ({ name: e.name || e.what || "…", gender: e.gender })), occasion: a.occasion.custom || "особенный день" });
-  }, [a.hero, a.extras, a.occasion.custom]);
+    return (t: string) => fillTags(t, { hero: h, extras: a.extras.map((e) => ({ name: e.name || e.what || "…", gender: e.gender })), occasion: occasionWord(a.occasion.key, a.occasion.custom) ?? (a.occasion.custom || "особенный день") });
+  }, [a.hero, a.extras, a.occasion.key, a.occasion.custom]);
 
   // Доп. герои по сюжету: первые min — обязательная роль (пара, хозяева питомца, дарители)
   const plotRoles = story?.extras.roles ?? [];
@@ -310,7 +315,7 @@ export function QuizWizard({
     fur: FUR.includes(a.pet.furColor ?? "") ? a.pet.furColor : undefined,
     extras: a.extras.map((e) => e.role),
   };
-  const coverTitle = story ? fill(story.title.replace(/ о \[Имя\]/, " о {ГЕРОЙ.пр}").replace("[Имя]", "{ГЕРОЙ.им}")) : own ? "Своя история" : "";
+  const coverTitle = story ? fill(titleTemplate(story.title)) : own ? "Своя история" : "";
   const coverName = a.hero.name?.trim() || HERO_WORD[aud];
 
   function chooseAudience(next: AudienceKey) {
@@ -418,7 +423,7 @@ export function QuizWizard({
     <button key={s.slug} type="button" className="choice" data-slug={s.slug} aria-pressed={!own && a.story.slug === s.slug} onClick={() => chooseStory(s.slug)}>
       <Cover theme={s.coverTheme} title="" sample={sampleUrl({ slug: s.slug })} />
       <div>
-        <strong>{s.title.replace(/ о \[Имя\]/, aud === "PET" ? " о вашем питомце" : " о вашем герое").replace("[Имя]", HERO_WORD[aud])}</strong>
+        <strong>{titleForCatalog(s.title, aud)}</strong>
         <span>{s.tagline}</span>
         <span className="choice__badges">
           {badge && <span className={`badge ${badge === "к вашему поводу" ? "badge--gold" : ""}`}>{badge}</span>}
@@ -441,7 +446,8 @@ export function QuizWizard({
         <div className="panel own-panel">
           <label className="field">
             <span>Ваша идея</span>
-            <textarea className="textarea" name="idea" maxLength={300} value={a.story.idea ?? ""} onChange={(e) => set("story", { slug: "", idea: e.target.value })} placeholder={aud === "PET" ? "Например: кот Барсик охраняет ёлку от ночных шорохов" : "Например: Марк строит ракету из коробок и летит на Луну к своему коту"} />
+            <textarea className="textarea" name="idea" maxLength={300} value={a.story.idea ?? ""} onChange={(e) => set("story", { slug: "", idea: e.target.value })} placeholder={aud === "PET" ? "Например: кот охраняет ёлку от ночных шорохов" : "Например: герой строит ракету из коробок и летит на Луну к своему коту"} />
+            <small className="names-hint">{NAMES_HINT}</small>
           </label>
           <button type="button" className="btn btn--ghost btn--sm" disabled={busy || (a.story.idea ?? "").trim().length < 5} onClick={suggest}>
             {busy ? "Придумываем…" : "Предложить варианты"}
@@ -531,7 +537,7 @@ export function QuizWizard({
                 <label className="field">
                   <span>Какой у вас повод? <span className="req">*</span></span>
                   <input className="input" name="occasion-custom" maxLength={120} value={a.occasion.custom ?? ""} onChange={(e) => set("occasion", { ...a.occasion, custom: e.target.value })} placeholder={aud === "PET" ? "Например, первая зима на даче" : "Например, первый поход в бассейн"} />
-                  <small>Впишем его в первую и последнюю страницы.</small>
+                  <small>Впишем его в первую и последнюю страницы. {NAMES_HINT}.</small>
                 </label>
               )}
               <h2 className="quiz__h2" aria-live="polite">
@@ -665,6 +671,7 @@ export function QuizWizard({
                   <label className="field">
                     <span>Своими словами</span>
                     <textarea className="textarea" name="look-custom" maxLength={300} value={a.appearance.custom ?? ""} onChange={(e) => look({ custom: e.target.value })} placeholder="Например: большие голубые глаза, ямочки на щеках, всегда в красной кепке" />
+                    <small className="names-hint">{NAMES_HINT}</small>
                   </label>
                 </>
               ) : (
@@ -672,10 +679,12 @@ export function QuizWizard({
                   <label className="field">
                     <span>Характер и привычки</span>
                     <textarea className="textarea" name="pet-traits" maxLength={300} value={a.pet.traits ?? ""} onChange={(e) => pet({ traits: e.target.value })} placeholder="Ворует носки, боится пылесоса, спит на клавиатуре" />
+                    <small className="names-hint">{NAMES_HINT}</small>
                   </label>
                   <label className="field">
                     <span>Приметы</span>
                     <input className="input" name="pet-marks" maxLength={300} value={a.appearance.custom ?? ""} onChange={(e) => look({ custom: e.target.value })} placeholder="Белое пятно на груди, одно ухо висит, разные глаза" />
+                    <small className="names-hint">{NAMES_HINT}</small>
                   </label>
                 </>
               )}
@@ -703,6 +712,7 @@ export function QuizWizard({
                     <label className="field">
                       <span>Как вы познакомились</span>
                       <textarea className="textarea" name="adult-howmet" maxLength={400} value={a.adult.howMet ?? ""} onChange={(e) => adult({ howMet: e.target.value })} placeholder="Пара предложений: где, когда, что запомнилось" />
+                      <small className="names-hint">{NAMES_HINT}</small>
                     </label>
                   )}
                   <span className="label">Общие воспоминания или семейные шутки — до трёх</span>
@@ -721,6 +731,7 @@ export function QuizWizard({
                       placeholder={["Например: как мы заблудились в Суздале", "Например: папины блины по воскресеньям", "Например: «главное — не забыть ключи»"][i]}
                     />
                   ))}
+                  <small className="names-hint">{NAMES_HINT}</small>
                 </>
               )}
               <label className="field">
@@ -768,6 +779,7 @@ export function QuizWizard({
                       <label className="field">
                         <span>{e.role === "custom" ? "Какой он" : "Как выглядит"}</span>
                         <input className="input" name={`extra-desc-${i}`} maxLength={200} value={e.description ?? ""} onChange={(ev) => setExtra(i, { description: ev.target.value })} placeholder={e.role === "pet" ? "Рыжий кот с белыми лапками" : e.role === "custom" ? "Старый, мудрый, с дуплом-окошком" : "Светлые волосы, очки"} />
+                        <small className="names-hint">{NAMES_HINT}</small>
                       </label>
                     </div>
                     {e.role === "pet" && (

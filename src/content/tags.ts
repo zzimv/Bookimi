@@ -14,7 +14,8 @@ export const TAG_GRAMMAR: { re: RegExp; doc: string }[] = [
   { re: /^Р:[^|{}]*\|[^|{}]*(\|[^|{}]*)?$/, doc: "{Р:м|ж} или {Р:м|ж|ср} — форма по полу героя" },
   { re: /^Р[1-3]:[^|{}]*\|[^|{}]*(\|[^|{}]*)?$/, doc: "{Р1:м|ж} — форма по полу доп. героя 1..3" },
   { re: /^МН:[^|{}]*\|[^|{}]*$/, doc: "{МН:один|много} — по числу доп. героев (1 / больше 1)" },
-  { re: /^ПОВОД$/, doc: "{ПОВОД} — название повода или текст «своего повода»" },
+  { re: /^ПОВОД$/, doc: "{ПОВОД} — повод словом для текста («новоселье», «годовщина») или текст «своего повода»" },
+  { re: new RegExp(`^ПОВОД\\.${CASE}$`), doc: "{ПОВОД.род} — повод в падеже («к годовщине» — {ПОВОД.дат}); свой повод не склоняется" },
   { re: /^ВОЗРАСТ$/, doc: "{ВОЗРАСТ} — «5 лет», «3 года»" },
 ];
 
@@ -56,4 +57,43 @@ export function nameAtLineEnd(text: string): string[] {
     .split("\n")
     .map((l) => l.trim())
     .filter((l) => new RegExp(NAME_TAG_RE.source + "[\\s.,!?;:…»—–-]*$").test(l));
+}
+
+/** Метки переменной длины в стихах: имена и повод ({ПОВОД} — от одного до шести слов). */
+const VARIABLE_TAG_RE = new RegExp(`${NAME_TAG_RE.source}|\\{ПОВОД(\\.(им|род|дат|вин|тв|пр))?\\}`, "g");
+
+/**
+ * Строка-обращение вне метра: кроме меток имени/повода — не больше одного слова
+ * («— {ГЕРОЙ.им}!», «Спи, {ЛАСКОВО.им}.», «{ПОВОД}!»).
+ */
+export function isStandaloneLine(line: string): boolean {
+  const rest = line.replace(VARIABLE_TAG_RE, " ").replace(/\{[^{}]*\}/g, "x");
+  return (rest.match(/[А-Яа-яЁёA-Za-z]+/g) ?? []).length <= 1;
+}
+
+/**
+ * Стихотворные строки, в которых имя или повод стоит внутри метра. Имена — от 1 до 5 слогов,
+ * поэтому в стихах метка имени — только в отдельной строке-обращении (isStandaloneLine).
+ */
+export function nameInMetricLine(text: string): string[] {
+  return text
+    .split("\n")
+    .map((l) => l.trim())
+    .filter((l) => new RegExp(VARIABLE_TAG_RE.source).test(l) && !isStandaloneLine(l));
+}
+
+/** Сколько меток имени в тексте (для лимита «не больше 4 на стихотворную книгу»). */
+export function countNameTags(text: string): number {
+  return (text.match(new RegExp(NAME_TAG_RE.source, "g")) ?? []).length;
+}
+
+const VOWELS = /[аеёиоуыэюя]/gi;
+/** Формы рода {Р:…|…} с разным числом слогов (в стихах ломают метр): «{Р:наш герой|героиня}». */
+export function unevenGenderForms(text: string): string[] {
+  const bad: string[] = [];
+  for (const m of text.matchAll(/\{Р[1-3]?:([^{}]*)\}/g)) {
+    const counts = m[1].split("|").map((f) => (f.match(VOWELS) ?? []).length);
+    if (new Set(counts).size > 1) bad.push(m[0]);
+  }
+  return bad;
 }

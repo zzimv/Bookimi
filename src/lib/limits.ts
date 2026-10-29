@@ -32,6 +32,21 @@ export async function used(subject: string, kind: string) {
   return row?.count ?? 0;
 }
 
+/**
+ * Подсеть клиента для суточных лимитов по IP: IPv4 — /24 («203.0.113.0/24»), IPv6 — /64.
+ * Сброс cookie (новый deviceKey) не обходит лимит, а соседи по NAT делят один, более высокий, лимит.
+ */
+export function ipSubnet(ip: string): string {
+  const v = ip.trim().replace(/^::ffff:/i, "");
+  const v4 = v.match(/^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.\d{1,3}$/);
+  if (v4) return `${v4[1]}.${v4[2]}.${v4[3]}.0/24`;
+  if (v.includes(":")) {
+    const groups = v.split("::")[0].split(":").filter(Boolean);
+    return `${groups.slice(0, 4).join(":")}::/64`;
+  }
+  return v || "unknown";
+}
+
 // ── Ограничение частоты запросов в памяти (один web-контейнер) ──
 const buckets = new Map<string, { n: number; reset: number }>();
 

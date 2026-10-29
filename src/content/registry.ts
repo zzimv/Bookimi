@@ -16,7 +16,8 @@ import { ADULT_ART_STYLES, ADULT_THEMES } from "./art/adults";
 import { PET_ART_STYLES, PET_THEMES } from "./art/pets";
 import { ART_STYLES, artStyle, heroDrawer, themeFor, themesByKey } from "./art/index";
 import { GENERIC_HOOKS, occasionText } from "./occasions";
-import { checkTags, maxExtraRef, nameAtLineEnd } from "./tags";
+import { titleTemplate } from "./title";
+import { checkTags, countNameTags, maxExtraRef, nameInMetricLine, unevenGenderForms } from "./tags";
 import {
   ART_STYLE_OWNERS,
   DEMO_THEME_KEYS,
@@ -136,7 +137,7 @@ export function validateContent(opts: { strict?: boolean } = {}): ContentReport 
     if (s.systemPrompt.length < 500) errors.push(`text-styles: ${s.id} — слишком короткий systemPrompt`);
     if (s.rules.length < 3) errors.push(`text-styles: ${s.id} — меньше трёх правил`);
     for (const e of checkTags(s.example)) errors.push(`text-styles: ${s.id} пример: ${e}`);
-    if (s.verse) for (const l of nameAtLineEnd(s.example)) errors.push(`text-styles: ${s.id} пример: имя в конце строки «${l}»`);
+    if (s.verse) for (const l of nameInMetricLine(s.example)) errors.push(`text-styles: ${s.id} пример: имя внутри стихотворной строки «${l}»`);
   }
   for (const t of TEXT_STYLE_IDS) if (!seenStyles.has(t.id)) errors.push(`text-styles: нет описания стиля ${t.id}`);
 
@@ -242,13 +243,25 @@ export function validateContent(opts: { strict?: boolean } = {}): ContentReport 
     if (!p.coverScene || CYR.test(p.coverScene)) errors.push(`${at}: coverScene — на английском`);
     if (p.spreads.length !== 12) errors.push(`${at}: ${p.spreads.length} разворотов, нужно ровно 12`);
     const verse = !!textStyle(p.textStyle)?.verse;
-    const texts: [string, string][] = [["title", p.title.replace(/\[Имя\]/g, "{ГЕРОЙ.им}")]];
+    const texts: [string, string][] = [["title", titleTemplate(p.title)]];
     p.spreads.forEach((s, i) => {
       if (!s.text?.trim()) errors.push(`${at}: разворот ${i + 1} без текста`);
       if (!s.scene?.trim() || CYR.test(s.scene)) errors.push(`${at}: разворот ${i + 1} — scene на английском и без имён`);
       texts.push([`разворот ${i + 1}`, s.text ?? ""]);
-      if (verse) for (const l of nameAtLineEnd(s.text ?? "")) errors.push(`${at}: разворот ${i + 1} — имя в конце стихотворной строки «${l}»`);
     });
+    if (verse) {
+      // Стихи: имя и повод — только в отдельных строках-обращениях; имён — не больше 4 на книгу; формы рода — равной длины
+      const verseTexts: [string, string][] = [
+        ...p.spreads.map((s, i): [string, string] => [`разворот ${i + 1}`, s.text ?? ""]),
+        ...Object.entries(p.occasionHooks ?? {}).flatMap(([k, h]): [string, string][] => (h ? [[`крючок ${k}`, h.opening], [`крючок ${k}`, h.closing]] : [])),
+      ];
+      for (const [where, t] of verseTexts) {
+        for (const l of nameInMetricLine(t)) errors.push(`${at}: ${where} — имя или повод внутри стихотворной строки «${l}» (только отдельной строкой-обращением)`);
+        for (const f of unevenGenderForms(t)) errors.push(`${at}: ${where} — формы рода разной длины ${f} ломают метр`);
+      }
+      const names = p.spreads.reduce((n, s) => n + countNameTags(s.text ?? ""), 0);
+      if (names > 4) errors.push(`${at}: в стихах ${names} меток имени, нужно не больше 4`);
+    }
     for (const [k, h] of Object.entries(p.occasionHooks ?? {})) {
       if (!h) continue;
       if (k !== "default" && !occasionKeys.has(k)) errors.push(`${at}: крючок для неизвестного повода ${k}`);
