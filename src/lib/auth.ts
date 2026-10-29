@@ -126,6 +126,9 @@ export const PERMS = {
   triggers: ["OWNER", "MARKETER"],
   promo: ["OWNER", "MARKETER"],
   seo: ["OWNER", "MARKETER"],
+  /** «Праздники»: смотрят все сотрудники, меняют владелец и маркетолог. */
+  holidays: ["OWNER", "MARKETER", "OPERATOR"],
+  holidaysEdit: ["OWNER", "MARKETER"],
   reviews: ["OWNER", "MARKETER", "OPERATOR"],
   catalog: ["OWNER"],
   settings: ["OWNER"],

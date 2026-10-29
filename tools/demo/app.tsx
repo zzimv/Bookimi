@@ -12,11 +12,17 @@ import AudiencePage from "../../src/app/dlya/[audience]/page";
 import OccasionsPage from "../../src/app/povody/page";
 import OccasionPage from "../../src/app/povod/[slug]/page";
 import SozdatPage from "../../src/app/sozdat/page";
+import PrazdnikiPage from "../../src/app/prazdniki/page";
+import { AdminHolidays, DemoGeroi, resetHolidays } from "./holidays";
 import NotFound from "../../src/app/not-found";
 import { installApi, onStoreChange, resetStore, resumeJobs, svgUrl } from "./api";
 import { DemoPay, KabinetBook, KabinetHome, KabinetLayout, KabinetOrders, KabinetStub, KnigaPage, KupitPage, StubPage, VhodPage, ZakazPage } from "./pages";
 import { AdminCatalog, AdminDashboard, AdminHome, AdminJournal, AdminLayout, AdminOrder, AdminOrders, AdminPromos, AdminSettings, AdminTransfers } from "./admin";
 import { bindRouter, currentPath, currentQuery, currentUrl, demoHref, NotFoundError, push, RedirectError } from "./router";
+import { DEFAULTS } from "../../src/lib/settings";
+
+// Демо показывает и пробные стили картинок (значок «пробный»); на сайте они скрыты до настройки art.showTrialStyles
+DEFAULTS.art.showTrialStyles = true;
 
 // ───────── картинки-образцы /obrazec — тем же кодом, что маршрут сайта ─────────
 function sampleSrc(url: string) {
@@ -70,6 +76,8 @@ function page(path: string, q: Record<string, string>) {
       return <AudiencePage params={params({ audience: p[1] ?? "" })} />;
     case "povody":
       return <OccasionsPage />;
+    case "prazdniki":
+      return <PrazdnikiPage />;
     case "povod":
       return <OccasionPage params={params({ slug: p[1] ?? "" })} />;
     case "sozdat":
@@ -85,7 +93,7 @@ function page(path: string, q: Record<string, string>) {
     case "kabinet":
       return (
         <KabinetLayout path={path}>
-          {!p[1] ? <KabinetHome /> : p[1] === "kniga" ? <KabinetBook id={p[2]} /> : p[1] === "zakazy" ? <KabinetOrders /> : <KabinetStub title={CAB_TITLES[p[1]] ?? "Кабинет"} />}
+          {!p[1] ? <KabinetHome /> : p[1] === "kniga" ? <KabinetBook id={p[2]} /> : p[1] === "zakazy" ? <KabinetOrders /> : p[1] === "geroi" ? <DemoGeroi /> : <KabinetStub title={CAB_TITLES[p[1]] ?? "Кабинет"} />}
         </KabinetLayout>
       );
   }
@@ -109,6 +117,8 @@ function adminPage(p: string[]) {
       return <AdminCatalog />;
     case "nastrojki":
       return <AdminSettings />;
+    case "prazdniki":
+      return <AdminHolidays />;
     case "zhurnal":
       return <AdminJournal />;
   }
@@ -203,6 +213,7 @@ function View() {
 function reset() {
   if (!confirm("Начать демо сначала? Книги, заказы и настройки демо будут стёрты.")) return;
   resetStore();
+  resetHolidays();
   document.documentElement.style.setProperty("--hero-name", '""');
   document.documentElement.classList.remove("has-name");
   root.reset();

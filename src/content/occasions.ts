@@ -18,6 +18,19 @@ export const GENERIC_HOOKS: Record<string, OccasionHook> = {
     openingScene: "a decorated New Year fir tree with garlands, tangerines on the table, snow outside the window",
     closingScene: "New Year celebration, a fir tree with warm lights, gifts, snow falling outside",
   },
+  // Рождество (7 января) — тёплый зимний праздник: свет в окнах, тишина, семья; без религиозных утверждений
+  rozhdestvo: {
+    opening: "Стояли тихие январские дни: снег укрыл крыши, в окнах горели огоньки, и весь дом ждал Рождества.",
+    closing: "С Рождеством, {ЛАСКОВО.им}! Пусть в доме всегда будет светло, тепло и спокойно.",
+    openingScene: "a quiet snowy winter evening, warm lights glowing in the windows, gingerbread cookies and a candle in a glass holder on the table",
+    closingScene: "a cozy winter holiday evening with family at a festive table, warm string lights, snow falling outside",
+  },
+  "staryj-novyj-god": {
+    opening: "Ёлка всё ещё стояла в углу, а праздник и не думал заканчиваться: впереди был Старый Новый год — время загадать ещё одно желание.",
+    closing: "Со Старым Новым годом, {ЛАСКОВО.им}! Пусть и второе желание сбудется.",
+    openingScene: "a decorated fir tree still standing in mid-January, tangerines and a garland on the windowsill, snowy evening outside",
+    closingScene: "a cheerful family winter evening by a decorated fir tree, tangerines on the table, snowflakes outside",
+  },
   "vypusknoj-v-sadu": {
     opening: "Совсем скоро {ГЕРОЙ.дат} прощаться с детским садом — {Р:он|она} уже совсем {Р:большой|большая}.",
     closing: "До свидания, детский сад! Здравствуй, новое большое приключение, {ЛАСКОВО.им}!",
@@ -172,6 +185,8 @@ const fixed = (w: string, gender: OccasionWord["gender"] = "n"): OccasionWord =>
 export const OCCASION_WORDS: Record<string, OccasionWord> = {
   "den-rozhdeniya": den("рождения", false),
   "novyj-god": { им: "Новый год", род: "Нового года", дат: "Новому году", вин: "Новый год", тв: "Новым годом", пр: "Новом году", gender: "m" },
+  rozhdestvo: { им: "Рождество", род: "Рождества", дат: "Рождеству", вин: "Рождество", тв: "Рождеством", пр: "Рождестве", gender: "n" },
+  "staryj-novyj-god": { им: "Старый Новый год", род: "Старого Нового года", дат: "Старому Новому году", вин: "Старый Новый год", тв: "Старым Новым годом", пр: "Старом Новом году", gender: "m" },
   "vypusknoj-v-sadu": { им: "выпускной в детском саду", род: "выпускного в детском саду", дат: "выпускному в детском саду", вин: "выпускной в детском саду", тв: "выпускным в детском саду", пр: "выпускном в детском саду", gender: "m" },
   "pervyj-klass": { им: "первое сентября", род: "первого сентября", дат: "первому сентября", вин: "первое сентября", тв: "первым сентября", пр: "первом сентября", gender: "n" },
   "rozhdenie-brata-ili-sestry": { им: "рождение братика или сестрёнки", род: "рождения братика или сестрёнки", дат: "рождению братика или сестрёнки", вин: "рождение братика или сестрёнки", тв: "рождением братика или сестрёнки", пр: "рождении братика или сестрёнки", gender: "n" },

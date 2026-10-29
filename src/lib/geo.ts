@@ -3,9 +3,10 @@
 import { getOccasions, getPriceTable, getStories, displayTitle } from "./catalog";
 import { cfg } from "./settings";
 import { db, hasDatabase } from "./db";
+import { getHolidayCards } from "./holidays";
 
 export async function catalogData() {
-  const [stories, occasions, prices, shipping, limits] = await Promise.all([getStories(), getOccasions(), getPriceTable(), cfg("shipping"), cfg("limits")]);
+  const [stories, occasions, prices, shipping, limits, holidays] = await Promise.all([getStories(), getOccasions(), getPriceTable(), cfg("shipping"), cfg("limits"), getHolidayCards().catch(() => [])]);
   const addons = hasDatabase ? await db.addon.findMany({ where: { isActive: true }, orderBy: { sortOrder: "asc" } }).catch(() => []) : [];
   const ph = hasDatabase ? await db.printHouse.findFirst({ where: { isActive: true } }).catch(() => null) : null;
   const base = `https://${process.env.DOMAIN ?? "bookimi.ru"}`;
@@ -25,6 +26,8 @@ export async function catalogData() {
     ],
     stories: stories.map((s) => ({ title: displayTitle(s.title, s.audience), url: `${base}/skazki/${s.slug}`, audience: s.audience, age: `${s.ageMin}-${s.ageMax}`, occasions: s.occasions, summary: s.tagline })),
     occasions: occasions.map((o) => ({ title: o.title, url: `${base}/povod/${o.slug}` })),
+    /** Ближайшие праздники (/prazdniki): дата, до какого дня заказать печатную книгу. */
+    holidays: holidays.map((h) => ({ title: h.title, date: h.iso, daysLeft: h.daysLeft, printOrder: h.deadlineLine, url: `${base}${h.occasionHref ?? h.catalogHref}` })),
     prices: prices.map((p) => ({ product: p.title, priceRub: p.priceRub, type: p.kind === "PDF" ? "digital" : "printed", pages: 24 })),
     addons: addons.map((a) => ({ title: a.title, priceRub: a.priceRub, percentOff: a.percentOff })),
     production: { printDays: `${ph?.leadDaysMin ?? 3}-${ph?.leadDaysMax ?? 5} рабочих дней`, pdf: "в течение часа после оплаты" },

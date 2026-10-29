@@ -4,6 +4,8 @@ import { createOrder } from "@/lib/orders";
 import { Checkout } from "@/lib/checkout-schema";
 import { notifyUser } from "@/lib/notify";
 import { db } from "@/lib/db";
+import { addressError, cleanAddress } from "@/lib/delivery";
+import { cdekCityCode, cdekPoints, hasCdek } from "@/lib/shipping";
 
 export async function POST(req: Request) {
   const t = await throttle("checkout", 10, 60_000);
@@ -16,8 +18,23 @@ export async function POST(req: Request) {
   if (!own || own.book.userId !== user.id) return err("Не найдено", 404);
   if (b.whoPrints === "bookimi") {
     if (!b.shipping) return err("Выберите доставку");
-    if (b.shipping.method !== "pickup" && !b.shipping.address.city) return err("Укажите город");
+    const addr = cleanAddress(b.shipping.method, b.shipping.address);
+    const bad = addressError(b.shipping.method, addr, { pvzListAvailable: hasCdek() });
+    if (bad) return err(bad);
     if (!b.contact.name || !b.contact.phone) return err("Укажите имя и телефон получателя");
+    // Пункт выдачи сверяем со списком СДЭК и берём его адрес оттуда (не со слов браузера)
+    if (b.shipping.method === "cdek_pvz" && hasCdek()) {
+      try {
+        const code = addr.cityCode ?? (await cdekCityCode(addr.city, addr.region));
+        const point = code ? (await cdekPoints(code)).find((p) => p.code === addr.pvzCode) : null;
+        if (!point) return err("Пункт выдачи не найден в этом городе — выберите его заново");
+        addr.cityCode = code ?? undefined;
+        addr.pvzAddress = point.address;
+      } catch (e) {
+        console.error("[checkout] pvz", (e as Error).message); // СДЭК недоступен — оператор сверит пункт вручную
+      }
+    }
+    b.shipping.address = addr;
   }
   // UTM блогера → его промокод автоматически
   const utm = await utmCookie();

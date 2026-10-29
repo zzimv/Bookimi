@@ -14,6 +14,7 @@ const NAV: { href: string; label: string; perm: Perm }[] = [
   { href: "/admin/podderzhka", label: "Поддержка", perm: "support" },
   { href: "/admin/triggery", label: "Триггеры", perm: "triggers" },
   { href: "/admin/promokody", label: "Промокоды", perm: "promo" },
+  { href: "/admin/prazdniki", label: "Праздники", perm: "holidays" },
   { href: "/admin/otzyvy", label: "Отзывы", perm: "reviews" },
   { href: "/admin/seo", label: "SEO и блог", perm: "seo" },
   { href: "/admin/katalog", label: "Каталог и цены", perm: "catalog" },

@@ -7,6 +7,8 @@ import { cfg } from "./settings";
 import { sampleUrl } from "./obrazec";
 import { getApprovedReviews, type PublicStory } from "./catalog";
 import { OCCASIONS as OCCASION_KEYS, SEGMENTS, type AudienceKey } from "../content/profiles";
+import { getNearestHoliday } from "./holidays";
+import { dayFromIso, dayOf, fmtDay, mskToday, orderDeadline, type Day } from "./holidays-core";
 
 /** Посадочные аудиторий: /dlya/<slug>. ?dlya= в каталоге и анкете принимает и slug, и ключ (CHILD). */
 export const AUDIENCE_PAGES: { slug: string; key: AudienceKey; nav: string; h1: string; lead: string; title: string; description: string; hero: string }[] = [
@@ -109,6 +111,8 @@ export interface Season {
 
 const SEASON_COPY: Record<string, { nav: string; cta: string; holiday?: [number, number] }> = {
   "novyj-god": { nav: "Новый год", cta: "Выбрать новогоднюю книгу", holiday: [12, 31] },
+  rozhdestvo: { nav: "Рождество", cta: "Выбрать книгу к Рождеству", holiday: [1, 7] },
+  "staryj-novyj-god": { nav: "Старый Новый год", cta: "Выбрать книгу к Старому Новому году", holiday: [1, 14] },
   "den-vlyublennyh": { nav: "14 февраля", cta: "Выбрать книгу ко Дню влюблённых", holiday: [2, 14] },
   "23-fevralya": { nav: "23 Февраля", cta: "Выбрать книгу к 23 Февраля", holiday: [2, 23] },
   "8-marta": { nav: "8 Марта", cta: "Выбрать книгу к 8 Марта", holiday: [3, 8] },
@@ -130,41 +134,43 @@ export function seasonByDate(d = new Date()): string | null {
   return null;
 }
 
-/** Рабочие дни назад от даты (без учёта праздников). */
-function minusWorkdays(d: Date, n: number) {
-  const x = new Date(d);
-  while (n > 0) {
-    x.setDate(x.getDate() - 1);
-    if (x.getDay() !== 0 && x.getDay() !== 6) n--;
-  }
-  return x;
+/** Строка о сроке печати к празднику по готовой дате и последнему дню заказа (дни — по Москве, holidays-core). */
+function deadlineLine(occasion: string, deadline: Day, now: Date): string {
+  const label = OCCASION_KEYS.find((o) => o.key === occasion)?.label ?? "празднику";
+  if (mskToday(now) > deadline) return `Печатная книга к празднику может не успеть — PDF придёт сразу после оплаты, его можно распечатать дома.`;
+  const what = occasion === "novyj-god" ? "к Новому году" : `к празднику «${label}»`;
+  return `Чтобы печатная книга успела ${what}, закажите до ${fmtDay(deadline)}. PDF — сразу после оплаты.`;
 }
 
-const fmtDay = (d: Date) => d.toLocaleDateString("ru-RU", { day: "numeric", month: "long" });
-
+/**
+ * Срок печати для повода с известной датой (SEASON_COPY): ручная дата из настроек или расчёт —
+ * доставка 7 дней + печать 5 рабочих дней (выходные и праздники РФ не считаются).
+ */
 export function printDeadlineLine(occasion: string, manual = "", now = new Date()): string | null {
   const copy = SEASON_COPY[occasion];
   if (!copy?.holiday) return null;
   const [hm, hd] = copy.holiday;
-  let year = now.getFullYear();
-  if (new Date(year, hm - 1, hd, 23, 59) < now) year++;
-  const holiday = new Date(year, hm - 1, hd);
-  const deadline = /^\d{4}-\d{2}-\d{2}$/.test(manual) ? new Date(`${manual}T23:59:00`) : minusWorkdays(new Date(holiday.getTime() - 7 * 86400_000), 5);
-  const label = OCCASION_KEYS.find((o) => o.key === occasion)?.label ?? "празднику";
-  if (now > deadline) return `Печатная книга к празднику может не успеть — PDF придёт сразу после оплаты, его можно распечатать дома.`;
-  const what = occasion === "novyj-god" ? "к Новому году" : `к празднику «${label}»`;
-  return `Чтобы печатная книга успела ${what}, закажите до ${fmtDay(deadline)}. PDF — сразу после оплаты.`;
+  const today = mskToday(now);
+  let year = new Date(today * 86400_000).getUTCFullYear();
+  if (dayOf(year, hm, hd) < today) year++;
+  const deadline = dayFromIso(manual) ?? orderDeadline(dayOf(year, hm, hd), null);
+  return deadlineLine(occasion, deadline, now);
 }
 
 export async function getSeason(now = new Date()): Promise<Season | null> {
   const s = await cfg("season");
   if (s.mode === "off") return null;
-  const key = s.mode === "manual" ? s.occasion : seasonByDate(now);
+  // auto: ближайший праздник из раздела «Праздники» (в окне «показывать за N дней»), иначе — по дате, как раньше
+  const near = s.mode === "auto" ? await getNearestHoliday(now).catch(() => null) : null;
+  const key = s.mode === "manual" ? s.occasion : (near?.calc.holiday.occasionKey ?? seasonByDate(now));
   if (!key) return null;
   const o = OCCASION_KEYS.find((x) => x.key === key);
-  if (!o) return null;
-  const copy = SEASON_COPY[key] ?? { nav: o.label, cta: `Выбрать книгу: ${o.label.toLowerCase()}` };
-  return { occasion: key, label: o.label, nav: copy.nav, cta: copy.cta, href: `/povod/${key}`, printLine: printDeadlineLine(key, s.printDeadline, now) };
+  if (!o && !near) return null;
+  const label = near?.calc.holiday.title ?? o!.label;
+  const copy = SEASON_COPY[key] ?? { nav: label, cta: `Выбрать книгу: ${label.toLowerCase()}` };
+  const manual = dayFromIso(s.printDeadline);
+  const printLine = near?.calc.deadline != null ? deadlineLine(key, manual ?? near.calc.deadline, now) : printDeadlineLine(key, s.printDeadline, now);
+  return { occasion: key, label, nav: copy.nav, cta: copy.cta, href: o ? `/povod/${key}` : "/prazdniki", printLine };
 }
 
 // ───────── Рейтинг и подписка ─────────

@@ -37,6 +37,8 @@ export interface QuizStyle {
   title: string;
   description: string;
   audiences?: AudienceKey[];
+  /** Пробный стиль — в карточке значок «пробный». */
+  trial?: boolean;
 }
 export interface QuizMood {
   id: string;
@@ -817,6 +819,7 @@ export function QuizWizard({
                     <img src={sampleUrl({ ...previewLook, style: s.key, mood: undefined })} alt="" loading={i < 4 ? "eager" : "lazy"} width={160} height={160} />
                     <strong>{s.title}</strong>
                     {i < 2 && story?.artStyles.includes(s.key) && <span className="badge badge--gold">лучший выбор</span>}
+                    {s.trial && <span className="badge badge--trial" title="Новый стиль: пробуем вместе с вами">пробный</span>}
                   </button>
                 ))}
               </div>

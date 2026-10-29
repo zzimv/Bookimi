@@ -6,6 +6,7 @@
 import { artStyle } from "../../content/art/index";
 import { renderDemoSpread } from "../../content/art/render";
 import { moodPrompt } from "../../content/art/mood";
+import { HUMAN_FACE_GUARD } from "../../content/art/trial";
 import { ART_STYLE_OWNERS, type ArtStyle, type DemoExtra, type DemoLook, type HeroKind, type Mood } from "../../content/types";
 import { authHeader, ensureGpuUp, touchGpu } from "./gpu";
 
@@ -98,6 +99,33 @@ function identityFor(kind: HeroKind, age: number, gender: string | undefined, wi
   }
 }
 
+/**
+ * Общая фраза «тот же человек — другая техника». Добавляется к промпту КАЖДОГО стиля (свои и чужие аудитории,
+ * пробные) — и в сценах, и в листе персонажа. Для питомца — «то же животное».
+ */
+export const IDENTITY_CLAUSE =
+  "Use the uploaded image as a strict reference for the person. Depict the same person as a clearly human character. Preserve their recognizable identity, facial features, age, hairstyle, expression and body proportions. Apply a visual style transformation only. Do not turn the person into an animal, mascot, toy or another character, and never replace them with an existing cartoon, film or book character. Keep natural human anatomy, natural human eyes and recognizable facial features.";
+export const IDENTITY_CLAUSE_NO_PHOTO =
+  "Follow the hero description strictly and draw the same person on every page. Depict them as a clearly human character with natural human anatomy and natural human eyes. Apply a visual style only; do not turn the person into an animal, mascot, toy or another character, and never replace them with an existing cartoon, film or book character.";
+export const PET_IDENTITY_CLAUSE =
+  "Use the uploaded image as a strict reference for the animal. Depict the same animal: same species, breed traits, fur color and markings, eye color and body proportions. Apply a visual style transformation only. Do not turn the pet into a different animal, a mascot, a toy, a human or another character, and never replace it with an existing cartoon character.";
+export const PET_IDENTITY_CLAUSE_NO_PHOTO =
+  "Follow the pet description strictly and draw the same animal on every page: same species, breed traits, fur color and markings. Apply a visual style only; do not turn the pet into a different animal, a mascot, a toy, a human or another character.";
+
+/** Общий негатив сохранения личности (добавляется ко всем стилям). */
+const IDENTITY_NEGATIVE: Record<"human" | "pet", string> = {
+  human: "different person, another character, existing cartoon character, person turned into an animal, animal muzzle on a person, animal ears on a person, mascot costume, toy-like face",
+  pet: "different animal, different breed, changed fur markings, human face on the animal, existing cartoon character, plush toy",
+};
+
+export function identityClause(kind: HeroKind, withPhoto: boolean) {
+  if (kind === "pet") return withPhoto ? PET_IDENTITY_CLAUSE : PET_IDENTITY_CLAUSE_NO_PHOTO;
+  return withPhoto ? IDENTITY_CLAUSE : IDENTITY_CLAUSE_NO_PHOTO;
+}
+
+/** Анти-искажения лица человека (HUMAN_FACE_GUARD пробных стилей) питомцу не нужны: у него свои морда и уши. */
+const PET_FACE_GUARD_DROP = HUMAN_FACE_GUARD.split(",").map((t) => t.trim().toLowerCase());
+
 /** Слова негатива, которые спорят с видом героя (стиль одной аудитории для героя другой). */
 const NEG_CONFLICTS: Record<HeroKind, string[]> = {
   child: ["human body", "human hands", "animal standing upright like a person", "humanized clothing"],
@@ -118,15 +146,23 @@ export function stylePrompt(style: ArtStyle | null, styleId: string, kind: HeroK
 
 export function filterNegative(negative: string, kind: HeroKind, scene: string) {
   const drop = new Set(NEG_CONFLICTS[kind]);
+  if (kind === "pet") for (const t of PET_FACE_GUARD_DROP) drop.add(t);
   if (COSTUME_SCENE.test(scene)) {
     drop.add("costumes");
     drop.add("humanized clothing");
     drop.add("superhero costumes");
   }
-  return negative
+  const seen = new Set<string>();
+  return [negative, IDENTITY_NEGATIVE[kind === "pet" ? "pet" : "human"]]
+    .join(",")
     .split(",")
     .map((t) => t.trim())
-    .filter((t) => t && !drop.has(t.toLowerCase()))
+    .filter((t) => {
+      const k = t.toLowerCase();
+      if (!t || drop.has(k) || seen.has(k)) return false;
+      seen.add(k);
+      return true;
+    })
     .join(", ");
 }
 
@@ -147,6 +183,7 @@ export function scenePrompt(job: SceneJob): { prompt: string; negative: string }
     main?.description ? `Main hero details: ${main.description}.` : "",
     extras ? `Also in the scene: ${extras}.` : "",
     `Style: ${st.prompt}`,
+    identityClause(kind, withPhoto),
     "Leave calm space at the edges for page cropping.",
   ]
     .filter(Boolean)
@@ -186,7 +223,7 @@ export class GpuImageProvider implements ImageProvider {
     const views = kind === "pet" ? "front view, three-quarter view, side view, full body standing on four legs" : "front view, three-quarter view, side profile, full body standing";
     return this.call("/v1/edit", {
       images: hero.photos.map((p) => p.toString("base64")),
-      prompt: `Character reference sheet of the hero from the photo. Four views on one plain light background: ${views}. ${identityFor(kind, job.age, job.gender, true)} ${hero.description}. Style: ${st.prompt}`,
+      prompt: `Character reference sheet of the hero from the photo. Four views on one plain light background: ${views}. ${identityFor(kind, job.age, job.gender, true)} ${hero.description}. Style: ${st.prompt} ${identityClause(kind, true)}`,
       negative: filterNegative(st.negative, kind, ""),
       seed: 1,
     });

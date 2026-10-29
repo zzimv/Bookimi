@@ -59,6 +59,13 @@ const SECTIONS: { key: SettingKey; title: string; note?: string; fields: Field[]
     ],
   },
   {
+    key: "art",
+    title: "Стили иллюстраций",
+    fields: [
+      { p: "showTrialStyles", label: "Показывать пробные стили", t: "bool", hint: "Пробные стили (значок «пробный») появятся в анкете и будут приниматься при заказе. Включайте, когда проверите их на GPU." },
+    ],
+  },
+  {
     key: "limits",
     title: "Лимиты",
     fields: [
@@ -121,6 +128,7 @@ const SECTIONS: { key: SettingKey; title: string; note?: string; fields: Field[]
       { p: "fallbackRub.cdek_courier", label: "Тариф СДЭК курьер, ₽", t: "number" },
       { p: "fallbackRub.pochta", label: "Тариф Почта, ₽", t: "number" },
       { p: "fallbackRub.yandex", label: "Тариф Яндекс, ₽", t: "number" },
+      { p: "distanceMarkup", label: "Тарифы без API — с поправкой на удалённость города", t: "bool" },
     ],
   },
   {
@@ -165,12 +173,20 @@ const SECTIONS: { key: SettingKey; title: string; note?: string; fields: Field[]
       { p: "smsLogin", label: "Вход по SMS-коду на телефон", t: "bool", hint: "Нужен SMS_PROVIDER. Выключено — код только на почту." },
     ],
   },
-  { key: "promoBar", title: "Полоса промо сверху", fields: [{ p: "enabled", label: "Показывать", t: "bool" }, { p: "text", label: "Текст" }] },
+  {
+    key: "promoBar",
+    title: "Полоса промо сверху",
+    fields: [
+      { p: "enabled", label: "Показывать", t: "bool" },
+      { p: "holidayAuto", label: "Ближайший праздник вместо текста", t: "bool", hint: "Пока печать успевает к празднику из раздела «Праздники»: «Новый год: осталось 63 дня. Печатную книгу успеем, если заказать до 17 декабря». Выключите — всегда текст ниже." },
+      { p: "text", label: "Текст" },
+    ],
+  },
   {
     key: "season",
     title: "Сезон на главной",
     fields: [
-      { p: "mode", label: "Сезон", t: "select", options: [["auto", "По дате (ноябрь–декабрь — Новый год и т. д.)"], ["manual", "Выбранный повод"], ["off", "Без сезона"]] },
+      { p: "mode", label: "Сезон", t: "select", options: [["auto", "Ближайший праздник из раздела «Праздники» (иначе — по дате)"], ["manual", "Выбранный повод"], ["off", "Без сезона"]] },
       { p: "occasion", label: "Повод (для «Выбранный повод»), например novyj-god" },
       { p: "printDeadline", label: "Последний день заказа печатной книги к празднику (ГГГГ-ММ-ДД)", hint: "Пусто — посчитаем сами: печать 5 рабочих дней + доставка до 7 дней." },
     ],

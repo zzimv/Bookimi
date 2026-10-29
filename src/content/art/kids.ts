@@ -127,10 +127,10 @@ export const KIDS_ART_STYLES: ArtStyle[] = [
     id: "pen-ink-1920s",
     title: "Старый лес",
     description:
-      "Тонкий рисунок пером и тушью с лёгкой штриховкой и прозрачной подкраской, как в книжках 1920-х: старый лес, поляна, мостик через ручей, мягкие плюшевые звери и добрый юмор.",
+      "Тонкий рисунок пером и тушью с лёгкой штриховкой и прозрачной подкраской, как в книжках 1920-х: старый лес, поляна, тропинка у ручья, добрые лесные жители и тихий юмор.",
     audiences: ["CHILD", "ADULT", "PET"],
     prompt: prompt(
-      "Vintage 1920s storybook illustration. Fine pen and black ink drawing with light hatching and cross-hatching, slightly sketchy searching line, delicate pale watercolor tint over the ink (muted sage green, dusty blue, ochre and faded rose), lots of air and unpainted cream paper. English countryside setting: an old forest with gnarled trees, a sunny clearing, a small wooden footbridge over a brook. Soft plush-like toy animals as companions, gentle good-natured humor, calm unhurried composition.",
+      "Vintage 1920s storybook illustration. Fine pen and black ink drawing with light hatching and cross-hatching, slightly sketchy searching line, delicate pale watercolor tint over the ink (muted sage green, dusty blue, ochre and faded rose), lots of air and unpainted cream paper. Countryside setting: an old mixed forest with gnarled trees, a sunny clearing, a path along a stream. Small realistic woodland animals as companions, gentle good-natured humor, calm unhurried composition.",
     ),
     negative: neg("modern digital look, bright saturated colors, thick cartoon outlines, vector art, anime style, heavy black fills, glossy shading"),
     demo: { palette: { paper: "#f4ecd8", ink: "#2e2a26", accents: ["#9db08a", "#8fa9b8", "#d6b46a", "#c99a8c"] }, line: "sketch", texture: "grain", filter: "wobble" },

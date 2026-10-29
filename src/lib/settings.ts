@@ -33,6 +33,8 @@ export const DEFAULTS = {
     freeShippingBooks: 2,
     fallbackRub: { cdek_pvz: 290, cdek_courier: 490, pochta: 350, yandex: 450 } as Record<string, number>,
     fallbackDays: { cdek_pvz: [2, 7], cdek_courier: [2, 7], pochta: [7, 14], yandex: [1, 4] } as Record<string, [number, number]>,
+    /** Тарифы без API: надбавка/скидка по удалённости города от склада (пояса — src/lib/ship-zones.ts). */
+    distanceMarkup: true,
   },
   limits: {
     dailySpendRub: 3000,
@@ -93,7 +95,8 @@ export const DEFAULTS = {
     ],
   },
   referral: { newbiePct: 10, bonusPct: 10, delayDays: 14 },
-  promoBar: { enabled: true, text: "Бесплатное превью книги за 5 минут — без регистрации" },
+  /** holidayAuto: пока печать успевает к ближайшему празднику (раздел «Праздники»), полоса говорит о нём; выкл. — всегда текст ниже. */
+  promoBar: { enabled: true, text: "Бесплатное превью книги за 5 минут — без регистрации", holidayAuto: true },
   /** Сезонная кнопка на главной и пункт меню. mode: auto — по дате (ноябрь–декабрь — Новый год…), manual — повод ниже, off — без сезона. */
   season: {
     mode: "auto" as "auto" | "manual" | "off",
@@ -104,6 +107,8 @@ export const DEFAULTS = {
   /** Подписка на главной «−300 ₽ на первый заказ». Блок виден, только если указан активный промокод. */
   newsletter: { promoCode: "", discountText: "−300 ₽ на первый заказ" },
   flags: { printEnabled: true, photoUploadEnabled: false, demoMode: false },
+  /** Стили картинок. Пробные (status "trial" в ART_STYLE_IDS) на сайте скрыты, пока showTrialStyles = false; в демо видны всегда. */
+  art: { showTrialStyles: false },
 };
 
 export type Settings = typeof DEFAULTS;

@@ -8,6 +8,7 @@ import { artStyle as artStyleById, extraDrawKind, heroDrawer, themeFor } from ".
 import { applyMood } from "./mood";
 import { MOODS } from "../moods";
 import { drawDeco, escapeXml, rnd } from "./shared";
+import { FIGURE_FILTERS, fxBackdrop, fxDefs, fxLayers } from "./fx";
 
 const DEFAULT_STYLE: ArtStyle["demo"] = { palette: { paper: "#fbf8f1", ink: "#3a3a44", accents: ["#d9534f", "#3e8ed0", "#f0ad4e", "#5cb85c"] }, line: "none", texture: "none" };
 
@@ -129,7 +130,9 @@ export function renderDemoSpread(o: DemoRenderOpts): string {
   const H = 1024;
   const r = rnd(idx * 97 + o.plot.theme.length * 13 + o.plot.slug.length * 7 + 7);
   const ctx: DemoSceneCtx = { W, H, index: idx, theme, style, rnd: r };
-  const bg = theme.scene ? theme.scene(ctx) : standardBackground(ctx);
+  const bgTheme = theme.scene ? theme.scene(ctx) : standardBackground(ctx);
+  // Обработка фона стилем (пробные стили: размытый живописный фон, контур тушью, выбеленный…) — art/fx.ts
+  const bg = style.backdrop ? fxBackdrop(style, bgTheme, W, H) : bgTheme;
 
   const heroKind = o.hero.kind ?? o.plot.heroKind;
   const left = idx % 2 === 1;
@@ -162,10 +165,12 @@ export function renderDemoSpread(o: DemoRenderOpts): string {
   const hero = heroDrawer(heroKind)({ kind: heroKind, look: o.hero, x: heroX, y: H * 0.6, scale: heroScale, style, index: idx, flip: left && heroKind === "pet" });
 
   // Фильтр стиля — только на фигуры: на фоне он рвёт края кадра
-  const fx = style.filter && ["wobble", "posterize", "soft"].includes(style.filter) ? ` filter="url(#${style.filter})"` : "";
-  const art = `${bg}<g${fx}>${extras.join("")}${hero}</g>${textureOverlay(style, W, H)}`;
+  const fx = style.filter && ["wobble", "posterize", "soft", ...FIGURE_FILTERS].includes(style.filter) ? ` filter="url(#${style.filter})"` : "";
+  const extraFx = Boolean(style.backdrop || style.overlays?.length || (style.filter && (FIGURE_FILTERS as readonly string[]).includes(style.filter)));
+  const layers = style.overlays?.length ? fxLayers(style, { W, H, heroX, feet: heroFeet, scale: heroScale, index: idx }) : { behind: "", above: "" };
+  const art = `${bg}${layers.behind}<g${fx}>${extras.join("")}${hero}</g>${layers.above}${textureOverlay(style, W, H)}`;
   let svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${H}" width="${W}" height="${H}">
-  <defs><linearGradient id="sky" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="${theme.sky[0]}"/><stop offset="1" stop-color="${theme.sky[1]}"/></linearGradient>${textureDefs(style)}</defs>
+  <defs><linearGradient id="sky" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="${theme.sky[0]}"/><stop offset="1" stop-color="${theme.sky[1]}"/></linearGradient>${textureDefs(style)}${extraFx ? fxDefs(style, W, H) : ""}</defs>
   ${art}
 </svg>`;
   svg = applyMood(svg, resolveMood(o.mood));

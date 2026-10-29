@@ -21,6 +21,7 @@ const NAV = [
   { href: "/admin/zakazy", label: "Заказы" },
   { href: "/admin/perevody", label: "Переводы" },
   { href: "/admin/promokody", label: "Промокоды" },
+  { href: "/admin/prazdniki", label: "Праздники" },
   { href: "/admin/katalog", label: "Каталог и цены" },
   { href: "/admin/nastrojki", label: "Настройки" },
   { href: "/admin/zhurnal", label: "Журнал" },

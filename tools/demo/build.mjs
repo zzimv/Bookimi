@@ -94,6 +94,11 @@ const demoPlugin = {
     b.onResolve({ filter: /\.css$/ }, () => ({ path: shim("empty.cjs") }));
     b.onLoad({ filter: /src[\\/]content[\\/]text-styles\.ts$/ }, (a) => ({ contents: textStylesStub(readFileSync(a.path, "utf8")), loader: "ts", resolveDir: dirname(a.path) }));
     b.onResolve({ filter: /^zod$/ }, () => ({ path: shim("zod.ts") }));
+    // Офлайн-список городов (доставка): в демо — 600 крупнейших (строки уже по убыванию населения), сжатым, как сюжеты
+    b.onLoad({ filter: /src[\\/]lib[\\/]cities\.json$/ }, (a) => {
+      const c = JSON.parse(readFileSync(a.path, "utf8"));
+      return { contents: `import { unpack } from ${JSON.stringify(shim("unpack.ts"))};\nexport default unpack(${JSON.stringify(pack({ ...c, rows: c.rows.slice(0, 600) }))});`, loader: "ts", resolveDir: dirname(a.path) };
+    });
     b.onLoad({ filter: /src[\\/]content[\\/](art[\\/][a-z]+|moods)\.ts$/ }, (a) => ({ contents: stripEnglish(readFileSync(a.path, "utf8")).replace(MOOD_PROMPTS, '$1: ""'), loader: "ts", resolveDir: dirname(a.path) }));
     b.onLoad({ filter: /src[\\/]content[\\/]profiles\.ts$/ }, async (a) => ({ contents: await packedData(a.path, readFileSync(a.path, "utf8").replace(SEGMENT_PROSE, '$1: ""').replace(SEGMENT_LISTS, "$1: []")), loader: "ts", resolveDir: dirname(a.path) }));
     b.onLoad({ filter: /src[\\/]content[\\/]plots[\\/][a-z]+\.ts$/ }, async (a) => ({ contents: await packedPlots(a.path), loader: "ts", resolveDir: dirname(a.path) }));

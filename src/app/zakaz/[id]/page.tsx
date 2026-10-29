@@ -81,6 +81,7 @@ export default async function Page({ params }: { params: Promise<{ id: string }>
           {print && order.shipment && (
             <p className="small muted" style={{ marginTop: 12 }}>
               Доставка: {METHOD_TITLES[order.shipment.method as keyof typeof METHOD_TITLES] ?? order.shipment.method}
+              {order.shipment.pvzAddress && <> ({order.shipment.pvzAddress})</>}
               {order.readyDate && <> · печать к {ruDate(order.readyDate)}</>}
               {order.shipment.etaDate && <> · у вас ориентировочно {ruDate(order.shipment.etaDate)}</>}
             </p>

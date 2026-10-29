@@ -13,7 +13,7 @@
 | «Кто печатает книгу?», форматы, допы, доставка, промокод, расчёт суммы на сервере | `src/components/book/Checkout.tsx`, `src/lib/pricing.ts`, `src/lib/orders.ts` |
 | Оплата: СБП-QR, перевод с подтверждением, ЮKassa (выкл.), чеки НПД | `src/lib/payments.ts`, `src/lib/npd.ts`, `src/app/zakaz` |
 | Генерация: текст (YandexGPT, имя не уходит наружу), иллюстрации (Qwen на своём GPU), PDF, аудио | `src/lib/gen/*`, `src/lib/pdf.ts`, `tools/gpu-server` |
-| Печать (email/API типографии), доставка (СДЭК API + тарифы) | `src/lib/print.ts`, `src/lib/shipping.ts` |
+| Печать (email/API типографии), доставка (СДЭК API + тарифы), подсказки города и пункты выдачи (`/api/geo/*`), адресная книга | `src/lib/print.ts`, `src/lib/shipping.ts`, `src/lib/cities.ts`, `src/lib/delivery.ts` |
 | Кабинет покупателя | `src/app/kabinet` |
 | Кабинет администратора: роли, 2FA, дашборд, заказы, переводы, триггеры, каталог, настройки, журнал | `src/app/admin` |
 | Уведомления: email, Telegram, MAX (WhatsApp — выкл.) | `src/lib/notify.ts` |

@@ -17,6 +17,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     { url: `${base}/skazki`, lastModified: now, changeFrequency: "weekly", priority: 0.9 },
     ...AUDIENCE_PAGES.map((a) => ({ url: `${base}/dlya/${a.slug}`, lastModified: now, changeFrequency: "weekly" as const, priority: 0.9 })),
     { url: `${base}/povody`, lastModified: now, changeFrequency: "weekly", priority: 0.8 },
+    { url: `${base}/prazdniki`, lastModified: now, changeFrequency: "daily", priority: 0.8 },
     ...occasions.map((o) => ({ url: `${base}/povod/${o.slug}`, lastModified: now, changeFrequency: "weekly" as const, priority: 0.9 })),
     ...stories.filter((s) => s.slug !== SVOYA_IDEYA).map((s) => ({ url: `${base}/skazki/${s.slug}`, lastModified: now, changeFrequency: "weekly" as const, priority: 0.8 })),
     ...AGE_PAGES.map((a) => ({ url: `${base}/vozrast/${a.slug}`, lastModified: now, changeFrequency: "monthly" as const, priority: 0.7 })),

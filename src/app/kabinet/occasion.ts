@@ -1,5 +1,6 @@
 // «Следующий повод» для кабинета: ближайший день рождения героя, Новый год или праздник,
 // под который покупатель уже делал книгу. Чистая функция — без БД, тестируется.
+import { mskToday, orderDeadline } from "@/lib/holidays-core";
 
 export interface OccasionHint {
   key: string;
@@ -11,7 +12,8 @@ export interface OccasionHint {
 }
 
 const DAY = 86400_000;
-const PRINT_DAYS = 11; // 3–5 рабочих дней печати + доставка ≈ полторы недели
+/** Последний день заказа печати — тот же расчёт, что на /prazdniki: доставка 7 дн. + печать 5 раб. дн. (праздники РФ не в счёт). */
+const printDeadline = (date: Date) => new Date(orderDeadline(mskToday(date), null) * DAY + 6 * 3600_000); // 09:00 МСК
 
 const mskDate = (y: number, m: number, d: number) => new Date(Date.UTC(y, m - 1, d, 9 - 3)); // 09:00 МСК
 const fmt = (d: Date) => d.toLocaleDateString("ru-RU", { day: "numeric", month: "long", timeZone: "Europe/Moscow" });
@@ -32,7 +34,7 @@ function nthSunday(y: number, m: number, n: number) {
 /** Праздники года: ключ совпадает с ключами поводов в анкете. */
 function holidays(y: number): { key: string; title: string; date: Date; deadline?: Date; window: number; universal?: boolean }[] {
   return [
-    { key: "novyj-god", title: "Новый год", date: mskDate(y, 12, 31), deadline: mskDate(y, 12, 20), window: 75, universal: true },
+    { key: "novyj-god", title: "Новый год", date: mskDate(y, 12, 31), window: 75, universal: true },
     { key: "23-fevralya", title: "23 Февраля", date: mskDate(y, 2, 23), window: 40 },
     { key: "8-marta", title: "8 Марта", date: mskDate(y, 3, 8), window: 40 },
     { key: "vypusknoj-v-sadu", title: "Выпускной в детском саду", date: mskDate(y, 5, 25), window: 45 },
@@ -77,7 +79,7 @@ export function nextOccasion(opts: {
     if (next.getTime() < now.getTime() - DAY) next = mskDate(y + 1, m, d);
     const days = Math.ceil((next.getTime() - now.getTime()) / DAY);
     if (days < 0 || days > 60) continue;
-    const deadline = new Date(next.getTime() - PRINT_DAYS * DAY);
+    const deadline = printDeadline(next);
     const who = b.nameGen ?? b.name;
     out.push({
       key: "den-rozhdeniya",
@@ -97,7 +99,7 @@ export function nextOccasion(opts: {
       if (!h.universal && !past.has(h.key)) continue;
       const days = Math.ceil((h.date.getTime() - now.getTime()) / DAY);
       if (days < 0 || days > h.window) continue;
-      const deadline = h.deadline ?? new Date(h.date.getTime() - PRINT_DAYS * DAY);
+      const deadline = h.deadline ?? printDeadline(h.date);
       out.push({
         key: h.key,
         title: h.title,

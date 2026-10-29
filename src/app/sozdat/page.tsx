@@ -4,6 +4,8 @@ import { getStories } from "@/lib/catalog";
 import { db, hasDatabase } from "@/lib/db";
 import { currentUser } from "@/lib/auth";
 import { ART_STYLE_IDS, OCCASIONS } from "@/content/profiles";
+import { visibleArtStyleIds } from "@/content/art/index";
+import { cfg } from "@/lib/settings";
 import { audienceFromParam, SVOYA_IDEYA } from "@/lib/storefront";
 import { moodSwatch } from "@/lib/mood-swatch";
 import { MOODS } from "@/content/moods";
@@ -11,16 +13,27 @@ import { MOODS } from "@/content/moods";
 export const metadata: Metadata = { title: "Создать книгу", robots: { index: false } };
 export const dynamic = "force-dynamic";
 
-/** Стили для анкеты: из админки (включён/выключен, название), аудитории — из профилей. */
+/**
+ * Стили для анкеты: из админки (включён/выключен, название), аудитории — из профилей.
+ * Пробные стили (status "trial") — только при настройке art.showTrialStyles, всегда в конце и со значком.
+ */
 async function quizStyles() {
-  const base = ART_STYLE_IDS.map((s) => ({ key: s.id, title: s.title, description: s.oneLine, audiences: s.audiences }));
+  const showTrial = (await cfg("art")).showTrialStyles;
+  const visible = visibleArtStyleIds(showTrial);
+  const toQuiz = (s: (typeof ART_STYLE_IDS)[number]) => ({ key: s.id, title: s.title, description: s.oneLine, audiences: s.audiences, trial: s.status === "trial" || undefined });
+  const base = visible.map(toQuiz);
+  const trial = visible.filter((s) => s.status === "trial").map(toQuiz);
   if (!hasDatabase) return base;
   try {
     const rows = await db.illustrationStyle.findMany({ orderBy: { sortOrder: "asc" }, select: { key: true, title: true, description: true, isActive: true } });
     if (!rows.length) return base;
-    return rows
-      .filter((r) => r.isActive)
-      .map((r) => ({ key: r.key, title: r.title, description: r.description, audiences: ART_STYLE_IDS.find((s) => s.id === r.key)?.audiences }));
+    const isTrial = new Set(trial.map((t) => t.key));
+    return [
+      ...rows
+        .filter((r) => r.isActive && !isTrial.has(r.key) && visible.some((s) => s.id === r.key))
+        .map((r) => ({ key: r.key, title: r.title, description: r.description, audiences: ART_STYLE_IDS.find((s) => s.id === r.key)?.audiences })),
+      ...trial,
+    ];
   } catch {
     return base;
   }

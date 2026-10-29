@@ -7,6 +7,9 @@ import { cfg } from "@/lib/settings";
 import { declineName } from "@/lib/declension";
 import { CopyField } from "./Forms";
 import { nextOccasion } from "./occasion";
+import { HeroBirthdays } from "./Birthdays";
+import { upcomingBirthdays } from "@/lib/holidays-core";
+import { getLeadTimes } from "@/lib/holidays";
 import { journeyLine } from "../zakaz/journey";
 import { heroAcc, heroOf } from "../zakaz/journey-data";
 
@@ -37,7 +40,7 @@ export default async function Page() {
       orderBy: { createdAt: "desc" },
       include: { pages: { where: { index: 0 } }, story: { select: { coverUrl: true } } },
     }),
-    db.hero.findMany({ where: { userId: user.id, role: "main", birthDate: { not: null } }, select: { name: true, gender: true, birthDate: true } }),
+    db.hero.findMany({ where: { userId: user.id, role: "main", birthDate: { not: null } }, select: { id: true, name: true, gender: true, birthDate: true }, orderBy: { createdAt: "desc" } }),
     db.order.findFirst({ where: { userId: user.id, contactName: { not: null } }, orderBy: { createdAt: "desc" }, select: { contactName: true } }),
     cfg("referral"),
     db.order.findMany({
@@ -69,6 +72,14 @@ export default async function Page() {
     if (h.name && bd && !isNaN(+bd) && !bdays.has(h.name)) bdays.set(h.name, { name: h.name, nameGen: gen(h.name, h.gender), date: bd });
   }
   const hint = nextOccasion({ birthdays: [...bdays.values()], pastOccasions: past });
+  // «Ближайшие дни рождения ваших героев» — сохранённые герои (с id — анкета подставит героя) и герои книг
+  const heroIds = new Map(heroes.map((h) => [h.name, h.id]));
+  const birthdays = upcomingBirthdays(
+    [...bdays.values()].map((b) => ({ id: heroIds.get(b.name), name: b.name, birthDate: b.date })),
+    new Date(),
+    60,
+    await getLeadTimes(),
+  );
 
   // Строка «как идёт заказ» под книгой
   const orderLine = new Map<string, string>();
@@ -116,6 +127,8 @@ export default async function Page() {
           <Link className="btn btn--gold btn--sm" href={hint.href}>Выбрать сказку</Link>
         </aside>
       )}
+
+      <HeroBirthdays list={birthdays} hrefFor={(b) => `/sozdat?povod=den-rozhdeniya${b.id ? `&geroj=${b.id}` : ""}`} />
 
       <h2 className="cab-h2">Мои книги</h2>
       {books.length === 0 ? (

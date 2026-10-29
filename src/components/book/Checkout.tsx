@@ -3,6 +3,9 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import { api, goal, rub } from "@/lib/client";
+import { addressError, cleanAddress, type Prefill } from "@/lib/delivery";
+import { CityInput } from "./CityInput";
+import { PvzPicker } from "./PvzPicker";
 
 export interface Fmt { key: string; kind: "PDF" | "PRINT"; title: string; priceRub: number; widthMm: number | null; heightMm: number | null; cover: string; pages: number }
 export interface Add { key: string; kind: string; title: string; description: string; priceRub: number | null; percentOff: number | null; requiresPrint: boolean }
@@ -20,6 +23,20 @@ const PDF_FILES = [
   ["Копицентр 21×21 см", "300 dpi, вылеты 3 мм"],
   ["Копицентр 15×15 см", "мини-формат"],
 ];
+
+interface Addr {
+  city: string;
+  cityCode?: number;
+  region?: string;
+  postalCode: string;
+  street: string;
+  flat: string;
+  comment: string;
+  pvzCode: string;
+  pvzAddress: string;
+}
+const EMPTY_ADDR: Addr = { city: "", postalCode: "", street: "", flat: "", comment: "", pvzCode: "", pvzAddress: "" };
+const METHOD_LABEL: Record<string, string> = { cdek_pvz: "СДЭК до пункта", cdek_courier: "Курьер СДЭК", pochta: "Почта России", yandex: "Яндекс Доставка" };
 
 const SIZES = [
   { id: "mini", label: "Мини 15×15 см" },
@@ -41,6 +58,8 @@ export function Checkout(props: {
   printEnabled: boolean;
   contact: { name: string; phone: string; email: string };
   pdfPaid: number;
+  /** Получатель и адрес «из прошлого раза» (src/lib/delivery.ts → pickPrefill). */
+  prefill?: Prefill;
 }) {
   const router = useRouter();
   const [who, setWho] = useState<"self" | "bookimi">(props.printEnabled ? props.initialWho : "self");
@@ -49,9 +68,13 @@ export function Checkout(props: {
   const [cover, setCover] = useState<"soft" | "hard">(defaultFmt?.key.endsWith("soft") ? "soft" : "hard");
   const [addons, setAddons] = useState<string[]>([]);
   const [showAllAddons, setShowAllAddons] = useState(false);
-  const [method, setMethod] = useState(props.methods.find((m) => m.key !== "pickup")?.key ?? props.methods[0]?.key ?? "cdek_pvz");
-  const [addr, setAddr] = useState({ city: "", street: "", postalCode: "", pvzCode: "" });
-  const [contact, setContact] = useState(props.contact);
+  const defaultMethod = props.methods.find((m) => m.key !== "pickup")?.key ?? props.methods[0]?.key ?? "cdek_pvz";
+  const pre = props.prefill;
+  const [method, setMethod] = useState(pre?.method && props.methods.some((m) => m.key === pre.method) ? pre.method : defaultMethod);
+  const [addr, setAddr] = useState<Addr>({ ...EMPTY_ADDR, ...pre?.address });
+  const [contact, setContact] = useState({ ...props.contact, name: pre?.contact.name || props.contact.name, phone: pre?.contact.phone || props.contact.phone });
+  const [saveAddress, setSaveAddress] = useState(true);
+  const [prefilled, setPrefilled] = useState(pre?.source === "saved" || pre?.source === "order");
   const [promo, setPromo] = useState("");
   const [voice, setVoice] = useState(props.voices[0]?.key ?? "alena");
   const [q, setQ] = useState<Quote | null>(null);
@@ -74,12 +97,13 @@ export function Checkout(props: {
       whoPrints: who,
       formatKey: who === "bookimi" ? formatKey : undefined,
       addons: addons.filter((k) => availableAddons.some((a) => a.key === k)),
-      shipping: who === "bookimi" ? { method, address: addr } : undefined,
+      shipping: who === "bookimi" ? { method, address: cleanAddress(method, addr) } : undefined,
+      saveAddress,
       promo: promo || undefined,
       contact,
       voice,
     }),
-    [props.bookId, who, formatKey, addons, method, addr, promo, contact, voice, availableAddons],
+    [props.bookId, who, formatKey, addons, method, addr, promo, contact, voice, availableAddons, saveAddress],
   );
 
   useEffect(() => {
@@ -95,6 +119,13 @@ export function Checkout(props: {
 
   async function order() {
     setError("");
+    if (who === "bookimi") {
+      const bad = addressError(method, cleanAddress(method, addr)) ?? (!contact.name.trim() || !contact.phone.trim() ? "Укажите имя и телефон получателя" : null);
+      if (bad) {
+        setError(bad);
+        return;
+      }
+    }
     setBusy(true);
     try {
       const r = await api<{ orderId: string }>("/api/checkout", payload);
@@ -202,24 +233,62 @@ export function Checkout(props: {
                 <button key={m.key} className="chip" aria-pressed={method === m.key} onClick={() => setMethod(m.key)}>{m.title}</button>
               ))}
             </div>
+            {prefilled && (
+              <p className="small muted prefill-note">
+                Подставили получателя и адрес из прошлого заказа — проверьте.{" "}
+                <button type="button" className="link-btn" onClick={() => { setAddr(EMPTY_ADDR); setContact({ ...props.contact, name: "", phone: "" }); setPrefilled(false); }}>Очистить</button>
+              </p>
+            )}
             {method === "pickup" ? (
               <p className="muted-panel small">Заберёте сами: {props.pickupAddress}. Дата готовности — в кабинете.</p>
             ) : (
-              <div className="grid2">
-                <label className="field"><span>Город <span className="req">*</span></span><input className="input" value={addr.city} onChange={(e) => setAddr({ ...addr, city: e.target.value })} /></label>
-                <label className="field"><span>Индекс</span><input className="input" inputMode="numeric" value={addr.postalCode} onChange={(e) => setAddr({ ...addr, postalCode: e.target.value })} /></label>
+              <>
+                <CityInput
+                  required
+                  value={{ city: addr.city, region: addr.region, cityCode: addr.cityCode }}
+                  onChange={(v) => setAddr((a) => (a.city === v.city && a.region === v.region && a.cityCode === v.cityCode ? a : { ...a, city: v.city, region: v.region, cityCode: v.cityCode, pvzCode: "", pvzAddress: "" }))}
+                />
                 {method === "cdek_pvz" ? (
-                  <label className="field"><span>Пункт выдачи СДЭК (код или адрес)</span><input className="input" value={addr.pvzCode} onChange={(e) => setAddr({ ...addr, pvzCode: e.target.value })} /></label>
+                  <PvzPicker
+                    key={`${addr.city}|${addr.region ?? ""}`}
+                    city={addr.region || addr.cityCode || addr.pvzCode ? addr.city : ""}
+                    region={addr.region}
+                    cityCode={addr.cityCode}
+                    value={{ pvzCode: addr.pvzCode, pvzAddress: addr.pvzAddress }}
+                    onChange={(v) => setAddr((a) => ({ ...a, ...v }))}
+                  />
+                ) : method === "pochta" ? (
+                  <div className="grid2">
+                    <label className="field"><span>Улица, дом, квартира <span className="req">*</span></span><input className="input ym-disable-keys" autoComplete="street-address" value={addr.street} onChange={(e) => setAddr({ ...addr, street: e.target.value })} /></label>
+                    <label className="field"><span>Индекс <span className="req">*</span></span><input className="input ym-disable-keys" inputMode="numeric" autoComplete="postal-code" maxLength={6} placeholder="6 цифр" value={addr.postalCode} onChange={(e) => setAddr({ ...addr, postalCode: e.target.value.replace(/\D/g, "").slice(0, 6) })} /></label>
+                  </div>
                 ) : (
-                  <label className="field"><span>Улица, дом, квартира</span><input className="input ym-disable-keys" value={addr.street} onChange={(e) => setAddr({ ...addr, street: e.target.value })} /></label>
+                  <>
+                    <div className="grid2">
+                      <label className="field"><span>Улица и дом <span className="req">*</span></span><input className="input ym-disable-keys" autoComplete="address-line1" placeholder="ул. Ленина, 5к2" value={addr.street} onChange={(e) => setAddr({ ...addr, street: e.target.value })} /></label>
+                      <label className="field"><span>Квартира или офис</span><input className="input ym-disable-keys" autoComplete="address-line2" value={addr.flat} onChange={(e) => setAddr({ ...addr, flat: e.target.value })} /></label>
+                    </div>
+                    <label className="field"><span>Комментарий курьеру</span><input className="input ym-disable-keys" placeholder="Подъезд, этаж, домофон, когда удобно" maxLength={200} value={addr.comment} onChange={(e) => setAddr({ ...addr, comment: e.target.value })} /></label>
+                  </>
                 )}
-              </div>
+                {q?.ship && addr.city && (
+                  <p className="small ship-line" aria-live="polite">
+                    {METHOD_LABEL[method] ?? "Доставка"} · {addr.city}: <b>{q.ship.priceRub ? rub(q.ship.priceRub) : "бесплатно"}</b>
+                    {q.ship.daysMax > 0 && <>, {q.ship.daysMin === q.ship.daysMax ? q.ship.daysMax : `${q.ship.daysMin}–${q.ship.daysMax}`} дн. в пути</>}
+                    {q.ship.source === "table" && <span className="muted"> · ориентир</span>}
+                  </p>
+                )}
+              </>
             )}
             <h2 style={{ fontSize: "var(--fs-lg)", marginTop: 8 }}>Получатель</h2>
             <div className="grid2">
               <label className="field"><span>Имя и фамилия <span className="req">*</span></span><input className="input ym-disable-keys" value={contact.name} onChange={(e) => setContact({ ...contact, name: e.target.value })} /></label>
-              <label className="field"><span>Телефон <span className="req">*</span></span><input className="input ym-disable-keys" inputMode="tel" value={contact.phone} onChange={(e) => setContact({ ...contact, phone: e.target.value })} /></label>
+              <label className="field"><span>Телефон <span className="req">*</span></span><input className="input ym-disable-keys" inputMode="tel" autoComplete="tel" value={contact.phone} onChange={(e) => setContact({ ...contact, phone: e.target.value })} /></label>
             </div>
+            <label className="check">
+              <input type="checkbox" checked={saveAddress} onChange={(e) => setSaveAddress(e.target.checked)} />
+              <span>Сохранить адрес для следующих заказов <span className="muted">— храним в профиле, изменить или удалить можно в «Мои данные»</span></span>
+            </label>
           </>
         )}
       </div>

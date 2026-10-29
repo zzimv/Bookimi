@@ -3,7 +3,7 @@ import { db } from "@/lib/db";
 import { AnswersV2 } from "@/lib/quiz";
 import { plotBySlug } from "@/content/registry";
 import { moodsFor } from "@/content/moods";
-import { ART_STYLE_IDS } from "@/content/profiles";
+import { visibleArtStyleIds } from "@/content/art/index";
 import { anonId, clientIp, currentUser } from "@/lib/auth";
 import { body, deviceKey, err, json, throttle, utmCookie, verifyCaptcha } from "@/lib/api";
 import { hit, ipSubnet } from "@/lib/limits";
@@ -29,7 +29,9 @@ export async function POST(req: Request) {
   if (plot && a.extras.length < plot.extras.min) return err(plot.extras.note ?? `Для этого сюжета нужно добавить героев: не меньше ${plot.extras.min}`);
   if (plot && a.extras.length > plot.extras.max) a.extras = a.extras.slice(0, plot.extras.max);
   // Стиль картинок и настроение — только из каталога; иначе — по сюжету / без настроения
-  if (!ART_STYLE_IDS.some((x) => x.id === a.artStyle)) a.artStyle = plot?.artStyles[0] ?? "watercolor-air";
+  // Пробные стили (status "trial") — только если владелец включил art.showTrialStyles
+  const styles = visibleArtStyleIds((await cfg("art")).showTrialStyles);
+  if (!styles.some((x) => x.id === a.artStyle)) a.artStyle = plot?.artStyles[0] ?? "watercolor-air";
   if (a.mood && !moodsFor(a.audience, a.hero.age).some((m) => m.id === a.mood)) a.mood = "";
   if (!(await verifyCaptcha(b.captcha))) return err("Подтвердите, что вы не робот", 400);
   const bad = checkInputs([

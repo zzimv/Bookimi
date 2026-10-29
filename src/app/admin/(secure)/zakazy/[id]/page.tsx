@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { addressLine, type DeliveryAddress } from "@/lib/delivery";
 import { notFound } from "next/navigation";
 import { db } from "@/lib/db";
 import { requireAdmin } from "@/lib/admin";
@@ -24,7 +25,7 @@ export default async function Page({ params }: { params: Promise<{ id: string }>
   // Фото видно только в заказах младше 7 дней
   const fresh = Date.now() - o.createdAt.getTime() < 7 * 86400_000;
   const photos = fresh && bookId ? await db.photo.findMany({ where: { hero: { bookId }, deletedAt: null } }) : [];
-  const addr = o.shipment?.address as Record<string, string> | undefined;
+  const addr = o.shipment ? { ...(o.shipment.address as DeliveryAddress), ...(o.shipment.pvzCode ? { pvzCode: o.shipment.pvzCode, pvzAddress: o.shipment.pvzAddress ?? undefined } : {}) } : undefined;
   const logs = await db.auditLog.findMany({ where: { entityId: id }, orderBy: { createdAt: "desc" }, take: 20, include: { actor: { select: { email: true } } } });
   const hid = (name: string, v: string) => <input type="hidden" name={name} value={v} />;
 
@@ -52,7 +53,7 @@ export default async function Page({ params }: { params: Promise<{ id: string }>
           {o.shipment && (
             <p className="small">
               {METHOD_TITLES[o.shipment.method as keyof typeof METHOD_TITLES]}
-              {addr && <><br />{[addr.postalCode, addr.city, addr.street, addr.pvzCode && `ПВЗ ${addr.pvzCode}`].filter(Boolean).join(", ")}</>}
+              {addr && <><br />{addressLine(addr)}</>}
               {o.shipment.trackNumber && <><br />Трек: <b>{o.shipment.trackNumber}</b></>}
             </p>
           )}

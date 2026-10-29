@@ -1,5 +1,10 @@
 // ShippingProvider: СДЭК (API v2), Почта России, Яндекс Доставка. Без ключей — тарифы из настроек.
 import { cfg } from "./settings";
+import { Lru } from "./lru";
+import { findCity, normalizeCity, searchCities, type City } from "./cities";
+import { tableQuote } from "./ship-zones";
+import type { Pvz } from "./pvz";
+import type { DeliveryAddress } from "./delivery";
 
 export type ShipMethod = "pickup" | "cdek_pvz" | "cdek_courier" | "pochta" | "yandex";
 
@@ -12,12 +17,7 @@ export interface ShipQuote {
   source: "api" | "table";
 }
 
-export interface ShipAddress {
-  city: string;
-  postalCode?: string;
-  street?: string;
-  pvzCode?: string;
-}
+export type ShipAddress = DeliveryAddress;
 
 export const METHOD_TITLES: Record<ShipMethod, string> = {
   pickup: "Заберу сам в типографии",
@@ -31,6 +31,7 @@ export const METHOD_TITLES: Record<ShipMethod, string> = {
 const parcel = (books: number) => ({ weight: 400 + books * 450, length: 32, width: 26, height: 4 + books * 2 });
 
 let cdekToken: { v: string; exp: number } | null = null;
+export const hasCdek = () => Boolean(process.env.CDEK_CLIENT_ID && process.env.CDEK_CLIENT_SECRET);
 const cdekBase = () => (process.env.CDEK_TEST_MODE === "true" ? "https://api.edu.cdek.ru" : "https://api.cdek.ru");
 
 async function cdekAuth() {
@@ -53,7 +54,7 @@ async function cdekCalc(method: "cdek_pvz" | "cdek_courier", to: ShipAddress, bo
     body: JSON.stringify({
       tariff_code: method === "cdek_pvz" ? 136 : 137, // склад-склад / склад-дверь
       from_location: { code: Number(process.env.CDEK_FROM_CITY_CODE ?? 44) },
-      to_location: to.postalCode ? { postal_code: to.postalCode } : { address: to.city },
+      to_location: await cdekLocation(to),
       packages: [parcel(books)],
     }),
     signal: AbortSignal.timeout(8000),
@@ -61,6 +62,121 @@ async function cdekCalc(method: "cdek_pvz" | "cdek_courier", to: ShipAddress, bo
   if (!r.ok) throw new Error(`СДЭК ${r.status}`);
   const j = (await r.json()) as { total_sum: number; period_min: number; period_max: number };
   return { priceRub: Math.ceil(j.total_sum), daysMin: j.period_min, daysMax: j.period_max };
+}
+
+
+// ───────── География СДЭК: подсказки городов, коды, пункты выдачи (кэш в памяти процесса) ─────────
+async function cdekGet<T>(path: string, params: Record<string, string | number | boolean>): Promise<T> {
+  const token = await cdekAuth();
+  const qs = new URLSearchParams(Object.entries(params).map(([k, v]) => [k, String(v)]));
+  const r = await fetch(`${cdekBase()}${path}?${qs}`, { headers: { Authorization: `Bearer ${token}` }, signal: AbortSignal.timeout(8000) });
+  if (!r.ok) throw new Error(`СДЭК ${path} ${r.status}`);
+  return (await r.json()) as T;
+}
+
+export interface CityHit {
+  name: string;
+  region: string;
+  code: number | null;
+  lat: number | null;
+  lon: number | null;
+}
+
+const suggestCache = new Lru<CityHit[]>(1000, 24 * 3600_000);
+const codeCache = new Lru<number | null>(2000, 7 * 24 * 3600_000);
+const pvzCache = new Lru<Pvz[]>(300, 6 * 3600_000);
+
+/** GET /v2/location/suggest/cities: «Королёв, Московская обл., Россия» → { name, region, code }. */
+async function cdekSuggest(q: string): Promise<CityHit[]> {
+  return suggestCache.wrap(normalizeCity(q), async () => {
+    const list = await cdekGet<{ code: number; full_name: string }[]>("/v2/location/suggest/cities", { name: q, country_code: "RU" });
+    return list.slice(0, 20).map((x) => {
+      const parts = x.full_name.split(",").map((t) => t.trim()).filter((t) => t && t !== "Россия");
+      return { name: parts[0] ?? x.full_name, region: parts.slice(1).join(", "), code: x.code, lat: null, lon: null };
+    });
+  });
+}
+
+const sameRegion = (a: string, b: string) => {
+  const x = normalizeCity(a).split(" ")[0] ?? "";
+  const y = normalizeCity(b).split(" ")[0] ?? "";
+  return !x || !y || x.slice(0, 5) === y.slice(0, 5);
+};
+
+/**
+ * Подсказки города: офлайн-список (ранжирование и население) + коды и малые населённые пункты из СДЭК.
+ * СДЭК не ответил или ключей нет — только офлайн-список.
+ */
+export async function suggestCities(q: string, limit = 10): Promise<{ cities: CityHit[]; source: "cdek" | "offline" }> {
+  const offline: CityHit[] = searchCities(q, limit).map((c: City) => ({ name: c.name, region: c.region, code: c.cdekCode, lat: c.lat, lon: c.lon }));
+  if (!hasCdek()) return { cities: offline, source: "offline" };
+  try {
+    const remote = await cdekSuggest(q);
+    const used = new Set<CityHit>();
+    for (const c of offline) {
+      const m = remote.find((r) => !used.has(r) && normalizeCity(r.name) === normalizeCity(c.name) && sameRegion(r.region, c.region));
+      if (m) {
+        c.code = m.code;
+        used.add(m);
+      }
+    }
+    const nq = normalizeCity(q);
+    const extra = remote.filter((r) => !used.has(r) && normalizeCity(r.name).startsWith(nq));
+    return { cities: [...offline, ...extra].slice(0, limit), source: "cdek" };
+  } catch (e) {
+    console.error("[geo]", (e as Error).message);
+    return { cities: offline, source: "offline" };
+  }
+}
+
+/** Код города СДЭК по названию и региону: офлайн-список → GET /v2/location/cities. */
+export async function cdekCityCode(city: string, region?: string): Promise<number | null> {
+  const known = findCity(city, region)?.cdekCode;
+  if (known) return known;
+  if (!hasCdek() || !city) return null;
+  return codeCache.wrap(`${normalizeCity(city)}|${normalizeCity(region ?? "")}`, async () => {
+    const list = await cdekGet<{ code: number; city: string; region?: string }[]>("/v2/location/cities", { country_codes: "RU", city, size: 10 });
+    const hit = list.find((x) => normalizeCity(x.city) === normalizeCity(city) && (!region || sameRegion(x.region ?? "", region))) ?? list[0];
+    return hit?.code ?? null;
+  });
+}
+
+async function cdekLocation(to: ShipAddress) {
+  const code = to.cityCode ?? (to.city ? await cdekCityCode(to.city, to.region).catch(() => null) : null);
+  if (code) return { code };
+  return to.postalCode ? { postal_code: to.postalCode } : { address: to.city };
+}
+
+interface CdekPoint {
+  code: string;
+  name?: string;
+  type?: string;
+  work_time?: string;
+  nearest_metro_station?: string;
+  nearest_station?: string;
+  is_handout?: boolean;
+  location?: { address?: string; address_full?: string; latitude?: number; longitude?: number };
+}
+
+/** GET /v2/deliverypoints?city_code=…: пункты выдачи и постаматы города (только с выдачей посылок). */
+export async function cdekPoints(cityCode: number): Promise<Pvz[]> {
+  if (!hasCdek()) return [];
+  return pvzCache.wrap(String(cityCode), async () => {
+    const list = await cdekGet<CdekPoint[]>("/v2/deliverypoints", { city_code: cityCode, country_code: "RU", is_handout: true, type: "ALL" });
+    return list
+      .filter((p) => p.code && p.is_handout !== false)
+      .map((p) => ({
+        code: p.code,
+        name: p.name ?? "",
+        address: p.location?.address ?? p.location?.address_full ?? "",
+        workTime: p.work_time ?? "",
+        metro: p.nearest_metro_station || null,
+        type: (p.type === "POSTAMAT" ? "POSTAMAT" : "PVZ") as Pvz["type"],
+        lat: p.location?.latitude ?? null,
+        lon: p.location?.longitude ?? null,
+      }))
+      .sort((a, b) => a.address.localeCompare(b.address, "ru"));
+  });
 }
 
 export async function availableMethods(pickupAddress?: string | null): Promise<ShipMethod[]> {
@@ -77,7 +193,7 @@ export async function availableMethods(pickupAddress?: string | null): Promise<S
 export async function shipQuote(method: ShipMethod, to: ShipAddress, books: number): Promise<ShipQuote> {
   const s = await cfg("shipping");
   if (method === "pickup") return { method, title: METHOD_TITLES.pickup, priceRub: 0, daysMin: 0, daysMax: 0, source: "table" };
-  if ((method === "cdek_pvz" || method === "cdek_courier") && process.env.CDEK_CLIENT_ID) {
+  if ((method === "cdek_pvz" || method === "cdek_courier") && hasCdek() && to.city) {
     try {
       const q = await cdekCalc(method, to, books);
       return { method, title: METHOD_TITLES[method], ...q, source: "api" };
@@ -86,11 +202,12 @@ export async function shipQuote(method: ShipMethod, to: ShipAddress, books: numb
     }
   }
   // Почта России и Яндекс Доставка: API подключается ключами POCHTA_*/YANDEX_DELIVERY_*; до этого — таблица
-  const [dMin, dMax] = s.fallbackDays[method] ?? [3, 10];
-  return { method, title: METHOD_TITLES[method], priceRub: s.fallbackRub[method] ?? 350, daysMin: dMin, daysMax: dMax, source: "table" };
+  // Тариф из настроек + надбавка по удалённости города от склада (src/lib/ship-zones.ts)
+  const t = tableQuote(s.fallbackRub[method] ?? 350, s.fallbackDays[method] ?? [3, 10], to, { zones: s.distanceMarkup, fromCity: process.env.SHIP_FROM_CITY });
+  return { method, title: METHOD_TITLES[method], ...t, source: "table" };
 }
 
-/** Создание отправления в СДЭК после печати. Без ключей — трек вносит оператор вручную. */
+/** Создание отправления в СДЭК после печати (POST /v2/orders). Без ключей — трек вносит оператор вручную. */
 export async function createCdekOrder(o: {
   code: string;
   method: "cdek_pvz" | "cdek_courier";
@@ -99,8 +216,10 @@ export async function createCdekOrder(o: {
   address: ShipAddress;
   books: number;
 }) {
-  if (!process.env.CDEK_CLIENT_ID) return null;
+  if (!hasCdek()) return null;
+  if (o.method === "cdek_pvz" && !o.address.pvzCode) throw new Error("Не выбран пункт выдачи СДЭК");
   const token = await cdekAuth();
+  const street = [o.address.street, o.address.flat && `кв. ${o.address.flat}`].filter(Boolean).join(", ");
   const r = await fetch(`${cdekBase()}/v2/orders`, {
     method: "POST",
     headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
@@ -109,7 +228,11 @@ export async function createCdekOrder(o: {
       tariff_code: o.method === "cdek_pvz" ? 136 : 137,
       shipment_point: process.env.CDEK_SHIPMENT_POINT,
       delivery_point: o.method === "cdek_pvz" ? o.address.pvzCode : undefined,
-      to_location: o.method === "cdek_courier" ? { address: `${o.address.city}, ${o.address.street ?? ""}`, postal_code: o.address.postalCode } : undefined,
+      to_location:
+        o.method === "cdek_courier"
+          ? { ...(o.address.cityCode ? { code: o.address.cityCode } : {}), address: `${o.address.city}, ${street}`, postal_code: o.address.postalCode }
+          : undefined,
+      comment: o.method === "cdek_courier" ? o.address.comment : undefined,
       recipient: { name: o.name, phones: [{ number: o.phone }] },
       packages: [{ number: "1", ...parcel(o.books), items: [{ name: "Книга, изготовленная на заказ", ware_key: o.code, payment: { value: 0 }, cost: 0, weight: 450, amount: o.books }] }],
     }),
@@ -117,4 +240,18 @@ export async function createCdekOrder(o: {
   if (!r.ok) throw new Error(`СДЭК order ${r.status}: ${(await r.text()).slice(0, 200)}`);
   const j = (await r.json()) as { entity?: { uuid: string } };
   return j.entity?.uuid ?? null;
+}
+
+/** Параметры отправления из заказа: пункт выдачи и код города — из колонок Shipment (миграция 0004). */
+export function cdekOrderInput(order: {
+  publicCode: string;
+  contactName: string | null;
+  contactPhone: string | null;
+  shipment: { method: string; address: unknown; pvzCode: string | null; cityCode: number | null } | null;
+  books: number;
+}) {
+  const sh = order.shipment;
+  if (!sh || (sh.method !== "cdek_pvz" && sh.method !== "cdek_courier")) return null;
+  const address = { ...(sh.address as ShipAddress), pvzCode: sh.pvzCode ?? (sh.address as ShipAddress).pvzCode, cityCode: sh.cityCode ?? (sh.address as ShipAddress).cityCode };
+  return { code: order.publicCode, method: sh.method, name: order.contactName ?? "", phone: order.contactPhone ?? "", address, books: order.books } as Parameters<typeof createCdekOrder>[0];
 }

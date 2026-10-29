@@ -5,8 +5,9 @@ import { body, err, json } from "@/lib/api";
 import { currentUser, logout } from "@/lib/auth";
 import { deleteFile } from "@/lib/storage";
 import { DOC_VERSION } from "@/lib/legal";
+import { parseAddressBook } from "@/lib/delivery";
 
-// «Мои данные» (152-ФЗ): выгрузка, отзыв согласий, удаление.
+// «Мои данные» (152-ФЗ): выгрузка (вместе с адресной книгой savedAddresses), отзыв согласий, адреса доставки, удаление.
 export async function GET() {
   const user = await currentUser();
   if (!user) return err("Войдите", 401);
@@ -16,7 +17,7 @@ export async function GET() {
       consents: true,
       heroes: { select: { name: true, nickname: true, gender: true, ageGroup: true, birthDate: true, appearance: true, interests: true, createdAt: true } },
       books: { select: { id: true, text: true, createdAt: true, status: true } },
-      orders: { select: { publicCode: true, status: true, totalRub: true, createdAt: true, contactName: true, contactPhone: true, contactEmail: true } },
+      orders: { select: { publicCode: true, status: true, totalRub: true, createdAt: true, contactName: true, contactPhone: true, contactEmail: true, shipment: { select: { method: true, address: true, pvzCode: true, pvzAddress: true } } } },
       notifyPrefs: { select: { channel: true, marketing: true, isActive: true } },
     },
   });
@@ -30,6 +31,19 @@ const Input = z.discriminatedUnion("action", [
   z.object({ action: z.literal("revoke"), type: z.enum(["MARKETING", "CHILD_PHOTO", "ANALYTICS_COOKIES"]) }),
   z.object({ action: z.literal("delete"), confirm: z.literal("УДАЛИТЬ") }),
   z.object({ action: z.literal("maxChat"), chatId: z.string().trim().min(3).max(40) }),
+  z.object({
+    action: z.literal("address"),
+    id: z.string().max(40),
+    patch: z.object({
+      name: z.string().trim().max(80).optional(),
+      phone: z.string().trim().max(20).optional(),
+      street: z.string().trim().max(160).optional(),
+      flat: z.string().trim().max(20).optional(),
+      comment: z.string().trim().max(200).optional(),
+      postalCode: z.string().trim().max(10).optional(),
+    }),
+  }),
+  z.object({ action: z.literal("addressDelete"), id: z.string().max(40) }),
 ]);
 
 export async function POST(req: Request) {
@@ -57,6 +71,15 @@ export async function POST(req: Request) {
     });
     return json({ ok: true });
   }
+  if (b.action === "address" || b.action === "addressDelete") {
+    const list = parseAddressBook(user.savedAddresses) ?? [];
+    if (!list.some((a) => a.id === b.id)) return err("Адрес не найден", 404);
+    if (b.action === "address" && b.patch.postalCode && !/^\d{6}$/.test(b.patch.postalCode)) return err("Индекс — 6 цифр");
+    // [] (а не NULL): покупатель сам всё удалил — прошлые заказы больше не подставляются
+    const next = b.action === "addressDelete" ? list.filter((a) => a.id !== b.id) : list.map((a) => (a.id === b.id ? { ...a, ...b.patch } : a));
+    await db.user.update({ where: { id: user.id }, data: { savedAddresses: next as object[] } });
+    return json({ ok: true });
+  }
   if (b.action === "revoke") {
     await db.consent.create({ data: { userId: user.id, type: b.type, docVersion: DOC_VERSION, granted: false } });
     if (b.type === "MARKETING") {
@@ -77,10 +100,10 @@ export async function POST(req: Request) {
   for (const p of photos) await deleteFile("photos", p.storageKey).catch(() => {});
   await db.hero.deleteMany({ where: { userId: user.id } });
   await db.order.updateMany({ where: { userId: user.id }, data: { contactName: null, contactPhone: null, contactEmail: null } });
-  await db.shipment.updateMany({ where: { order: { userId: user.id } }, data: { address: {} } });
+  await db.shipment.updateMany({ where: { order: { userId: user.id } }, data: { address: {}, pvzAddress: null } });
   await db.book.updateMany({ where: { userId: user.id }, data: { params: {}, contact: null } });
   await db.notificationPref.deleteMany({ where: { userId: user.id } });
-  await db.user.update({ where: { id: user.id }, data: { email: null, phone: null, name: null, deletedAt: new Date(), marketingOk: false } });
+  await db.user.update({ where: { id: user.id }, data: { email: null, phone: null, name: null, savedAddresses: [], deletedAt: new Date(), marketingOk: false } });
   await db.auditLog.create({ data: { action: "user.delete", entity: "user", entityId: user.id } });
   await logout();
   return json({ ok: true });

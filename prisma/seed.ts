@@ -71,10 +71,22 @@ async function main() {
         data: { name: r.name, event: r.event, condition: {}, delayMinutes: r.delayMinutes, channel: "preferred", template: r.template, promoPercent: r.promoPercent, isMarketing: true, isActive: true },
       });
     }
+  } else {
+    // Новые события в DEFAULT_RULES (напр. hero_birthday) — добавляем, если правила с таким событием ещё нет.
+    // Удаления правил в админке нет (только выключение), поэтому выключенное правило не «воскреснет» включённым.
+    for (const r of DEFAULT_RULES) {
+      if (await db.triggerRule.findFirst({ where: { event: r.event } })) continue;
+      // Старое «birthday» уже есть → новое создаём выключенным, чтобы не было двух включённых напоминаний
+      const old = r.event === "hero_birthday" ? await db.triggerRule.findFirst({ where: { event: "birthday", isActive: true } }) : null;
+      await db.triggerRule.create({
+        data: { name: r.name, event: r.event, condition: {}, delayMinutes: r.delayMinutes, channel: "preferred", template: r.template, promoPercent: r.promoPercent, isMarketing: true, isActive: !old },
+      });
+    }
   }
 
-  // Стили картинок: все 15 из профилей; промпты — в коде (src/content/art), в БД — название и включение
-  for (const [i, st] of ART_STYLE_IDS.entries()) {
+  // Стили картинок: все живые из профилей; промпты — в коде (src/content/art), в БД — название и включение.
+  // Пробные (status "trial") в БД не заводим: их видимость — настройка art.showTrialStyles.
+  for (const [i, st] of ART_STYLE_IDS.filter((x) => x.status !== "trial").entries()) {
     await db.illustrationStyle.upsert({
       where: { key: st.id },
       update: {},

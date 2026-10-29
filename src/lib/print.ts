@@ -1,6 +1,7 @@
 // PrintProvider: передача заказа в типографию — email (по умолчанию) или API.
 // Состав: PDF блока + PDF обложки (для твёрдой — с корешком) + файлы допов + данные отправления.
 import { db } from "./db";
+import { addressLine, type DeliveryAddress } from "./delivery";
 import { signedUrl } from "./storage";
 import { sendEmail } from "./notify";
 import { audit, setStatus } from "./orders";
@@ -22,7 +23,7 @@ export async function sendToPrint(orderId: string, operatorId?: string) {
   const format = order.items.find((i) => i.kind === "format")?.title ?? "";
   const extras = order.items.filter((i) => i.kind === "addon" && !["second-copy", "audiobook", "audio-self", "coloring"].includes(i.refKey)).map((i) => i.title);
   const ship = order.shipment;
-  const addr = ship?.address as { city?: string; street?: string; postalCode?: string; pvzCode?: string } | undefined;
+  const addr = ship ? { ...(ship.address as DeliveryAddress), ...(ship.pvzCode ? { pvzCode: ship.pvzCode, pvzAddress: ship.pvzAddress ?? undefined } : {}) } : undefined;
   const body = [
     `Заказ ${order.publicCode}`,
     `Формат: ${format}`,
@@ -35,7 +36,7 @@ export async function sendToPrint(orderId: string, operatorId?: string) {
     "",
     `Отправление: ${ship ? METHOD_TITLES[ship.method as keyof typeof METHOD_TITLES] ?? ship.method : "—"}`,
     ship?.method === "pickup" ? "Покупатель заберёт сам." : `Получатель: ${order.contactName}, ${order.contactPhone}`,
-    addr ? `Адрес: ${[addr.postalCode, addr.city, addr.street, addr.pvzCode && `ПВЗ ${addr.pvzCode}`].filter(Boolean).join(", ")}` : "",
+    addr ? `Адрес: ${addressLine(addr)}` : "",
     "",
     "Требования: блок — мелованная 150–170 г/м², вылеты 3 мм; обложка — ламинация. Упакуйте и передайте в службу доставки.",
   ]

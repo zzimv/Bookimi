@@ -5,13 +5,16 @@
 import { db } from "./db";
 import { hmac } from "./crypto";
 import { notifyUser, alertOwner } from "./notify";
+import { birthdayReminders, fmtDay } from "./holidays-core";
+import { getLeadTimes } from "./holidays";
 
 export const TRIGGER_EVENTS = {
   text_abandoned: "Сказка сочинена, но фото не загружено",
   preview_abandoned: "Превью готово, но заказа нет",
   pdf_only: "Куплен только PDF — предложить печать с зачётом",
   delivered: "Книга доставлена — отзыв и «Приведи друга»",
-  birthday: "За 3 недели до дня рождения ребёнка",
+  birthday: "За 3 недели до дня рождения ребёнка (старое правило — то же, что «героя»)",
+  hero_birthday: "За 21 день до дня рождения сохранённого героя (любая аудитория)",
 } as const;
 export type TriggerEvent = keyof typeof TRIGGER_EVENTS;
 
@@ -22,7 +25,12 @@ export const DEFAULT_RULES: { name: string; event: TriggerEvent; delayMinutes: n
   { name: "Брошенное превью, 72 часа", event: "preview_abandoned", delayMinutes: 4320, template: "Напоминаем о книге «{title}». Превью сохранено ещё 4 дня: {link}" },
   { name: "Только PDF → печать", event: "pdf_only", delayMinutes: 1440, template: "Хотите книгу «{title}» в твёрдой обложке? Стоимость PDF зачтём — вы доплатите только разницу: {link}" },
   { name: "После доставки: отзыв и друг", event: "delivered", delayMinutes: 4320, template: "Как вам книга? Будем благодарны за отзыв: {review}. А друзья по вашей ссылке получат −10%: {ref}" },
-  { name: "День рождения через 3 недели", event: "birthday", delayMinutes: 0, template: "Через 3 недели день рождения у {name}. Новая сказка с героем-именинником — отличный подарок: {link}" },
+  {
+    name: "День рождения героя через 21 день",
+    event: "hero_birthday",
+    delayMinutes: 0,
+    template: "{date} — день рождения у {name}. Новая книга, где {name} — главный герой, станет тёплым подарком. Печатную успеем, если заказать до {deadline}: {link}",
+  },
 ];
 
 const site = () => `https://${process.env.DOMAIN ?? "bookimi.ru"}`;
@@ -31,6 +39,18 @@ interface Candidate {
   userId: string;
   subjectId: string; // уникальность: одно сообщение правила на книгу/заказ/год
   vars: Record<string, string>;
+  /** Уникальность по всем правилам (напоминание о дне рождения — одно, даже если правил два). */
+  global?: boolean;
+}
+
+/**
+ * Можно ли отправить маркетинговое сообщение: согласие на рассылку (отписка снимает его), аккаунт не удалён,
+ * не больше одного маркетингового сообщения в сутки. Сервисные (isMarketing = false) — без согласия и лимита.
+ */
+export function canSendTrigger(rule: { isMarketing: boolean }, user: { marketingOk: boolean; deletedAt?: Date | null } | null, sentLast24h: boolean) {
+  if (!user || user.deletedAt) return false;
+  if (!rule.isMarketing) return true;
+  return user.marketingOk && !sentLast24h;
 }
 
 async function candidates(event: TriggerEvent, delayMinutes: number): Promise<Candidate[]> {
@@ -80,18 +100,22 @@ async function candidates(event: TriggerEvent, delayMinutes: number): Promise<Ca
         };
       });
     }
-    case "birthday": {
-      const heroes = await db.hero.findMany({ where: { role: "main", birthDate: { not: null }, userId: { not: null } }, take: 2000 });
-      const out: Candidate[] = [];
-      const now = new Date();
-      for (const h of heroes) {
-        const b = h.birthDate!;
-        let next = new Date(now.getFullYear(), b.getMonth(), b.getDate());
-        if (next < now) next = new Date(now.getFullYear() + 1, b.getMonth(), b.getDate());
-        const days = (next.getTime() - now.getTime()) / 86400_000;
-        if (days <= 21 && days > 20) out.push({ userId: h.userId!, subjectId: `bday:${h.id}:${next.getFullYear()}`, vars: { name: h.name, link: `${site()}/povod/den-rozhdeniya` } });
-      }
-      return out;
+    case "birthday":
+    case "hero_birthday": {
+      // Сохранённые герои (кабинет → «Мои герои»): за 21 день по Москве, окно 2 дня на случай лимита «1 в сутки»
+      const heroes = await db.hero.findMany({
+        where: { role: "main", birthDate: { not: null }, userId: { not: null }, user: { deletedAt: null, marketingOk: true } },
+        select: { id: true, userId: true, name: true, birthDate: true },
+        orderBy: { createdAt: "desc" },
+        take: 5000,
+      });
+      const list = birthdayReminders(heroes.map((h) => ({ id: h.id, userId: h.userId, name: h.name, birthDate: h.birthDate! })), new Date(), 21, 2, await getLeadTimes());
+      return list.map((b) => ({
+        userId: b.userId!,
+        subjectId: b.subjectId,
+        global: true,
+        vars: { name: b.name, date: fmtDay(b.date), deadline: fmtDay(b.deadline), link: `${site()}/sozdat?povod=den-rozhdeniya${b.id ? `&geroj=${b.id}` : ""}` },
+      }));
     }
   }
 }
@@ -165,14 +189,12 @@ export async function runTriggers() {
   for (const rule of rules) {
     const list = await candidates(rule.event as TriggerEvent, rule.delayMinutes);
     for (const c of list) {
-      const exists = await db.triggerRun.findFirst({ where: { ruleId: rule.id, subjectId: c.subjectId } });
+      const exists = await db.triggerRun.findFirst({ where: c.global ? { subjectId: c.subjectId } : { ruleId: rule.id, subjectId: c.subjectId } });
       if (exists) continue;
       const user = await db.user.findUnique({ where: { id: c.userId } });
-      if (!user || user.deletedAt) continue;
-      if (rule.isMarketing && !user.marketingOk) continue;
       // не чаще одного маркетингового сообщения в сутки
       const lastToUser = await db.auditLog.findFirst({ where: { action: "trigger.sent", entityId: c.userId, createdAt: { gte: new Date(Date.now() - 86400_000) } } });
-      if (rule.isMarketing && lastToUser) continue;
+      if (!canSendTrigger(rule, user, Boolean(lastToUser))) continue;
       const isControl = parseInt(hmac(`${rule.id}:${c.subjectId}`).replace(/[^0-9]/g, "").slice(0, 4) || "0", 10) % 100 < rule.controlPct;
       let vars = c.vars;
       if (!isControl && rule.promoPercent) {
@@ -209,7 +231,7 @@ export async function sendTestTrigger(ruleId: string, userId: string) {
   const rule = await db.triggerRule.findUniqueOrThrow({ where: { id: ruleId } });
   await notifyUser(userId, "marketing", {
     subject: `[тест] ${rule.name}`,
-    text: fill(rule.template, { name: "Маша", title: "Новогоднее путешествие с Дедом Морозом", link: site(), promo: "TEST-10", review: site(), ref: site() }),
+    text: fill(rule.template, { name: "Маша", title: "Новогоднее путешествие с Дедом Морозом", link: site(), promo: "TEST-10", review: site(), ref: site(), date: "20 ноября", deadline: "6 ноября" }),
   });
 }
 

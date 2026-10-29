@@ -14,6 +14,7 @@ import { KIDS_ART_STYLES, KIDS_THEMES } from "./art/kids";
 import { TEEN_ART_STYLES, TEEN_THEMES } from "./art/teens";
 import { ADULT_ART_STYLES, ADULT_THEMES } from "./art/adults";
 import { PET_ART_STYLES, PET_THEMES } from "./art/pets";
+import { TRIAL_ART_STYLES } from "./art/trial";
 import { ART_STYLES, artStyle, heroDrawer, themeFor, themesByKey } from "./art/index";
 import { GENERIC_HOOKS, occasionText } from "./occasions";
 import { titleTemplate } from "./title";
@@ -110,6 +111,10 @@ export interface ContentReport {
 const CYR = /[а-яё]/i;
 const HEX = /^#[0-9a-f]{6}$/i;
 const SLUG = /^[a-z0-9]+(-[a-z0-9]+)*$/;
+/** Имена художников, студий и франшиз, которых не должно быть в стилях картинок (юридическое правило). */
+const BANNED_ART_NAMES =
+  /nordqvist|нурдквист|bidstrup|бидструп|berner|бернер|shepard|шепард|suteev|сутеев|saint-?exup|экзюпери|pogodi|погоди|kanivets|канивец|semenov|семёнов|семенов|gravity falls|гравити|disney|дисней|pooh|винни|soyuzmult|союзмульт|wimmel|hirsch|ghibli|pixar|миядзаки|miyazaki/i;
+
 /** Частые ошибки форм рода: «нашёл{Р:|а}» → «нашёла», «вышел{Р:|а}» → «вышела». */
 const BAD_GENDER = /(ёл|шел)\{Р\d?:\|а\}/;
 
@@ -147,6 +152,7 @@ export function validateContent(opts: { strict?: boolean } = {}): ContentReport 
     ["teens", TEEN_ART_STYLES],
     ["adults", ADULT_ART_STYLES],
     ["pets", PET_ART_STYLES],
+    ["trial", TRIAL_ART_STYLES],
   ];
   const seenArt = new Set<string>();
   for (const [owner, list] of artModules) {
@@ -158,10 +164,16 @@ export function validateContent(opts: { strict?: boolean } = {}): ContentReport 
       else if (ART_STYLE_OWNERS[a.id] !== owner) errors.push(`${where} — стиль принадлежит art/${ART_STYLE_OWNERS[a.id]}`);
       if (!a.prompt || CYR.test(a.prompt) || CYR.test(a.negative)) errors.push(`${where} — prompt/negative должны быть на английском и непустыми`);
       if (!a.title || !a.description) errors.push(`${where} — нет title/description`);
+      if (BANNED_ART_NAMES.test([a.title, a.description, a.prompt, a.negative].join(" "))) errors.push(`${where} — имя художника, студии или франшизы в стиле: только техника`);
+      // Пробный стиль: только в art/trial.ts и со status "trial" и в ArtStyle, и в ART_STYLE_IDS
+      const idStatus = ART_STYLE_IDS.find((x) => x.id === a.id)?.status ?? "live";
+      if ((a.status ?? "live") !== idStatus) errors.push(`${where} — status ${a.status ?? "live"}, а в ART_STYLE_IDS — ${idStatus}`);
+      if ((owner === "trial") !== (idStatus === "trial")) errors.push(`${where} — пробные стили (status "trial") живут только в art/trial.ts`);
       const p = a.demo.palette;
       if (![p.paper, p.ink, ...p.accents].every((c) => HEX.test(c)) || !p.accents.length) errors.push(`${where} — палитра demo: цвета #rrggbb, accents не пуст`);
     }
   }
+  for (const a of ART_STYLE_IDS) if (BANNED_ART_NAMES.test(`${a.title} ${a.oneLine}`)) errors.push(`profiles: стиль ${a.id} — имя художника, студии или франшизы в описании`);
   for (const a of ART_STYLE_IDS) if (!definedArt.has(a.id)) soft(`art: стиль ${a.id} ещё не описан (art/${ART_STYLE_OWNERS[a.id] ?? "?"}.ts)`);
 
   // ── Темы ──
@@ -230,6 +242,7 @@ export function validateContent(opts: { strict?: boolean } = {}): ContentReport 
     if (!p.artStyles.length) errors.push(`${at}: нет стилей картинок`);
     for (const a of p.artStyles) {
       if (!artIds.has(a)) errors.push(`${at}: нет стиля картинок ${a} в ART_STYLE_IDS`);
+      else if (ART_STYLE_IDS.find((x) => x.id === a)?.status === "trial") errors.push(`${at}: пробный стиль ${a} нельзя рекомендовать в сюжете (на сайте он скрыт)`);
       else if (!definedArt.has(a)) soft(`${at}: стиль картинок ${a} ещё не описан`);
     }
     if (!themeKeys.has(p.theme)) errors.push(`${at}: тема ${p.theme} не из DEMO_THEME_KEYS`);

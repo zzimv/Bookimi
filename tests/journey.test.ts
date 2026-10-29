@@ -41,10 +41,10 @@ describe("путь заказа", () => {
 });
 
 describe("следующий повод", () => {
-  it("конец октября — Новый год с дедлайном печати 20 декабря", () => {
+  it("конец октября — Новый год с дедлайном печати 17 декабря (как на /prazdniki)", () => {
     const h = nextOccasion({ now: new Date("2026-10-29T12:00:00+03:00") });
     expect(h?.key).toBe("novyj-god");
-    expect(h?.text).toContain("до 20 декабря");
+    expect(h?.text).toContain("до 17 декабря");
   });
   it("день рождения героя важнее, если раньше", () => {
     const h = nextOccasion({ now: new Date("2026-10-29T12:00:00+03:00"), birthdays: [{ name: "Маша", nameGen: "Маши", date: new Date("2019-11-20T00:00:00Z") }] });

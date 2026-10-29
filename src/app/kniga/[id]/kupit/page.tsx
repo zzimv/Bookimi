@@ -7,6 +7,7 @@ import { cfg, canAcceptPayments } from "@/lib/settings";
 import { catalogForPricing, pdfPaidFor } from "@/lib/orders";
 import { availableMethods, METHOD_TITLES } from "@/lib/shipping";
 import { signedUrl } from "@/lib/storage";
+import { parseAddressBook, pickPrefill } from "@/lib/delivery";
 
 export const metadata: Metadata = { title: "Оформление", robots: { index: false } };
 export const dynamic = "force-dynamic";
@@ -32,6 +33,20 @@ export default async function Page({ params, searchParams }: { params: Promise<{
   const cover = await db.bookPage.findUnique({ where: { bookId_index: { bookId: id, index: 0 } } });
   const coverUrl = cover?.previewKey ? await signedUrl("books", cover.previewKey) : null;
   const user = own.user;
+  // Получатель и адрес «из прошлого раза»: адресная книга → последний заказ → профиль → черновик анкеты
+  const lastOrder = await db.order.findFirst({
+    where: { userId: user.id, shipment: { isNot: null } },
+    orderBy: { createdAt: "desc" },
+    select: { contactName: true, contactPhone: true, shipment: { select: { method: true, address: true, pvzCode: true, pvzAddress: true, cityCode: true } } },
+  });
+  const draft = (own.book.params as { contact?: { phone?: string } } | null)?.contact;
+  const prefill = pickPrefill({
+    saved: parseAddressBook(user.savedAddresses),
+    lastOrder,
+    profile: { name: user.name, phone: user.phone },
+    draft: { phone: draft?.phone },
+    methods,
+  });
 
   return (
     <div className="wrap" style={{ padding: "24px var(--gutter) 80px" }}>
@@ -56,6 +71,7 @@ export default async function Page({ params, searchParams }: { params: Promise<{
         printEnabled={flags.printEnabled}
         contact={{ name: user.name ?? "", phone: user.phone ?? "", email: user.email ?? "" }}
         pdfPaid={await pdfPaidFor(id, user.id)}
+        prefill={prefill}
       />
     </div>
   );

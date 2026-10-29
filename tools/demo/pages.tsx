@@ -21,8 +21,10 @@ import { METHOD_TITLES } from "../../src/lib/shipping";
 import { declineName } from "../../src/lib/declension";
 import { canAcceptPayments, DEFAULTS } from "../../src/lib/settings";
 import { FORMATS } from "../../src/lib/catalog-defaults";
-import { bookById, catalogForPricing, heroAccOf, journeyOf, markPaid, orderById, pageUrl, pdfPaidFor, S, SHIP_METHODS } from "./api";
+import { bookById, catalogForPricing, demoPrefill, heroAccOf, journeyOf, markPaid, orderById, pageUrl, pdfPaidFor, S, SHIP_METHODS } from "./api";
 import { NotFoundError, RedirectError } from "./router";
+import { HeroBirthdays } from "../../src/app/kabinet/Birthdays";
+import { demoBirthdays } from "./holidays";
 
 const needUser = (next: string) => {
   if (!S.user) throw new RedirectError(`/vhod?next=${next}`);
@@ -73,6 +75,7 @@ export async function KupitPage({ id, who, pechat }: { id: string; who?: string;
         printEnabled={DEFAULTS.flags.printEnabled}
         contact={{ name: user.name ?? "", phone: user.phone ?? "", email: user.email ?? "" }}
         pdfPaid={pdfPaidFor(id)}
+        prefill={demoPrefill([...SHIP_METHODS])}
       />
     </div>
   );
@@ -232,6 +235,7 @@ export async function KabinetHome() {
     }
   }
   const hint = nextOccasion({ birthdays: [...bdays.values()], pastOccasions: past });
+  const birthdays = await demoBirthdays(60);
 
   const orderLine = new Map<string, string>();
   for (const o of S.orders.filter((x) => OPEN_ORDER.includes(x.status))) {
@@ -267,6 +271,8 @@ export async function KabinetHome() {
           <Link className="btn btn--gold btn--sm" href={hint.href}>Выбрать сказку</Link>
         </aside>
       )}
+
+      <HeroBirthdays list={birthdays} hrefFor={() => "/sozdat?povod=den-rozhdeniya"} />
 
       <h2 className="cab-h2">Мои книги</h2>
       {books.length === 0 ? (

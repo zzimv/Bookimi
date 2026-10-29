@@ -37,6 +37,8 @@ model User {
   referredBy    User?     @relation("Referrals", fields: [referredById], references: [id])
   referrals     User[]    @relation("Referrals")
   deviceHashes  String[]  // для защиты «пригласить себя»
+  /// Адресная книга доставки (последние 3, src/lib/delivery.ts). NULL — ещё не заводилась, [] — всё удалено.
+  savedAddresses Json?
   createdAt     DateTime  @default(now())
   deletedAt     DateTime?
 
@@ -471,6 +473,9 @@ model Shipment {
   order       Order    @relation(fields: [orderId], references: [id])
   method      String   // pickup | cdek_pvz | cdek_courier | pochta | yandex
   address     Json
+  cityCode    Int?     // код города СДЭК
+  pvzCode     String?  // пункт выдачи СДЭК (delivery_point)
+  pvzAddress  String?
   priceRub    Int
   etaDate     DateTime?
   trackNumber String?

@@ -20,7 +20,7 @@ function RuleForm({ r }: { r?: Awaited<ReturnType<typeof ruleStats>>[number] }) 
         <label className="field"><span>Контрольная группа, %</span><input className="input" type="number" name="controlPct" defaultValue={r?.controlPct ?? 10} /></label>
         <label className="check"><input type="checkbox" name="isActive" defaultChecked={r?.isActive ?? false} /> Правило включено</label>
       </div>
-      <label className="field"><span>Текст. Подстановки: {"{name}"} {"{title}"} {"{link}"} {"{promo}"} {"{review}"} {"{ref}"}</span><textarea className="textarea" name="template" defaultValue={r?.template} required /></label>
+      <label className="field"><span>Текст. Подстановки: {"{name}"} {"{title}"} {"{link}"} {"{promo}"} {"{review}"} {"{ref}"} {"{date}"} {"{deadline}"} (дни рождения)</span><textarea className="textarea" name="template" defaultValue={r?.template} required /></label>
       <button className="btn btn--primary btn--sm">Сохранить</button>
     </form>
   );

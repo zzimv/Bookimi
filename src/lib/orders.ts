@@ -10,6 +10,7 @@ import { notifyUser, alertOwner, orderHeroAcc } from "./notify";
 import { track } from "./events";
 import { shipQuote, type ShipAddress, type ShipMethod } from "./shipping";
 import { hmac } from "./crypto";
+import { addToAddressBook, cleanAddress, parseAddressBook } from "./delivery";
 
 export async function catalogForPricing(): Promise<{ formats: CatalogFormat[]; addons: CatalogAddon[] }> {
   const [formats, addons, audio, flags] = await Promise.all([
@@ -67,6 +68,8 @@ export interface CheckoutInput {
   promo?: string;
   contact: { name: string; phone?: string; email?: string };
   utm?: Record<string, string>;
+  /** Сохранить адрес и получателя в адресной книге профиля (по умолчанию — да). */
+  saveAddress?: boolean;
 }
 
 export async function priceCheckout(userId: string, input: CheckoutInput) {
@@ -76,7 +79,7 @@ export async function priceCheckout(userId: string, input: CheckoutInput) {
   let shipInfo: Awaited<ReturnType<typeof shipQuote>> | null = null;
   const books = input.whoPrints === "bookimi" ? 1 + (input.addons.includes("second-copy") ? 1 : 0) : 0;
   if (input.whoPrints === "bookimi" && input.shipping) {
-    shipInfo = await shipQuote(input.shipping.method, input.shipping.address, books);
+    shipInfo = await shipQuote(input.shipping.method, cleanAddress(input.shipping.method, input.shipping.address), books);
     shippingRub = shipInfo.priceRub;
   }
   const promo = input.promo ? await findPromo(input.promo, userId) : null;
@@ -120,6 +123,7 @@ export async function createOrder(userId: string, input: CheckoutInput) {
   if (!book) throw new Error("Книга не найдена");
   const q = priced.quote;
   const title = (book.text as { title?: string } | null)?.title ?? "Персональная книга";
+  const ship = input.shipping ? { method: input.shipping.method, address: cleanAddress(input.shipping.method, input.shipping.address) } : null;
   const order = await db.order.create({
     data: {
       publicCode: publicCode(),
@@ -147,11 +151,15 @@ export async function createOrder(userId: string, input: CheckoutInput) {
         })),
       },
       shipment:
-        input.whoPrints === "bookimi" && input.shipping
+        input.whoPrints === "bookimi" && ship
           ? {
               create: {
-                method: input.shipping.method,
-                address: input.shipping.address as object,
+                method: ship.method,
+                // noPrefill: покупатель снял «Сохранить адрес» — этот заказ не подставляется в следующие
+                address: { ...ship.address, ...(input.saveAddress === false ? { noPrefill: true } : {}) } as object,
+                cityCode: ship.address.cityCode,
+                pvzCode: ship.method === "cdek_pvz" ? ship.address.pvzCode : undefined,
+                pvzAddress: ship.method === "cdek_pvz" ? ship.address.pvzAddress : undefined,
                 priceRub: q.shippingRub,
                 etaDate: priced.eta?.eta,
               },
@@ -159,8 +167,23 @@ export async function createOrder(userId: string, input: CheckoutInput) {
           : undefined,
     },
   });
+  if (ship && input.saveAddress !== false) await saveToAddressBook(userId, ship.method, ship.address, input.contact);
   await track("checkout", { userId, props: { orderId: order.id, total: order.totalRub, whoPrints: order.whoPrints } });
   return order;
+}
+
+/** Адресная книга покупателя: этот адрес — первым, не больше трёх. Только на сервере, в профиле (выгрузка — /api/me). */
+export async function saveToAddressBook(userId: string, method: string, address: ReturnType<typeof cleanAddress>, contact: { name: string; phone?: string }) {
+  const u = await db.user.findUnique({ where: { id: userId }, select: { savedAddresses: true } });
+  const list = addToAddressBook(parseAddressBook(u?.savedAddresses), {
+    ...address,
+    id: hmac(`${userId}-${Date.now()}-${Math.random()}`).replace(/[^a-z0-9]/gi, "").slice(0, 12),
+    savedAt: new Date().toISOString(),
+    method,
+    name: contact.name,
+    phone: contact.phone ?? "",
+  });
+  await db.user.update({ where: { id: userId }, data: { savedAddresses: list as object[] } });
 }
 
 export async function availableProviders(): Promise<PaymentProvider[]> {

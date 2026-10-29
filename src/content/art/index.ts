@@ -3,13 +3,16 @@
 
 import type { ArtStyle, DemoExtra, DemoHeroDrawer, DemoTheme, ExtraDrawKind, ExtraRole, HeroKind } from "../types";
 import { FALLBACK_THEME_KEY } from "../types";
+import { ART_STYLE_IDS } from "../profiles";
 import { drawChild, KIDS_ART_STYLES, KIDS_THEMES } from "./kids";
 import { drawTeen, TEEN_ART_STYLES, TEEN_THEMES } from "./teens";
 import { drawAdult, ADULT_ART_STYLES, ADULT_THEMES } from "./adults";
 import { drawPet, PET_ART_STYLES, PET_THEMES } from "./pets";
+import { TRIAL_ART_STYLES } from "./trial";
 import { drawThing } from "./shared";
 
-export const ART_STYLES: ArtStyle[] = [...KIDS_ART_STYLES, ...TEEN_ART_STYLES, ...ADULT_ART_STYLES, ...PET_ART_STYLES];
+/** Все стили, включая пробные (status "trial"); что показывать покупателю — visibleArtStyleIds (profiles.ts). */
+export const ART_STYLES: ArtStyle[] = [...KIDS_ART_STYLES, ...TEEN_ART_STYLES, ...ADULT_ART_STYLES, ...PET_ART_STYLES, ...TRIAL_ART_STYLES];
 export const DEMO_THEMES: DemoTheme[] = [...KIDS_THEMES, ...TEEN_THEMES, ...ADULT_THEMES, ...PET_THEMES];
 
 export const themesByKey: Record<string, DemoTheme> = Object.fromEntries(DEMO_THEMES.map((t) => [t.key, t]));
@@ -20,6 +23,11 @@ const STUB_THEME: DemoTheme = { key: FALLBACK_THEME_KEY, sky: ["#bfe3f2", "#eef7
 export function themeFor(key: string): DemoTheme {
   return themesByKey[key] ?? themesByKey[FALLBACK_THEME_KEY] ?? themesByKey.dragon ?? STUB_THEME;
 }
+
+/** Пробный ли стиль (status "trial" в ART_STYLE_IDS). */
+export const isTrialArtStyle = (id: string) => ART_STYLE_IDS.some((s) => s.id === id && s.status === "trial");
+/** Стили, видимые покупателю: пробные — только при showTrial (настройка art.showTrialStyles; демо — всегда). */
+export const visibleArtStyleIds = (showTrial: boolean) => ART_STYLE_IDS.filter((s) => showTrial || s.status !== "trial");
 
 export function artStyle(id: string): ArtStyle | null {
   return ART_STYLES.find((s) => s.id === id) ?? null;

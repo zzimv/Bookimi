@@ -16,6 +16,10 @@ import { ADDONS, FORMATS } from "../../src/lib/catalog-defaults";
 import { canAcceptPayments, DEFAULTS } from "../../src/lib/settings";
 import type { ExtraV2T } from "../../src/content/answers";
 import type { JourneyOrder } from "../../src/app/zakaz/journey";
+import { cityLabel, findCity, normalizeCity, searchCities } from "../../src/lib/cities";
+import { filterPvz, type Pvz } from "../../src/lib/pvz";
+import { tableQuote } from "../../src/lib/ship-zones";
+import { addToAddressBook, addressError, cleanAddress, pickPrefill, type DeliveryAddress, type SavedAddress } from "../../src/lib/delivery";
 
 // ───────── хранилище ─────────
 export interface DBook {
@@ -56,7 +60,7 @@ export interface DOrder {
   contactPhone: string;
   contactEmail: string;
   readyDate?: number;
-  shipment?: { method: string; address: Record<string, string>; etaDate?: number; trackNumber?: string };
+  shipment?: { method: string; address: DeliveryAddress & { noPrefill?: boolean }; etaDate?: number; trackNumber?: string };
   status: string;
   paidAt?: number;
   payMethod?: string;
@@ -86,6 +90,8 @@ export interface Store {
   costs: { at: number; rub: number }[];
   events: { at: number; name: string }[];
   otp: { email: string; phone: string; code: string } | null;
+  /** Адресная книга доставки (как User.savedAddresses): null — ещё не заводилась. */
+  addresses?: SavedAddress[] | null;
 }
 
 export const KEY = "bookimi.demo.v1";
@@ -392,11 +398,68 @@ export function catalogForPricing(): { formats: CatalogFormat[]; addons: Catalog
   };
 }
 export const SHIP_METHODS = (["cdek_pvz", "cdek_courier", "pochta", "yandex"] as const).filter((m) => ({ cdek_pvz: DEFAULTS.shipping.cdekPvz, cdek_courier: DEFAULTS.shipping.cdekCourier, pochta: DEFAULTS.shipping.pochta, yandex: DEFAULTS.shipping.yandex })[m]);
-function shipQuote(method: string) {
+function shipQuote(method: string, to: Partial<DeliveryAddress> = {}) {
   const s = DEFAULTS.shipping;
   if (method === "pickup") return { priceRub: 0, daysMin: 0, daysMax: 0, source: "table" };
-  const [daysMin, daysMax] = s.fallbackDays[method] ?? [2, 7];
-  return { priceRub: s.fallbackRub[method] ?? 0, daysMin, daysMax, source: "table" };
+  // Как shipQuote без ключей СДЭК: тариф из настроек + пояс по удалённости города (src/lib/ship-zones.ts)
+  return { ...tableQuote(s.fallbackRub[method] ?? 0, s.fallbackDays[method] ?? [2, 7], { city: to.city, region: to.region }, { zones: s.distanceMarkup }), source: "table" };
+}
+
+// ───────── география: подсказки городов (офлайн-список сайта) и демо-пункты выдачи ─────────
+const STREETS = ["ул. Ленина", "ул. Мира", "ул. Советская", "ул. Гагарина", "ул. Кирова", "ул. Пушкина", "ул. Садовая", "ул. Молодёжная", "ул. Центральная", "ул. Октябрьская", "пр-т Победы", "ул. Комсомольская", "ул. Лесная", "ул. Школьная", "ул. Чехова", "ул. Строителей", "б-р Космонавтов", "ул. Королёва", "ул. Горького", "ул. Набережная", "ул. Первомайская", "ул. Островского", "ул. Маяковского", "ул. Свободы"];
+const METRO: Record<string, string[]> = {
+  "Москва": ["Сокол", "Тверская", "Китай-город", "Профсоюзная", "Бауманская", "Медведково", "Выхино", "Филёвский парк"],
+  "Санкт-Петербург": ["Невский проспект", "Площадь Восстания", "Петроградская", "Купчино", "Московская", "Девяткино"],
+  "Новосибирск": ["Площадь Ленина", "Речной вокзал", "Заельцовская"],
+  "Екатеринбург": ["Площадь 1905 года", "Уралмаш", "Геологическая"],
+  "Казань": ["Кремлёвская", "Козья слобода", "Проспект Победы"],
+  "Нижний Новгород": ["Горьковская", "Московская", "Буревестник"],
+  "Самара": ["Российская", "Гагаринская", "Юнгородок"],
+};
+const WORK = ["Пн–Пт 10:00–20:00, Сб–Вс 10:00–18:00", "Ежедневно 09:00–21:00", "Пн–Сб 10:00–19:00", "Ежедневно 10:00–22:00"];
+function seeded(seed: string) {
+  let h = 2166136261;
+  for (const ch of seed) h = Math.imul(h ^ ch.charCodeAt(0), 16777619);
+  return () => {
+    h = Math.imul(h ^ (h >>> 15), 2246822507);
+    h = Math.imul(h ^ (h >>> 13), 3266489909);
+    return ((h ^= h >>> 16) >>> 0) / 4294967296;
+  };
+}
+/** Демо-пункты выдачи города: детерминированно по городу (тот же город — те же пункты), с пометкой «демо-пункт». */
+export function demoPvz(city: string, region?: string): Pvz[] {
+  const c = findCity(city, region);
+  if (!c) return [];
+  const rnd = seeded(`${normalizeCity(c.name)}|${c.region}`);
+  const n = Math.max(3, Math.min(24, Math.round(Math.sqrt(c.population) / 60)));
+  const metro = METRO[c.name];
+  const tag = Math.floor(rnd() * 900 + 100);
+  return Array.from({ length: n }, (_, i) => {
+    const post = i % 4 === 3;
+    const house = `${1 + Math.floor(rnd() * 120)}${rnd() < 0.2 ? `к${1 + Math.floor(rnd() * 3)}` : ""}`;
+    return {
+      code: `DEMO-${tag}-${String(i + 1).padStart(2, "0")}`,
+      name: `демо-пункт №${i + 1}`,
+      address: `${STREETS[Math.floor(rnd() * STREETS.length)]}, ${house}`,
+      workTime: post ? "Круглосуточно" : WORK[Math.floor(rnd() * WORK.length)],
+      metro: metro ? metro[Math.floor(rnd() * metro.length)] : null,
+      type: post ? "POSTAMAT" : "PVZ",
+      lat: +(c.lat + (rnd() - 0.5) * 0.06).toFixed(6),
+      lon: +(c.lon + (rnd() - 0.5) * 0.1).toFixed(6),
+      demo: true,
+    } as Pvz;
+  }).sort((a, b) => a.address.localeCompare(b.address, "ru"));
+}
+
+/** Подстановка в оформление — те же правила, что на сайте (pickPrefill): адресная книга → прошлый заказ → профиль. */
+export function demoPrefill(methods: string[]) {
+  const last = S.orders.find((o) => o.shipment);
+  return pickPrefill({
+    saved: S.addresses ?? null,
+    lastOrder: last ? { contactName: last.contactName, contactPhone: last.contactPhone, shipment: { method: last.shipment!.method, address: last.shipment!.address } } : null,
+    profile: { name: S.user?.name, phone: S.user?.phone },
+    methods,
+  });
 }
 export function findPromo(code?: string) {
   if (!code) return null;
@@ -416,14 +479,15 @@ interface CheckoutInput {
   whoPrints: "self" | "bookimi";
   formatKey?: string;
   addons: string[];
-  shipping?: { method: string; address: Record<string, string> };
+  shipping?: { method: string; address: DeliveryAddress };
   promo?: string;
   contact: { name: string; phone?: string; email?: string };
+  saveAddress?: boolean;
 }
 function priceCheckout(input: CheckoutInput) {
   const { formats, addons } = catalogForPricing();
   const books = input.whoPrints === "bookimi" ? 1 + (input.addons.includes("second-copy") ? 1 : 0) : 0;
-  const ship = input.whoPrints === "bookimi" && input.shipping ? shipQuote(input.shipping.method) : null;
+  const ship = input.whoPrints === "bookimi" && input.shipping ? shipQuote(input.shipping.method, input.shipping.address) : null;
   const promo = findPromo(input.promo);
   const q = quote(
     {
@@ -685,6 +749,14 @@ async function handle(method: string, path: string, q: URLSearchParams, body: un
     return ok({ ok: true });
   }
 
+  if (path === "/api/geo/cities") {
+    return ok({ cities: searchCities(q.get("q") ?? "", 10).map((c) => ({ name: c.name, region: c.region, code: c.cdekCode, lat: c.lat, lon: c.lon, label: cityLabel(c) })), source: "offline" });
+  }
+  if (path === "/api/geo/pvz") {
+    const all = demoPvz(q.get("city") ?? "", q.get("region") || undefined);
+    const found = filterPvz(all, q.get("q") ?? "");
+    return ok({ points: found.slice(0, 30), total: found.length, source: "demo", cityCode: null });
+  }
   if (path === "/api/checkout/quote" && method === "POST") {
     const input = b0 as unknown as CheckoutInput;
     if (!bookById(input.bookId)) return err("Не найдено", 404);
@@ -697,8 +769,16 @@ async function handle(method: string, path: string, q: URLSearchParams, body: un
     if (!book) return err("Не найдено", 404);
     if (input.whoPrints === "bookimi") {
       if (!input.shipping) return err("Выберите доставку");
-      if (input.shipping.method !== "pickup" && !input.shipping.address.city) return err("Укажите город");
+      input.shipping.address = cleanAddress(input.shipping.method, input.shipping.address ?? { city: "" });
+      const bad = addressError(input.shipping.method, input.shipping.address);
+      if (bad) return err(bad);
       if (!input.contact.name || !input.contact.phone) return err("Укажите имя и телефон получателя");
+      if (input.shipping.method === "cdek_pvz") {
+        const a = input.shipping.address;
+        const point = demoPvz(a.city, a.region).find((p) => p.code === a.pvzCode);
+        if (!point) return err("Пункт выдачи не найден в этом городе — выберите его заново");
+        a.pvzAddress = point.address;
+      }
     }
     const priced = priceCheckout(input);
     if (priced.quote.errors.length) return err(priced.quote.errors.join("; "));
@@ -721,10 +801,16 @@ async function handle(method: string, path: string, q: URLSearchParams, body: un
       contactPhone: input.contact.phone ?? S.user.phone,
       contactEmail: input.contact.email || S.user.email,
       readyDate: priced.eta ? priced.eta.ready.getTime() : undefined,
-      shipment: input.whoPrints === "bookimi" && input.shipping ? { method: input.shipping.method, address: input.shipping.address, etaDate: priced.eta?.eta.getTime() } : undefined,
+      shipment:
+        input.whoPrints === "bookimi" && input.shipping
+          ? { method: input.shipping.method, address: { ...input.shipping.address, ...(input.saveAddress === false ? { noPrefill: true } : {}) }, etaDate: priced.eta?.eta.getTime() }
+          : undefined,
       status: "PENDING_PAYMENT",
     };
     if (input.contact.name && S.user && !S.user.name) S.user.name = input.contact.name;
+    if (input.whoPrints === "bookimi" && input.shipping && input.saveAddress !== false) {
+      S.addresses = addToAddressBook(S.addresses, { ...input.shipping.address, id: uuid().slice(0, 12), savedAt: new Date().toISOString(), method: input.shipping.method, name: input.contact.name, phone: input.contact.phone ?? "" });
+    }
     S.orders.unshift(o);
     log(`Заказ ${o.publicCode} оформлен: ${o.totalRub.toLocaleString("ru-RU")} ₽ (${o.whoPrints === "self" ? "PDF" : "печать"}${o.promo ? `, промокод ${o.promo}` : ""}) · уведомление «Заказ оформлен»`);
     commit();

@@ -1,16 +1,30 @@
 import Link from "next/link";
 import { getPromoBar, getSeller, sellerIsComplete } from "@/lib/settings";
-import { AUDIENCE_PAGES, getSeason } from "@/lib/storefront";
+import { AUDIENCE_PAGES } from "@/lib/storefront";
+import { getNearestHoliday } from "@/lib/holidays";
+import { daysLeftText, fmtDay } from "@/lib/holidays-core";
 import { ThemeToggle } from "./ThemeToggle";
 
 export async function PromoBar() {
   const p = await getPromoBar();
-  if (!p.enabled || !p.text) return null;
+  if (!p.enabled) return null;
+  // Ближайший праздник, пока печать к нему успевает (выключается в Настройках → «Полоса промо сверху»)
+  const near = p.holidayAuto ? await getNearestHoliday().catch(() => null) : null;
+  if (near && near.calc.printOk && near.calc.deadline != null && near.calc.daysLeft != null) {
+    const left = daysLeftText(near.calc.daysLeft);
+    return (
+      <div className="promo">
+        <Link href="/prazdniki">
+          {near.calc.holiday.title}: {left}. Печатную книгу успеем, если заказать до {fmtDay(near.calc.deadline)}
+        </Link>
+      </div>
+    );
+  }
+  if (!p.text) return null;
   return <div className="promo">{p.text}</div>;
 }
 
 export async function Header() {
-  const season = await getSeason();
   const links = [
     { href: "/skazki", label: "Книги" },
     ...AUDIENCE_PAGES.map((a) => ({ href: `/dlya/${a.slug}`, label: a.nav })),
@@ -26,9 +40,7 @@ export async function Header() {
           {links.map((l) => (
             <Link key={l.href} href={l.href}>{l.label}</Link>
           ))}
-          {season && (
-            <Link href={season.href} className="nav__season">{season.nav}</Link>
-          )}
+          <Link href="/prazdniki" className="nav__season">Ближайшие праздники</Link>
         </nav>
         <div className="header__right">
           <Link href="/kabinet" className="header__cab" aria-label="Личный кабинет">
@@ -44,7 +56,7 @@ export async function Header() {
               <svg viewBox="0 0 24 24" width="26" height="26" aria-hidden="true"><path d="M3 6h18M3 12h18M3 18h18" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" /></svg>
             </summary>
             <nav className="burger__menu" aria-label="Меню">
-              {season && <Link href={season.href} className="nav__season">{season.nav}</Link>}
+              <Link href="/prazdniki" className="nav__season">Ближайшие праздники</Link>
               {links.map((l) => (
                 <Link key={l.href} href={l.href}>{l.label}</Link>
               ))}
@@ -92,6 +104,7 @@ export async function Footer() {
               <li key={a.slug}><Link href={`/dlya/${a.slug}`}>{a.nav}</Link></li>
             ))}
             <li><Link href="/povody">Все поводы</Link></li>
+            <li><Link href="/prazdniki">Ближайшие праздники</Link></li>
             <li><Link href="/povod/novyj-god">На Новый год</Link></li>
             <li><Link href="/vozrast/2-4-goda">Для детей 2–4 лет</Link></li>
             <li><Link href="/blog">Блог</Link></li>

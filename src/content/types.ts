@@ -161,13 +161,36 @@ export interface TextStyle {
 export type DemoLine = "thin" | "bold" | "sketch" | "none";
 export type DemoTexture = "paper" | "grain" | "halftone" | "none";
 
+/**
+ * Обработка фона отдельно от фигур (render.ts):
+ *  blur — размытый живописный фон (фигуры остаются чёткими, как целлулоид поверх написанного фона);
+ *  wash — фон выбелен к бумаге (минимум фона, много белого); lines — фон превращён в контур тушью цвета ink
+ *  на бумаге paper; offset — плоский цвет + контур со сдвигом (ксерокопия); glow — тёплое живописное сияние;
+ *  dream — мягкий светлый акварельный фон в золотом свете.
+ */
+export type DemoBackdrop = "blur" | "wash" | "lines" | "offset" | "glow" | "dream";
+
+/**
+ * Доп. слои стиля (render.ts). За фигурами: town (панорама городка), cutaway (дом в разрезе с полками),
+ * splash (акварельные пятна), floor (пара линий пола), crosses (пустыня: дюны и звёзды-крестики). Поверх: hatch (штриховка), aged (старая бумага, пятна,
+ * скотч, пометки), panels (раскадровка), fog (туман и лучи), vignette (уход в бумагу), shade (тёмные тёплые края), rays (золотые лучи и искорки).
+ */
+export type DemoOverlay = "town" | "cutaway" | "splash" | "floor" | "hatch" | "aged" | "panels" | "crosses" | "fog" | "vignette" | "shade" | "rays";
+
 export interface ArtStyleDemo {
   palette: { paper: string; ink: string; accents: string[] };
   line: DemoLine;
   texture: DemoTexture;
-  /** id SVG-фильтра из render.ts (wobble, grain, posterize, soft) или подсказка. */
+  /** id SVG-фильтра фигур из render.ts (wobble, posterize, soft, ink, sepia, cel, xerox) или подсказка. */
   filter?: string;
+  /** Обработка фона (по умолчанию — фон темы как есть). */
+  backdrop?: DemoBackdrop;
+  /** Доп. слои стиля. */
+  overlays?: DemoOverlay[];
 }
+
+/** live — на сайте; trial — пробный: виден в демо (значок «пробный»), на сайте — только при art.showTrialStyles. */
+export type ArtStyleStatus = "live" | "trial";
 
 export interface ArtStyle {
   id: string;
@@ -180,6 +203,8 @@ export interface ArtStyle {
   /** EN, негатив для Qwen. */
   negative: string;
   demo: ArtStyleDemo;
+  /** По умолчанию live. Пробные стили — в art/trial.ts. */
+  status?: ArtStyleStatus;
 }
 
 // ---------------------------------------------------------------------------
@@ -346,7 +371,9 @@ export const FALLBACK_THEME_KEY: DemoThemeKey = "meadow";
 // Владельцы стилей картинок (кто описывает ArtStyle с этим id).
 // ---------------------------------------------------------------------------
 
-export const ART_STYLE_OWNERS: Record<string, "kids" | "teens" | "adults" | "pets"> = {
+export type ArtStyleOwner = "kids" | "teens" | "adults" | "pets" | "trial";
+
+export const ART_STYLE_OWNERS: Record<string, ArtStyleOwner> = {
   "watercolor-air": "kids",
   "kind-classic": "kids",
   "folk-lubok": "kids",
@@ -362,4 +389,18 @@ export const ART_STYLE_OWNERS: Record<string, "kids" | "teens" | "adults" | "pet
   "soft-gouache": "pets",
   "pet-cartoon": "pets",
   "vintage-postcard": "pets",
+  // Пробные стили (art/trial.ts, status "trial"): на сайте скрыты, пока не включён art.showTrialStyles
+  "farm-cutaway": "trial",
+  "ink-satire": "trial",
+  "town-panorama": "trial",
+  "pen-vignette": "trial",
+  "storyboard-book": "trial",
+  "desert-stars": "trial",
+  "cel-70s": "trial",
+  "painterly-tale": "trial",
+  "fable-ink": "trial",
+  "mystery-toon": "trial",
+  "field-journal": "trial",
+  "golden-animation": "trial",
+  "xerox-pencil": "trial",
 };
