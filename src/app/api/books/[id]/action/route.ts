@@ -7,7 +7,7 @@ import { cfg } from "@/lib/settings";
 import { hit } from "@/lib/limits";
 import { track } from "@/lib/events";
 import { DOC_VERSION } from "@/lib/legal";
-import { spentTodayRub } from "@/lib/limits";
+import { isStaff, spendLimitReached } from "@/lib/staff";
 import { AnswersV2, heroAge } from "@/lib/quiz";
 import { moodsFor } from "@/content/moods";
 import { hasConsent } from "@/lib/consent";
@@ -35,13 +35,18 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   if (!b) return err("Некорректный запрос");
   const { book } = own;
   const anon = await anonId();
+  // Сотрудник тестирует свою книгу: без лимитов покупателя; расходы ИИ — в свой суточный лимит (src/lib/staff.ts)
+  const staff = isStaff(own.user?.role);
 
   switch (b.action) {
     case "rewrite": {
-      if (book.rewritesLeft <= 0) return err("Сказку можно переписать не больше двух раз. Поправьте текст вручную.");
+      if (book.rewritesLeft <= 0 && !staff) return err("Сказку можно переписать не больше двух раз. Поправьте текст вручную.");
       if (!["TEXT_READY", "TEXT_APPROVED"].includes(book.status)) return err("Сейчас переписать нельзя");
       // Атомарно: параллельный запрос не спишет лишнее и не поставит вторую задачу
-      if (!(await takeRewrite(id))) return err("Сейчас переписать нельзя", 409);
+      const took = staff
+        ? (await db.book.updateMany({ where: { id, status: { in: ["TEXT_READY", "TEXT_APPROVED"] } }, data: { status: "TEXT_QUEUED", progress: 0 } })).count === 1
+        : await takeRewrite(id);
+      if (!took) return err("Сейчас переписать нельзя", 409);
       await enqueue(QUEUES.generateText, { bookId: id });
       return json({ ok: true });
     }
@@ -83,23 +88,25 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       }
       const limits = await cfg("limits");
       const contact = user.email ?? user.phone ?? user.id;
-      if (!(await hit(contact, "preview", limits.previewsPerContact))) {
+      if (!staff && !(await hit(contact, "preview", limits.previewsPerContact))) {
         return err("Сегодня превью уже было. Новое можно сделать завтра — или купите эту книгу без ожидания.", 429);
       }
       if (b.marketing) {
         await db.user.update({ where: { id: user.id }, data: { marketingOk: true } });
         await db.consent.create({ data: { userId: user.id, type: "MARKETING", docVersion: DOC_VERSION, granted: true } });
       }
-      await db.book.update({ where: { id }, data: { userId: user.id, withPhoto: b.withPhoto, contact, status: "PREVIEW_QUEUED", progress: 0, error: null } });
-      await db.hero.updateMany({ where: { bookId: id }, data: { userId: user.id } });
+      // Анонимная книга этого браузера переходит в аккаунт; чужую книгу (уже с владельцем) не переписываем
+      await db.book.update({ where: { id }, data: { ...(book.userId ? {} : { userId: user.id }), withPhoto: b.withPhoto, contact, status: "PREVIEW_QUEUED", progress: 0, error: null } });
+      if (!book.userId) await db.hero.updateMany({ where: { bookId: id, userId: null }, data: { userId: user.id } });
       await enqueue(QUEUES.generatePreview, { bookId: id }, { singletonKey: `preview-${id}` });
       return json({ ok: true });
     }
     case "redraw": {
       if (!book.paidFull) return err("Перерисовка доступна после покупки");
       const limits = await cfg("limits");
-      if (book.redrawsLeft <= 0) return err(`Бесплатные перерисовки закончились. Следующая — ${limits.redrawPriceRub} ₽ (через поддержку).`, 402);
-      if (!(await takeRedraw(id))) return err(`Бесплатные перерисовки закончились. Следующая — ${limits.redrawPriceRub} ₽ (через поддержку).`, 402);
+      if (book.redrawsLeft <= 0 && !staff) return err(`Бесплатные перерисовки закончились. Следующая — ${limits.redrawPriceRub} ₽ (через поддержку).`, 402);
+      if (staff && (await spendLimitReached(true)).over) return err("Лимит расходов сотрудников на сегодня исчерпан (Настройки → Лимиты)", 429);
+      if (!staff && !(await takeRedraw(id))) return err(`Бесплатные перерисовки закончились. Следующая — ${limits.redrawPriceRub} ₽ (через поддержку).`, 402);
       await enqueue(QUEUES.redraw, { bookId: id, index: b.index });
       const left = (await db.book.findUnique({ where: { id }, select: { redrawsLeft: true } }))?.redrawsLeft ?? 0;
       return json({ ok: true, redrawsLeft: left });
@@ -118,18 +125,22 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       }
       if (!book.paidFull) {
         if (book.status !== "PREVIEW_READY") return err("Подождите, пока превью дорисуется");
-        if (book.moodChangesPreview >= limits.moodChangesPreview) return err(`До оплаты настроение можно сменить ${limits.moodChangesPreview} раза. После покупки — ещё раз бесплатно для всей книги.`, 429);
-        if ((await spentTodayRub()) >= limits.dailySpendRub) return err("Сейчас много заказов — попробуйте сменить настроение чуть позже", 429);
+        const moodLimit = staff ? 1_000_000 : limits.moodChangesPreview;
+        if (book.moodChangesPreview >= moodLimit) return err(`До оплаты настроение можно сменить ${limits.moodChangesPreview} раза. После покупки — ещё раз бесплатно для всей книги.`, 429);
+        if ((await spendLimitReached(staff)).over) return err(staff ? "Лимит расходов сотрудников на сегодня исчерпан (Настройки → Лимиты)" : "Сейчас много заказов — попробуйте сменить настроение чуть позже", 429);
         // Атомарно: счётчик < лимита и превью готово — иначе параллельный запрос уже занял попытку
-        if (!(await takePreviewMood(id, moodId || null, limits.moodChangesPreview))) {
+        if (!(await takePreviewMood(id, moodId || null, moodLimit))) {
           return err(`До оплаты настроение можно сменить ${limits.moodChangesPreview} раза. После покупки — ещё раз бесплатно для всей книги.`, 429);
         }
       } else {
         if (book.status !== "FULL_READY") return err("Подождите, пока книга будет готова");
         // Первая смена после оплаты — бесплатно (вся книга), дальше — одна перерисовка из лимита за смену
         const free = book.moodChangesFull === 0;
-        if (!free && book.redrawsLeft <= 0) return err(`Бесплатные перерисовки закончились. Смена настроения — ${limits.redrawPriceRub} ₽ (через поддержку).`, 402);
-        if (!(await takeFullMood(id, moodId || null, free))) return err("Настроение уже меняется — подождите, пока книга будет готова", 409);
+        if (!free && book.redrawsLeft <= 0 && !staff) return err(`Бесплатные перерисовки закончились. Смена настроения — ${limits.redrawPriceRub} ₽ (через поддержку).`, 402);
+        const took = staff
+          ? (await db.book.updateMany({ where: { id, paidFull: true, status: "FULL_READY" }, data: { mood: moodId || null, moodChangesFull: { increment: 1 }, status: "FULL_QUEUED", progress: 0 } })).count === 1
+          : await takeFullMood(id, moodId || null, free);
+        if (!took) return err("Настроение уже меняется — подождите, пока книга будет готова", 409);
       }
       await enqueue(QUEUES.mood, { bookId: id }, { singletonKey: `mood-${id}` });
       await track("mood_change", { anonId: anon, userId: own.user?.id, props: { bookId: id, mood: moodId || "as-drawn" } });

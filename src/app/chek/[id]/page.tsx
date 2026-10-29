@@ -1,6 +1,6 @@
 import { notFound } from "next/navigation";
 import { db } from "@/lib/db";
-import { currentUser, isDemo } from "@/lib/auth";
+import { can, currentUser, isDemo } from "@/lib/auth";
 import { getSeller } from "@/lib/settings";
 
 export const dynamic = "force-dynamic";
@@ -10,9 +10,11 @@ export const metadata = { robots: { index: false } };
 export default async function Page({ params }: { params: Promise<{ id: string }> }) {
   if (!isDemo()) notFound();
   const { id } = await params;
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id)) notFound();
   const user = await currentUser();
   const order = await db.order.findUnique({ where: { id }, include: { items: true } });
-  if (!order || !user || (order.userId !== user.id && user.role === "CUSTOMER")) notFound();
+  // Покупатель — свой чек; сотрудник — только с правом на заказы (маркетологу — нет)
+  if (!order || !user || (order.userId !== user.id && !can(user.role, "orders"))) notFound();
   const seller = await getSeller();
   return (
     <div className="flow" style={{ maxWidth: 520 }}>

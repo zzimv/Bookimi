@@ -9,7 +9,9 @@ import { ThanksPanel } from "../../src/app/zakaz/ThanksPanel";
 import { journeyLine } from "../../src/app/zakaz/journey";
 import { nextOccasion } from "../../src/app/kabinet/occasion";
 import { BookCabinet } from "../../src/app/kabinet/kniga/[id]/BookCabinet";
-import { CopyField } from "../../src/app/kabinet/Forms";
+import { CopyField, DataActions, NameForm } from "../../src/app/kabinet/Forms";
+import { AddressBook } from "../../src/app/kabinet/dannye/AddressBook";
+import { CartoonPlayer } from "./cartoon";
 import { LoginBox } from "../../src/app/vhod/LoginBox";
 import { SideNav } from "../../src/components/SideNav";
 import { AnswersV2, heroAge } from "../../src/lib/quiz";
@@ -21,7 +23,7 @@ import { METHOD_TITLES } from "../../src/lib/shipping";
 import { declineName } from "../../src/lib/declension";
 import { canAcceptPayments, DEFAULTS } from "../../src/lib/settings";
 import { FORMATS } from "../../src/lib/catalog-defaults";
-import { bookById, bulkState, catalogForPricing, demoPrefill, heroAccOf, journeyOf, markPaid, orderById, pageUrl, pdfPaidFor, S, SHIP_METHODS } from "./api";
+import { bookById, bulkState, cartoonOf, catalogForPricing, demoPrefill, heroAccOf, journeyOf, markPaid, orderById, pageUrl, pdfPaidFor, S, SHIP_METHODS } from "./api";
 import { NotFoundError, RedirectError } from "./router";
 import { HeroBirthdays } from "../../src/app/kabinet/Birthdays";
 import { demoBirthdays } from "./holidays";
@@ -79,6 +81,7 @@ export async function KupitPage({ id, who, pechat, bulk }: { id: string; who?: s
         pdfPaid={pdfPaidFor(id)}
         prefill={demoPrefill([...SHIP_METHODS])}
         bulk={bs?.available ? { ...bs, initialOn: bulk === "1" } : null}
+        audience={AnswersV2.safeParse(b.params).data?.audience ?? "CHILD"}
       />
     </div>
   );
@@ -238,7 +241,7 @@ export async function KabinetHome() {
   const user = S.user!;
   const books = [...S.books].sort((x, y) => y.createdAt - x.createdAt);
   const lastOrder = S.orders.find((o) => o.contactName);
-  const name = firstName(user.name) ?? firstName(lastOrder?.contactName);
+  const name = firstName(user.firstName) ?? firstName(user.name) ?? firstName(lastOrder?.contactName);
   const paidCount = books.filter((b) => b.paidFull).length;
 
   const bdays = new Map<string, { name: string; nameGen?: string; date: Date }>();
@@ -376,6 +379,8 @@ export async function KabinetBook({ id }: { id: string }) {
           <p className="small" style={{ margin: "8px 0 0" }}><Link href={`/zakaz/${order.id}`}>Подробнее о заказе →</Link></p>
         </details>
       )}
+      {b.status === "FULL_READY" && cartoonOf(b).bought && <CartoonPlayer book={b} />}
+      {b.status !== "FULL_READY" && cartoonOf(b).bought && <p className="muted-panel small">Мультфильм соберётся, как только книга будет готова.</p>}
       <BookCabinet id={id} title={b.text?.title ?? ""} status={b.status} progress={b.progress} redrawsLeft={b.redrawsLeft} pages={pages} files={files} audioUrl={null} selfRead={false} />
       <p className="small demo-note" style={{ marginTop: 16 }}>
         <Link href={`/kniga/${id}`}>Настроение иллюстраций — сменить для всей книги →</Link>
@@ -394,20 +399,35 @@ export async function KabinetOrders() {
         <p className="muted">Заказов пока нет.</p>
       ) : (
         <div className="tbl-wrap">
-          <table className="tbl">
+          <table className="tbl tbl--cards">
             <thead><tr><th>Заказ</th><th>Сумма</th><th>Как идёт</th></tr></thead>
             <tbody>
               {list.map((o) => (
                 <tr key={o.id}>
-                  <td><Link href={`/zakaz/${o.id}`}><b>{o.publicCode}</b></Link><br /><small className="muted">{new Date(o.createdAt).toLocaleDateString("ru-RU")}</small></td>
-                  <td>{o.totalRub.toLocaleString("ru-RU")} ₽</td>
-                  <td className="small">{journeyLine(journeyOf(o)) ?? "—"}</td>
+                  <td data-label="Заказ"><Link href={`/zakaz/${o.id}`}><b>{o.publicCode}</b></Link><br /><small className="muted">{new Date(o.createdAt).toLocaleDateString("ru-RU")}</small></td>
+                  <td data-label="Сумма">{o.totalRub.toLocaleString("ru-RU")} ₽</td>
+                  <td data-label="Как идёт" className="small">{journeyLine(journeyOf(o)) ?? "—"}</td>
                 </tr>
               ))}
             </tbody>
           </table>
         </div>
       )}
+    </>
+  );
+}
+
+// ───────── /kabinet/dannye — как на сайте: имя, адреса, выгрузка, отзыв согласий, удаление ─────────
+export function KabinetDannye() {
+  const user = S.user!;
+  return (
+    <>
+      <h1 style={{ fontSize: "var(--fs-xl)" }}>Мои данные</h1>
+      <p className="muted">По закону о персональных данных (152-ФЗ) вы можете в любой момент выгрузить свои данные, отозвать согласия и удалить аккаунт.</p>
+      <NameForm initial={user.firstName ?? ""} />
+      <AddressBook addresses={S.addresses ?? []} />
+      <DataActions />
+      <p className="small muted demo-note">Демо: «Скачать мои данные» — JSON из этого окна браузера; удаление аккаунта начинает демо сначала.</p>
     </>
   );
 }

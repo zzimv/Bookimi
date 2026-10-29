@@ -1,10 +1,10 @@
 import { db } from "@/lib/db";
-import { currentUser } from "@/lib/auth";
+import { userOrLogin } from "@/lib/auth";
 import { cfg } from "@/lib/settings";
 import { CopyField } from "../Forms";
 
 export default async function Page() {
-  const user = (await currentUser())!;
+  const user = await userOrLogin();
   const ref = await cfg("referral");
   const [invited, paid, promos] = await Promise.all([
     db.referral.count({ where: { inviterId: user.id } }),

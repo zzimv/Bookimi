@@ -11,7 +11,7 @@ import { cfg } from "../settings";
 import { Answers, extraGender, type QuizAnswers } from "../quiz";
 import { guessGender, fillTags } from "../declension";
 import { getFile, putFile, deleteFile, fileExists } from "../storage";
-import { alertOwner, notifyUser } from "../notify";
+import { alertOwner, notifySafe } from "../notify";
 import { voicePurgeDate } from "../cartoon-guide";
 import { bookText, bookTextHash, cueKind, renderedKeyOf } from "../cartoon";
 import { dedicationText, tagContext, YandexGptProvider, type StoryText } from "./text";
@@ -221,7 +221,7 @@ export async function runCartoon(bookId: string) {
         ...(own ? { voicePurgeAt: voicePurgeDate(now, set.voicePurgeDays), voicePurgedAt: null } : {}),
       },
     });
-    if (book.userId) await notifyUser(book.userId, "cartoon_ready", { title: text.title, bookId, own: own ? 1 : undefined });
+    if (book.userId) await notifySafe(book.userId, "cartoon_ready", { title: text.title, bookId, own: own ? 1 : undefined });
     return out;
   } catch (e) {
     await db.cartoon.update({ where: { bookId }, data: { status: "FAILED", error: (e as Error).message.slice(0, 300) } }).catch(() => {});

@@ -2,7 +2,8 @@ import { z } from "zod";
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { body, err, json } from "@/lib/api";
-import { currentUser, logout } from "@/lib/auth";
+import { cleanFirstName, currentUser, logout } from "@/lib/auth";
+import { deleteAccount } from "@/lib/account";
 import { deleteFile } from "@/lib/storage";
 import { DOC_VERSION } from "@/lib/legal";
 import { parseAddressBook } from "@/lib/delivery";
@@ -21,7 +22,7 @@ export async function GET() {
       notifyPrefs: { select: { channel: true, marketing: true, isActive: true } },
     },
   });
-  return new NextResponse(JSON.stringify({ exportedAt: new Date(), ...data, totpSecret: undefined }, null, 2), {
+  return new NextResponse(JSON.stringify({ exportedAt: new Date(), ...data, totpSecret: undefined, totpRecovery: undefined, deviceHashes: undefined }, null, 2), {
     headers: { "Content-Type": "application/json; charset=utf-8", "Content-Disposition": 'attachment; filename="bookimi-my-data.json"' },
   });
 }
@@ -44,6 +45,8 @@ const Input = z.discriminatedUnion("action", [
     }),
   }),
   z.object({ action: z.literal("addressDelete"), id: z.string().max(40) }),
+  /** «Как к вам обращаться»: пусто — удалить имя. */
+  z.object({ action: z.literal("name"), firstName: z.string().max(80) }),
 ]);
 
 export async function POST(req: Request) {
@@ -51,6 +54,12 @@ export async function POST(req: Request) {
   if (!user) return err("Войдите", 401);
   const b = await body(req, Input);
   if (!b) return err("Некорректный запрос");
+  if (b.action === "name") {
+    const firstName = cleanFirstName(b.firstName);
+    if (firstName === false) return err("Имя: до 40 символов — буквы, пробел или дефис");
+    await db.user.update({ where: { id: user.id }, data: { firstName } });
+    return json({ ok: true, firstName });
+  }
   if (b.action === "prefs") {
     const address = b.channel === "email" ? user.email ?? "" : undefined;
     const existing = await db.notificationPref.findUnique({ where: { userId_channel: { userId: user.id, channel: b.channel } } });
@@ -95,16 +104,10 @@ export async function POST(req: Request) {
     }
     return json({ ok: true });
   }
-  // Удаление: фото и анкеты — сразу; заказы обезличиваются (сумма и дата нужны для учёта дохода НПД)
-  const photos = await db.photo.findMany({ where: { hero: { userId: user.id }, deletedAt: null } });
-  for (const p of photos) await deleteFile("photos", p.storageKey).catch(() => {});
-  await db.hero.deleteMany({ where: { userId: user.id } });
-  await db.order.updateMany({ where: { userId: user.id }, data: { contactName: null, contactPhone: null, contactEmail: null } });
-  await db.shipment.updateMany({ where: { order: { userId: user.id } }, data: { address: {}, pvzAddress: null } });
-  await db.book.updateMany({ where: { userId: user.id }, data: { params: {}, contact: null } });
-  await db.notificationPref.deleteMany({ where: { userId: user.id } });
-  await db.user.update({ where: { id: user.id }, data: { email: null, phone: null, name: null, savedAddresses: [], deletedAt: new Date(), marketingOk: false } });
-  await db.auditLog.create({ data: { action: "user.delete", entity: "user", entityId: user.id } });
+  // Удаление (152-ФЗ): книги, файлы, фото, голос, журнал писем, коды входа — удаляются; тикеты и отзывы —
+  // обезличиваются; заказы и чеки остаются для налогового учёта без контактов (src/lib/account.ts)
+  const r = await deleteAccount(user.id);
+  if (!r.ok) return err(r.error, 409);
   await logout();
   return json({ ok: true });
 }

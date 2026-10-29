@@ -28,8 +28,9 @@ export default async function Page({ searchParams }: { searchParams: Promise<Rec
         title="Расходы на ИИ по дням"
         sub="30 дней"
         unit="₽"
-        bars={c.spend.map((s) => ({ label: dayLabel(s.day), value: s.value }))}
+        bars={c.spend.map((s, i) => ({ label: dayLabel(s.day), value: s.value, extra: c.staffSpend[i]?.value ?? 0 }))}
         limit={{ value: c.dailyLimit, label: "Суточный лимит" }}
+        extraLabel={`тесты сотрудников (свой лимит ${c.staffDailyLimit} ₽)`}
       />
     </section>
   );

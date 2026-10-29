@@ -30,7 +30,10 @@ export async function throttle(key: string, max: number, windowMs: number) {
   return err("Слишком много запросов. Попробуйте через минуту.", 429);
 }
 
-/** Книга доступна её автору: по аккаунту или по анонимному идентификатору браузера. */
+/**
+ * Книга доступна её автору: по аккаунту или по анонимному идентификатору браузера. Сотрудникам покупательские
+ * API чужих книг не открываются (ни фото, ни PDF, ни правка) — для поддержки есть /api/admin/books/* с правами PERMS.
+ */
 export async function ownBook(bookId: string) {
   if (!/^[0-9a-f-]{36}$/.test(bookId)) return null;
   const [user, anon] = await Promise.all([currentUser(), anonId()]);
@@ -38,7 +41,6 @@ export async function ownBook(bookId: string) {
   if (!book) return null;
   if (book.userId && user?.id === book.userId) return { book, user };
   if (!book.userId && book.anonId === anon) return { book, user };
-  if (user && user.role !== "CUSTOMER") return { book, user, admin: true };
   return null;
 }
 

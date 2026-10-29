@@ -4,7 +4,7 @@ import { body, err, json, ownBook, throttle } from "@/lib/api";
 import { cfg } from "@/lib/settings";
 import { createOrder } from "@/lib/orders";
 import { hasConsent } from "@/lib/consent";
-import { notifyUser } from "@/lib/notify";
+import { notifySafe } from "@/lib/notify";
 import { signedUrl } from "@/lib/storage";
 import { bookText, bookTextHash, cartoonPurchase, cartoonView, createShare, deleteVoiceFiles, enqueueCartoon, renderedKeyOf, revokeShare } from "@/lib/cartoon";
 import { CARTOON_VOICE_DOC_VERSION, VOICE_LIMITS } from "@/lib/cartoon-guide";
@@ -72,14 +72,14 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
         addonsOnly: true,
         contact: { name: own.user.name ?? "", email: own.user.email ?? undefined, phone: own.user.phone ?? undefined },
       });
-      await notifyUser(own.user.id, "order_created", { code: order.publicCode, total: order.totalRub, orderId: order.id });
+      await notifySafe(own.user.id, "order_created", { code: order.publicCode, total: order.totalRub, orderId: order.id });
       return json({ orderId: order.id });
     } catch (e) {
       return err((e as Error).message);
     }
   }
 
-  if (!bought.cartoon && !own.admin) return err("Мультфильм к этой книге не куплен", 403);
+  if (!bought.cartoon) return err("Мультфильм к этой книге не куплен", 403);
   const c = await db.cartoon.findUnique({ where: { bookId: id } });
   if (!c) return err("Мультфильм ещё не создан — он появится после готовности книги", 409);
 

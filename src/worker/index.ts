@@ -7,7 +7,8 @@ import { runTriggers } from "../lib/triggers";
 import { issueDueBonuses } from "../lib/referral";
 import { checkNpdLimit } from "../lib/orders";
 import { gpuTick } from "../lib/gen/gpu";
-import { alertOwner } from "../lib/notify";
+import { alertOwner, notifyUser, type Template } from "../lib/notify";
+import { cancelUnpaid, runBatch } from "./jobs";
 import { runCartoon } from "../lib/gen/cartoon";
 import { purgeCartoonVoices } from "../lib/cartoon";
 
@@ -21,8 +22,10 @@ async function fail(bookId: string, e: unknown) {
 async function main() {
   const boss = await getBoss();
 
-  await boss.work<{ bookId: string }>(QUEUES.generateText, { batchSize: 2 }, async (jobs: Job<{ bookId: string }>) => {
-    for (const j of jobs) {
+  // Пачка из двух сказок: лимит расходов у одной — откладываем только её и продолжаем пачку; ошибка одной
+  // не теряет другие (pg-boss завершает всю пачку разом — упавшие повторяются отдельной задачей).
+  await boss.work<{ bookId: string; attempt?: number }>(QUEUES.generateText, { batchSize: 2 }, async (jobs: Job<{ bookId: string; attempt?: number }>) => {
+    await runBatch(jobs, async (j) => {
       try {
         await runText(j.data.bookId);
       } catch (e) {
@@ -32,9 +35,11 @@ async function main() {
           return;
         }
         await fail(j.data.bookId, e);
-        throw e;
+        // Повтор этой сказки — отдельной задачей, не больше двух раз (пачка завершится успешно для остальных)
+        const attempt = j.data.attempt ?? 0;
+        if (attempt < 2) await boss.send(QUEUES.generateText, { ...j.data, attempt: attempt + 1 }, { retryLimit: 0, startAfter: 60 }).catch(() => {});
       }
-    }
+    });
   });
 
   await boss.work<{ bookId: string }>(QUEUES.generatePreview, { batchSize: 1 }, async (jobs: Job<{ bookId: string }>) => {
@@ -106,9 +111,18 @@ async function main() {
 
   // Автоотмена неоплаченных: QR — 1 час, перевод — 24 часа (expiresAt задаётся при выборе способа).
   // «Я оплатил(а)» — не отменяется автоматически, решает оператор.
+  // Заказ без выбранного способа оплаты (expiresAt не задан) — отмена через 48 часов после оформления.
   await boss.work(QUEUES.cancelUnpaid, async () => {
-    await db.order.updateMany({ where: { status: "PENDING_PAYMENT", expiresAt: { lt: new Date() } }, data: { status: "CANCELLED" } });
+    await cancelUnpaid();
   });
+
+  // Повтор писем и сообщений, которые не ушли сразу (SMTP или бот недоступны): исключение → pg-boss повторит с паузой
+  await boss.work<{ userId: string; t: Template; data: Record<string, string | number | undefined>; opts?: { marketing?: boolean; promo?: string } }>(
+    QUEUES.sendNotification,
+    async (jobs) => {
+      for (const j of jobs) await notifyUser(j.data.userId, j.data.t, j.data.data, j.data.opts ?? {});
+    },
+  );
 
   await boss.work(QUEUES.triggers, async () => runTriggers());
   await boss.work(QUEUES.referralBonuses, async () => issueDueBonuses());

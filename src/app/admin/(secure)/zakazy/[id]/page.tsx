@@ -3,6 +3,8 @@ import { addressLine, type DeliveryAddress } from "@/lib/delivery";
 import { notFound } from "next/navigation";
 import { db } from "@/lib/db";
 import { requireAdmin } from "@/lib/admin";
+import { can } from "@/lib/auth";
+import { printFilesReady } from "@/lib/print";
 import { signedUrl } from "@/lib/storage";
 import { ORDER_STATUS } from "@/lib/labels";
 import { METHOD_TITLES } from "@/lib/shipping";
@@ -11,9 +13,10 @@ import {
   attachReceiptAction, confirmTransferAction, refundAction, regenerateAction, reprintAction, sendToPrintAction, setStatusAction,
 } from "../../../actions";
 
-export default async function Page({ params }: { params: Promise<{ id: string }> }) {
-  await requireAdmin("orders");
+export default async function Page({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ error?: string }> }) {
+  const me = await requireAdmin("orders");
   const { id } = await params;
+  const sp = await searchParams;
   if (!/^[0-9a-f-]{36}$/.test(id)) notFound();
   const o = await db.order.findUnique({
     where: { id },
@@ -22,9 +25,10 @@ export default async function Page({ params }: { params: Promise<{ id: string }>
   if (!o) notFound();
   const bookId = o.items.find((i) => i.bookId)?.bookId;
   const book = bookId ? await db.book.findUnique({ where: { id: bookId }, include: { pages: { orderBy: { index: "asc" } }, files: true } }) : null;
-  // Фото видно только в заказах младше 7 дней
+  // Исходные фото детей — только с правом photos (владелец) и только в заказах младше 7 дней
   const fresh = Date.now() - o.createdAt.getTime() < 7 * 86400_000;
-  const photos = fresh && bookId ? await db.photo.findMany({ where: { hero: { bookId }, deletedAt: null } }) : [];
+  const photos = fresh && bookId && can(me.role, "photos") ? await db.photo.findMany({ where: { hero: { bookId }, deletedAt: null } }) : [];
+  const printReady = o.whoPrints === "bookimi" && o.status === "PAID" && !o.printJob ? await printFilesReady(o.id) : null;
   const addr = o.shipment ? { ...(o.shipment.address as DeliveryAddress), ...(o.shipment.pvzCode ? { pvzCode: o.shipment.pvzCode, pvzAddress: o.shipment.pvzAddress ?? undefined } : {}) } : undefined;
   const logs = await db.auditLog.findMany({ where: { entityId: id }, orderBy: { createdAt: "desc" }, take: 20, include: { actor: { select: { email: true } } } });
   const hid = (name: string, v: string) => <input type="hidden" name={name} value={v} />;
@@ -33,6 +37,8 @@ export default async function Page({ params }: { params: Promise<{ id: string }>
     <>
       <p className="small"><Link href="/admin/zakazy">← Заказы</Link></p>
       <h1 style={{ fontSize: "var(--fs-xl)" }}>Заказ {o.publicCode} <span className="badge">{ORDER_STATUS[o.status]}</span></h1>
+      {sp.error && <p className="error" role="alert">{sp.error}</p>}
+      {o.payments.some((p) => p.status === "needs_refund") && <p className="error" role="alert">Повторная оплата: верните покупателю деньги по платежу со статусом needs_refund.</p>}
 
       <div className="grid2">
         <section className="panel">
@@ -67,9 +73,10 @@ export default async function Page({ params }: { params: Promise<{ id: string }>
           {o.status === "AWAITING_CONFIRMATION" || o.status === "PENDING_PAYMENT" ? (
             <form action={confirmTransferAction}>{hid("orderId", o.id)}<button className="btn btn--primary btn--sm">Подтвердить оплату ({o.totalRub} ₽, код {o.publicCode})</button></form>
           ) : null}
-          {o.whoPrints === "bookimi" && o.status === "PAID" && !o.printJob && (
+          {printReady?.ok && (
             <form action={sendToPrintAction}>{hid("orderId", o.id)}<button className="btn btn--primary btn--sm">Передать в печать</button></form>
           )}
+          {printReady && !printReady.ok && <span className="small muted">Передать в печать пока нельзя: {printReady.error.toLowerCase()}</span>}
         </div>
         {o.whoPrints === "bookimi" && !["PENDING_PAYMENT", "AWAITING_CONFIRMATION", "CANCELLED", "REFUNDED"].includes(o.status) && (
           <form action={setStatusAction} className="row" style={{ marginTop: 10 }}>
@@ -123,7 +130,10 @@ export default async function Page({ params }: { params: Promise<{ id: string }>
 
       {book && (
         <section className="panel">
-          <b>Книга</b> <span className="badge">{book.status}</span> <Link className="small" href={`/kabinet/kniga/${book.id}`}>открыть</Link>
+          <b>Книга</b> <span className="badge">{book.status}</span>{" "}
+          {book.files.filter((f) => ["pdf-screen", "print-block", "print-cover"].includes(f.kind)).map((f) => (
+            <a key={f.kind} className="small" style={{ marginRight: 8 }} href={`/api/admin/books/${book.id}/download?kind=${f.kind}`}>{f.kind}</a>
+          ))}
           {photos.length > 0 && (
             <div className="photos" style={{ margin: "10px 0" }}>
               {await Promise.all(photos.map(async (p) => (

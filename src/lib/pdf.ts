@@ -5,6 +5,7 @@
 //  cover     — обложка для типографии: задняя + корешок + передняя (для твёрдой — с загибами)
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
+import { spreadHtml, SPREAD_PDF_CSS } from "./spread-markup";
 
 export interface BookPageData {
   title: string;
@@ -73,7 +74,8 @@ function baseCss(pageW: number, pageH: number) {
   body{font-family:Manrope,sans-serif;color:#1a2b24;-webkit-print-color-adjust:exact;print-color-adjust:exact}
   .page{width:${pageW}mm;height:${pageH}mm;position:relative;overflow:hidden;page-break-after:always;break-after:page;background:#fff}
   .img{position:absolute;inset:0;background-size:cover;background-repeat:no-repeat}
-  .text{position:absolute;background:rgba(255,255,255,.88);border-radius:4mm;padding:4mm 5mm;font-size:var(--fs);line-height:1.45}
+  .text{position:absolute;background:rgba(255,255,255,.88);border-radius:4mm;padding:4mm 5mm;font-size:var(--fs);line-height:1.45;white-space:pre-line}
+  ${SPREAD_PDF_CSS}
   h1{font-family:Nunito,sans-serif;font-weight:800}
   .mark{position:absolute;bottom:1mm;right:1mm;font-size:1pt;color:#fff}`;
 }
@@ -84,7 +86,7 @@ function blockPages(b: BookPageData, pageW: number, pageH: number, inset: number
   const pages: string[] = [];
   pages.push(`<section class="page" style="display:flex;align-items:center;justify-content:center;padding:${inset + 12}mm;text-align:center">
     <div><h1 style="font-size:${fs * 1.6}pt;color:#1e4d3b;margin-bottom:8mm">${esc(b.title)}</h1>
-    ${b.dedication ? `<p style="font-size:${fs}pt;font-style:italic;max-width:80%;margin:0 auto">${esc(b.dedication)}</p>` : ""}</div></section>`);
+    ${b.dedication ? `<p style="font-size:${fs}pt;font-style:italic;max-width:80%;margin:0 auto;white-space:pre-line">${esc(b.dedication)}</p>` : ""}</div></section>`);
   b.spreads.forEach((s, i) => {
     const textLeft = i % 2 === 0;
     for (const side of ["left", "right"] as const) {
@@ -92,7 +94,7 @@ function blockPages(b: BookPageData, pageW: number, pageH: number, inset: number
       const hasText = (side === "left") === textLeft;
       pages.push(`<section class="page" style="--fs:${fs}pt">
         <div class="img" style="background-image:url(${uri(s.image)});background-size:200% 100%;background-position:${pos}"></div>
-        ${hasText ? `<div class="text" style="left:${inset + 4}mm;right:${inset + 4}mm;bottom:${inset + 4}mm">${esc(s.text)}</div>` : ""}
+        ${hasText ? `<div class="text" style="left:${inset + 4}mm;right:${inset + 4}mm;bottom:${inset + 4}mm">${spreadHtml(s.text)}</div>` : ""}
         <span class="mark">${esc(b.orderCode ?? "")}</span></section>`);
     }
   });

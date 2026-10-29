@@ -2,10 +2,11 @@ import { body, err, json, throttle, ownBook, utmCookie } from "@/lib/api";
 import { currentUser } from "@/lib/auth";
 import { createOrder } from "@/lib/orders";
 import { Checkout } from "@/lib/checkout-schema";
-import { notifyUser } from "@/lib/notify";
+import { notifySafe } from "@/lib/notify";
 import { db } from "@/lib/db";
 import { addressError, cleanAddress } from "@/lib/delivery";
 import { cdekCityCode, cdekPoints, hasCdek } from "@/lib/shipping";
+import { normalizePhone } from "@/lib/quiz";
 
 export async function POST(req: Request) {
   const t = await throttle("checkout", 10, 60_000);
@@ -23,6 +24,11 @@ export async function POST(req: Request) {
     const bad = addressError(b.shipping.method, addr, { pvzListAvailable: hasCdek() });
     if (bad) return err(bad);
     if (!b.contact.name || !b.contact.phone) return err("Укажите имя и телефон получателя");
+    // Телефон получателя — для курьера и типографии: только мобильный, приводим к +7XXXXXXXXXX
+    const phone = normalizePhone(b.contact.phone);
+    if (!phone) return err("Телефон получателя: мобильный номер +7 9XX XXX-XX-XX");
+    b.contact.phone = phone;
+    if (b.contact.name.length < 2 || /[<>{}\[\]\\/@]|https?:/i.test(b.contact.name)) return err("Имя получателя: только имя и фамилия, без ссылок и спецсимволов");
     // Пункт выдачи сверяем со списком СДЭК и берём его адрес оттуда (не со слов браузера)
     if (b.shipping.method === "cdek_pvz" && hasCdek()) {
       try {
@@ -37,6 +43,8 @@ export async function POST(req: Request) {
     }
     b.shipping.address = addr;
   }
+  // Без печати телефон необязателен: неверный — не сохраняем
+  if (b.whoPrints !== "bookimi" && b.contact.phone) b.contact.phone = normalizePhone(b.contact.phone) ?? undefined;
   // UTM блогера → его промокод автоматически
   const utm = await utmCookie();
   let promo = b.promo;
@@ -47,7 +55,7 @@ export async function POST(req: Request) {
   try {
     if (b.voice && b.addons.includes("audiobook")) await db.book.update({ where: { id: b.bookId }, data: { audioVoice: b.voice } });
     const order = await createOrder(user.id, { ...b, promo, utm, contact: { ...b.contact, email: b.contact.email || user.email || undefined } });
-    await notifyUser(user.id, "order_created", { code: order.publicCode, total: order.totalRub, orderId: order.id });
+    await notifySafe(user.id, "order_created", { code: order.publicCode, total: order.totalRub, orderId: order.id });
     return json({ orderId: order.id });
   } catch (e) {
     return err((e as Error).message);

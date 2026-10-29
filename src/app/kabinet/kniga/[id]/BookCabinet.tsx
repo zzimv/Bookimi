@@ -1,5 +1,6 @@
 "use client";
 import Link from "next/link";
+import { SpreadText } from "@/components/SpreadText";
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { api } from "@/lib/client";
@@ -109,7 +110,7 @@ export function BookCabinet(p: {
                   <div className="row"><button className="btn btn--primary btn--sm" onClick={() => saveText(pg.index)}>Сохранить</button><button className="link-btn" onClick={() => setEditing(null)}>Отмена</button></div>
                 </div>
               ) : (
-                <figcaption>{pg.text}</figcaption>
+                <figcaption><SpreadText text={pg.text} /></figcaption>
               ))}
             <div className="row small" style={{ marginTop: 6 }}>
               {pg.index > 0 && editing !== pg.index && <button className="link-btn" onClick={() => { setEditing(pg.index); setDraft(pg.text); }}>Поправить текст</button>}
@@ -170,7 +171,7 @@ function VoiceRecorder({ bookId, pages }: { bookId: string; pages: { index: numb
       {pages.map((pg) => (
         <div key={pg.index} className="spread" style={{ marginBottom: 8 }}>
           <header><span>{pg.index === 0 ? "Название" : `Разворот ${pg.index}`}</span>{done[pg.index] ? <span className="badge">записано</span> : null}</header>
-          <p style={{ fontSize: ".95rem" }}>{pg.text}</p>
+          <p style={{ fontSize: ".95rem" }}><SpreadText text={pg.text} /></p>
           <div className="row" style={{ marginTop: 8 }}>
             {rec === pg.index ? (
               <button className="btn btn--gold btn--sm" onClick={() => { mr.current?.stop(); setRec(null); }}>Остановить</button>

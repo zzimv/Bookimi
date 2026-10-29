@@ -15,8 +15,9 @@ import SozdatPage from "../../src/app/sozdat/page";
 import PrazdnikiPage from "../../src/app/prazdniki/page";
 import { AdminHolidays, DemoGeroi, resetHolidays } from "./holidays";
 import NotFound from "../../src/app/not-found";
-import { installApi, onStoreChange, resetStore, resumeJobs, svgUrl } from "./api";
-import { DemoPay, KabinetBook, KabinetHome, KabinetLayout, KabinetOrders, KabinetStub, KnigaPage, KupitPage, StubPage, VhodPage, ZakazPage } from "./pages";
+import { exportData, installApi, onAccountDeleted, onStoreChange, resetLimits, resetStore, resumeJobs, svgUrl } from "./api";
+import { DemoMult } from "./cartoon";
+import { DemoPay, KabinetBook, KabinetDannye, KabinetHome, KabinetLayout, KabinetOrders, KabinetStub, KnigaPage, KupitPage, StubPage, VhodPage, ZakazPage } from "./pages";
 import { AdminCatalog, AdminDashboard, AdminHome, AdminJournal, AdminLayout, AdminOrder, AdminOrders, AdminPromos, AdminSettings, AdminTransfers } from "./admin";
 import { bindRouter, currentPath, currentQuery, currentUrl, demoHref, NotFoundError, push, RedirectError } from "./router";
 import { DEFAULTS } from "../../src/lib/settings";
@@ -93,7 +94,7 @@ function page(path: string, q: Record<string, string>) {
     case "kabinet":
       return (
         <KabinetLayout path={path}>
-          {!p[1] ? <KabinetHome /> : p[1] === "kniga" ? <KabinetBook id={p[2]} /> : p[1] === "zakazy" ? <KabinetOrders /> : p[1] === "geroi" ? <DemoGeroi /> : <KabinetStub title={CAB_TITLES[p[1]] ?? "Кабинет"} />}
+          {!p[1] ? <KabinetHome /> : p[1] === "kniga" ? (p[3] === "mult" ? <DemoMult id={p[2]} /> : <KabinetBook id={p[2]} />) : p[1] === "zakazy" ? <KabinetOrders /> : p[1] === "geroi" ? <DemoGeroi /> : p[1] === "dannye" ? <KabinetDannye /> : <KabinetStub title={CAB_TITLES[p[1]] ?? "Кабинет"} />}
         </KabinetLayout>
       );
   }
@@ -176,13 +177,14 @@ function View() {
       <div className="demo-bar">
         <div className="wrap demo-bar__in">
           <span className="demo-bar__text">
-            <b>Демо-стенд.</b> <span className="demo-bar__long">Всё работает в этом окне: оплата понарошку, фото не покидает браузер, письма не отправляются.</span>
+            <b>Демо-стенд <span className="demo-rev">rev 03</span>.</b> <span className="demo-bar__long">Всё работает в этом окне: оплата понарошку, фото не покидает браузер, письма не отправляются.</span>
           </span>
           <nav className="demo-tabs" aria-label="Демо">
             <a href="#/" aria-current={!admin ? "page" : undefined}>Сайт</a>
             <a href="#/admin" aria-current={admin ? "page" : undefined}>Админка</a>
           </nav>
           <ThemeQuick />
+          <button type="button" className="demo-limits" data-demo="reset-limits" title="Лимиты демо: по 999 сказок, превью, перерисовок в сутки" aria-label="Сбросить лимиты" onClick={() => { resetLimits(); say("Лимиты сброшены: по 999 сказок, превью, «Переписать», перерисовок и смен настроения"); }}><span className="demo-limits__long">Сбросить лимиты</span><span className="demo-limits__short" aria-hidden="true">Лимиты ↺</span></button>
         </div>
       </div>
       {admin ? (
@@ -213,6 +215,11 @@ function View() {
 function reset() {
   if (!confirm("Начать демо сначала? Книги, заказы и настройки демо будут стёрты.")) return;
   resetStore();
+  afterReset();
+}
+// «Удалить аккаунт» в «Моих данных» — то же, что «Начать демо сначала», без вопроса (стирает API)
+onAccountDeleted(() => setTimeout(afterReset, 0));
+function afterReset() {
   resetHolidays();
   document.documentElement.style.setProperty("--hero-name", '""');
   document.documentElement.classList.remove("has-name");
@@ -248,7 +255,17 @@ document.addEventListener(
     const a = (e.target as HTMLElement).closest?.("a[href]") as HTMLAnchorElement | null;
     if (!a) return;
     const href = a.getAttribute("href") ?? "";
-    if (/^#\/api\/books\/[^/]+\/download/.test(href)) {
+    if (href === "#/api/me") {
+      // «Скачать мои данные»: JSON из хранилища демо — как выгрузка /api/me на сайте
+      e.preventDefault();
+      const url = URL.createObjectURL(new Blob([JSON.stringify(exportData(), null, 2)], { type: "application/json" }));
+      const dl = Object.assign(document.createElement("a"), { href: url, download: "bookimi-my-data.json" });
+      document.body.appendChild(dl);
+      dl.click();
+      dl.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 5000);
+      say("Файл bookimi-my-data.json скачан");
+    } else if (/^#\/api\/books\/[^/]+\/download/.test(href)) {
       e.preventDefault();
       say("На сайте файл скачивается сразу. В демо PDF не собирается — его делает сервер.");
     } else if (href === "#/demo-receipt") {

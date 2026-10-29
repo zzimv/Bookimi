@@ -8,6 +8,7 @@ import { Faq } from "@/components/Sections";
 import { ageLabel, displayTitle, getPriceTable, getStories, getStory, HERO_WORD, rub } from "@/lib/catalog";
 import { FAQ } from "@/lib/catalog-defaults";
 import { sampleUrl } from "@/lib/obrazec";
+import { og } from "@/lib/og";
 import { getSeason, segmentTitle, SVOYA_IDEYA } from "@/lib/storefront";
 import { EXTRA_ROLE_LABELS } from "@/lib/quiz";
 import { ART_STYLE_IDS, OCCASIONS as OCCASION_KEYS, TEXT_STYLE_IDS } from "@/content/profiles";
@@ -24,7 +25,7 @@ export async function generateMetadata({ params }: { params: Promise<{ slug: str
   if (!s) return {};
   const title = s.seoTitle ?? `${displayTitle(s.title, s.audience)} — персональная книга`;
   const description = s.seoDescription ?? `${s.tagline} ${ageLabel(s.ageMin, s.ageMax, s.audience)}. Бесплатное превью, PDF 990 ₽, печатная книга от 2 490 ₽.`;
-  return { title, description, alternates: { canonical: `/skazki/${s.slug}` }, openGraph: { title, description } };
+  return { title, description, alternates: { canonical: `/skazki/${s.slug}` }, ...og({ title, description, slug: s.slug, path: `/skazki/${s.slug}`, alt: `Обложка-пример: ${displayTitle(s.title, s.audience)}` }) };
 }
 
 const NAME_LABEL = { CHILD: "Как зовут ребёнка?", TEEN: "Как зовут героя?", ADULT: "Как зовут героя книги?", PET: "Как зовут питомца?" } as const;
@@ -72,7 +73,7 @@ export default async function Page({ params }: { params: Promise<{ slug: string 
             itemListElement: [
               { "@type": "ListItem", position: 1, name: "Главная", item: `https://${domain}/` },
               { "@type": "ListItem", position: 2, name: "Книги", item: `https://${domain}/skazki` },
-              { "@type": "ListItem", position: 3, name: title },
+              { "@type": "ListItem", position: 3, name: title, item: `https://${domain}/skazki/${story.slug}` },
             ],
           },
         ]}

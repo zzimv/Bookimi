@@ -1,10 +1,10 @@
 import { db } from "@/lib/db";
-import { currentUser } from "@/lib/auth";
+import { userOrLogin } from "@/lib/auth";
 import { signToken } from "@/lib/crypto";
 import { Prefs } from "../Forms";
 
 export default async function Page() {
-  const user = (await currentUser())!;
+  const user = await userOrLogin();
   const prefs = await db.notificationPref.findMany({ where: { userId: user.id } });
   const bot = process.env.TELEGRAM_BOT_USERNAME;
   return (

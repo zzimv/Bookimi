@@ -12,7 +12,7 @@ import { ruDate } from "../../src/lib/pricing";
 import { METHOD_TITLES } from "../../src/lib/shipping";
 import { ADDONS, FORMATS } from "../../src/lib/catalog-defaults";
 import { DEFAULTS, getReadiness } from "../../src/lib/settings";
-import { addPromo, bookById, confirmTransfer, mskDay, orderById, pageUrl, S, setLimits, setPrices, setStatus, spentTodayRub, STATUS_FLOW, togglePromo } from "./api";
+import { addPromo, bookById, confirmTransfer, mskDay, orderById, pageUrl, resetLimits, S, setLimits, setPrices, setStatus, spentTodayRub, STATUS_FLOW, togglePromo } from "./api";
 import { NotFoundError } from "./router";
 
 const NAV = [
@@ -506,6 +506,7 @@ const LIMIT_FIELDS: [keyof typeof DEFAULTS.limits, string][] = [
   ["freeRedraws", "Бесплатных перерисовок после покупки"],
   ["moodChangesPreview", "Смен настроения превью до оплаты"],
   ["redrawPriceRub", "Цена перерисовки сверх лимита, ₽"],
+  ["staffDailySpendRub", "Сотрудники: лимит расходов на ИИ в сутки, ₽ (лимиты покупателя на них не действуют)"],
 ];
 export function AdminSettings() {
   const [l, setL] = useState<Record<string, string>>(() => Object.fromEntries(LIMIT_FIELDS.map(([k]) => [k, String(DEFAULTS.limits[k])])));
@@ -532,7 +533,21 @@ export function AdminSettings() {
             </label>
           ))}
         </div>
-        <button className="btn btn--primary btn--sm" data-demo="save-limits">Сохранить лимиты</button>
+        <div className="row">
+          <button className="btn btn--primary btn--sm" data-demo="save-limits">Сохранить лимиты</button>
+          <button
+            type="button"
+            className="btn btn--ghost btn--sm"
+            data-demo="admin-reset-limits"
+            onClick={() => {
+              resetLimits();
+              setL(Object.fromEntries(LIMIT_FIELDS.map(([k]) => [k, String(DEFAULTS.limits[k])])));
+              setMsg("Лимиты сброшены к демо-значениям (по 999), счётчики за сегодня обнулены.");
+            }}
+          >
+            Сбросить лимиты
+          </button>
+        </div>
         {msg && <p className="ok small">{msg}</p>}
       </form>
       <section className="panel" style={{ marginTop: 16 }}>

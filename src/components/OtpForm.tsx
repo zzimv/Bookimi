@@ -3,6 +3,7 @@ import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { api } from "@/lib/client";
 import { normalizePhone } from "@/content/answers";
+import { checkFirstName, FIRST_NAME_ERROR, typeFirstName } from "@/lib/first-name";
 
 /** +7 912 345-67-89 по мере ввода (принимает 8…, +7…, 9…). */
 export function formatPhone(raw: string) {
@@ -27,6 +28,7 @@ export function OtpForm({
   consentGiven,
   withMarketing = true,
   phoneRequired = true,
+  withName = true,
 }: {
   onDone: (role: string) => void;
   submitLabel?: string;
@@ -37,9 +39,12 @@ export function OtpForm({
   withMarketing?: boolean;
   /** false — вход в кабинет: телефон проверяет сервер (у сотрудников и тех, кто его уже указал, не нужен). */
   phoneRequired?: boolean;
+  /** Необязательное поле «Как к вам обращаться» — приветствие в кабинете и получатель при оформлении. */
+  withName?: boolean;
 }) {
   const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("");
+  const [firstName, setFirstName] = useState("");
   const [code, setCode] = useState("");
   const [sent, setSent] = useState(false);
   const [demoCode, setDemoCode] = useState<string | null>(null);
@@ -65,6 +70,7 @@ export function OtpForm({
     const phoneEmpty = phone.replace(/\D/g, "").length <= 1;
     if (withPhone && (phoneRequired || !phoneEmpty) && !phoneValid) return setError("Укажите мобильный номер: +7 9XX XXX-XX-XX");
     if (!emailValid) return setError("Проверьте адрес почты");
+    if (withName && checkFirstName(firstName) === false) return setError(FIRST_NAME_ERROR);
     if (withConsent && consentGiven === false && !consent) return setError("Отметьте согласие на обработку персональных данных");
     setBusy(true);
     try {
@@ -93,6 +99,7 @@ export function OtpForm({
         code: c,
         consentPd: withConsent && consent,
         marketing: withMarketing && marketing,
+        ...(withName && checkFirstName(firstName) ? { firstName: checkFirstName(firstName) } : {}),
       });
       onDone(r.role);
     } catch (e) {
@@ -154,6 +161,15 @@ export function OtpForm({
             <input className="input input--lg ym-disable-keys" name="email" type="email" inputMode="email" autoComplete="email" required value={email} onChange={(e) => setEmail(e.target.value.trim())} placeholder="anna@mail.ru" />
             <small>Сюда придёт код для входа — пароль не нужен. И ссылка на книгу.</small>
           </label>
+          {withName && (
+            <label className="field">
+              <span>
+                Как к вам обращаться <span className="muted small">— необязательно</span>
+              </span>
+              <input className="input ym-disable-keys" name="first-name" autoComplete="given-name" maxLength={40} value={firstName} aria-invalid={checkFirstName(firstName) === false ? true : undefined} onChange={(e) => setFirstName(typeFirstName(e.target.value))} placeholder="Анна" />
+              <small>Так поздороваемся в кабинете и подставим имя получателя при оформлении. Буквы, пробел или дефис.</small>
+            </label>
+          )}
           {withConsent &&
             (consentGiven ? (
               <p className="consent-done">

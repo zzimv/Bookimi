@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { cookies } from "next/headers";
-import { anonId, normalizeTarget, verifyOtp } from "@/lib/auth";
+import { anonId, cleanFirstName, normalizeTarget, verifyOtp } from "@/lib/auth";
 import { attachAnonConsents, hasConsent } from "@/lib/consent";
 import { body, deviceKey, err, json, throttle } from "@/lib/api";
 import { subjectHash } from "@/lib/crypto";
@@ -22,9 +22,13 @@ export async function POST(req: Request) {
       consentPd: z.boolean().optional(),
       /** Необязательная отдельная галочка «новости и скидки» — только на входе. */
       marketing: z.boolean().optional(),
+      /** «Как к вам обращаться» — необязательно. */
+      firstName: z.string().max(80).optional(),
     }),
   );
   if (!b || !(b.email || b.target)) return err("Введите код");
+  const firstName = cleanFirstName(b.firstName);
+  if (firstName === false) return err("Имя: до 40 символов — буквы, пробел или дефис");
   // Согласие на обработку ПДн — один раз: если уже дано (с этого устройства или в аккаунте), повторно не требуем.
   // Проверяем до кода, чтобы не «сжечь» его. Сотрудникам согласие покупателя не нужно.
   const anon = await anonId();
@@ -48,7 +52,7 @@ export async function POST(req: Request) {
     return err("Отметьте согласие на обработку персональных данных");
   }
   const ref = (await cookies()).get("bk_ref")?.value;
-  const r = await verifyOtp(b.email || b.target!, b.code, { referral: ref, device: subjectHash(await deviceKey()) });
+  const r = await verifyOtp(b.email || b.target!, b.code, { referral: ref, device: subjectHash(await deviceKey()), firstName });
   if (!r.ok) return err(r.error);
   // Телефон из формы входа — в профиль (за другим аккаунтом он не закреплён — проверено выше)
   if (phone && r.user.phone !== phone) {

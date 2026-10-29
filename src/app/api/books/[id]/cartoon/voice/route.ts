@@ -18,7 +18,7 @@ async function access(id: string) {
   const own = await ownBook(id);
   if (!own || !own.user) return { error: err("Войдите в кабинет", 401) };
   const c = await db.cartoon.findUnique({ where: { bookId: id } });
-  if (!c?.ownVoicePaid && !own.admin) return { error: err("Доступно после покупки «Мультфильм своим голосом»", 403) };
+  if (!c?.ownVoicePaid) return { error: err("Доступно после покупки «Мультфильм своим голосом»", 403) };
   if (!c) return { error: err("Мультфильм ещё не создан", 409) };
   if (!(await hasConsent("VOICE", { userId: own.user.id }))) return { error: err("Сначала отметьте согласие на обработку голоса", 403) };
   return { own, c };

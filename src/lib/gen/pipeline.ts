@@ -21,7 +21,8 @@ import { getFile, putFile, deleteFile } from "../storage";
 import { renderPdf, type BookPageData } from "../pdf";
 import { ttsProvider } from "./tts";
 import { spentTodayRub } from "../limits";
-import { alertOwner, notifyUser } from "../notify";
+import { bookIsStaff, spendLimitReached } from "../staff";
+import { alertOwner, notifySafe } from "../notify";
 import { track } from "../events";
 import { checkText } from "../moderation";
 import { personsOf, redactForImage } from "./redact";
@@ -34,7 +35,9 @@ export class LimitReached extends Error {}
 const answersOf = (b: Book) => Answers.parse(b.params);
 
 async function cost(bookId: string, provider: string, operation: string, r: { gpuSeconds?: number; costKopecks: number }) {
-  await db.generationCost.create({ data: { bookId, provider, operation, gpuSeconds: r.gpuSeconds ?? 0, costKopecks: r.costKopecks } });
+  // Тестовые книги сотрудников — отдельный учёт (свой суточный лимит, своя серия на дашборде)
+  const staff = r.costKopecks > 0 ? await bookIsStaff(bookId) : false;
+  await db.generationCost.create({ data: { bookId, provider, operation, gpuSeconds: r.gpuSeconds ?? 0, costKopecks: r.costKopecks, staff } });
 }
 
 // ── Текст ──
@@ -45,8 +48,7 @@ export async function runText(bookId: string) {
   const provider = textProvider(ai.text);
   // Суточный лимит расходов — как у превью (демо-текст бесплатен, оплаченные книги — всегда)
   if (provider.name !== "demo" && !book.paidFull) {
-    const limits = await cfg("limits");
-    if ((await spentTodayRub()) >= limits.dailySpendRub) {
+    if ((await spendLimitReached(await bookIsStaff(bookId))).over) {
       await db.book.update({ where: { id: bookId }, data: { error: "limit" } });
       throw new LimitReached("Суточный лимит расходов исчерпан");
     }
@@ -242,14 +244,18 @@ async function drawPages(book: Book, indices: number[], opts: { preview: boolean
 export async function runPreview(bookId: string) {
   const book = await db.book.findUniqueOrThrow({ where: { id: bookId } });
   if (!book.paidFull) {
-    const limits = await cfg("limits");
-    const spent = await spentTodayRub();
-    if (spent >= limits.dailySpendRub) {
+    const lim = await spendLimitReached(await bookIsStaff(bookId));
+    if (lim.over) {
       await db.book.update({ where: { id: bookId }, data: { error: "limit" } });
-      const key = `spend-alert-${new Date().toISOString().slice(0, 10)}-100`;
+      const key = `spend-alert-${new Date().toISOString().slice(0, 10)}-100${lim.staff ? "-staff" : ""}`;
       if (!(await db.auditLog.findFirst({ where: { action: key } }))) {
         await db.auditLog.create({ data: { action: key, entity: "alert" } });
-        await alertOwner("Лимит расходов на генерацию исчерпан", `Потрачено ${spent} ₽ из ${limits.dailySpendRub} ₽. Новые превью ждут в очереди. Поднять лимит: админка → Настройки → Лимиты.`);
+        await alertOwner(
+          lim.staff ? "Лимит расходов сотрудников исчерпан" : "Лимит расходов на генерацию исчерпан",
+          lim.staff
+            ? `Тестовые книги сотрудников: потрачено ${lim.spent} ₽ из ${lim.limit} ₽. Покупателей это не затрагивает. Поднять лимит: Настройки → Лимиты.`
+            : `Потрачено ${lim.spent} ₽ из ${lim.limit} ₽. Новые превью ждут в очереди. Поднять лимит: админка → Настройки → Лимиты.`,
+        ).catch(() => {});
       }
       throw new LimitReached("Суточный лимит расходов исчерпан");
     }
@@ -259,7 +265,7 @@ export async function runPreview(bookId: string) {
   await db.book.update({ where: { id: bookId }, data: { status: "PREVIEW_READY", previewReadyAt: new Date(), progress: 100 } });
   await track("preview_ready", { anonId: book.anonId ?? undefined, userId: book.userId, props: { bookId } });
   if (book.parentBookId) return; // копия «для каждого»: письмо — одно, о главной книге
-  if (book.userId) await notifyUser(book.userId, "preview_ready", { title: (book.text as unknown as StoryText).title, bookId });
+  if (book.userId) await notifySafe(book.userId, "preview_ready", { title: (book.text as unknown as StoryText).title, bookId });
   // Превью первых копий «для каждого в группе» — вслед за главной книгой
   if (await db.book.count({ where: { parentBookId: bookId } })) await (await import("../bulk-server")).previewBulkCopies(bookId);
   await spendAlerts();
@@ -274,7 +280,7 @@ async function spendAlerts() {
     const key = `spend-alert-${new Date().toISOString().slice(0, 10)}-${pct}`;
     if (await db.auditLog.findFirst({ where: { action: key } })) continue;
     await db.auditLog.create({ data: { action: key, entity: "alert" } });
-    await alertOwner(`Расходы на генерацию: ${pct}% лимита`, `Сегодня потрачено ${spent} ₽ из ${limits.dailySpendRub} ₽.`);
+    await alertOwner(`Расходы на генерацию: ${pct}% лимита`, `Сегодня потрачено ${spent} ₽ из ${limits.dailySpendRub} ₽.`).catch(() => {});
   }
 }
 
@@ -325,20 +331,48 @@ export async function renderBookFiles(bookId: string, orderId?: string) {
   await saveFile(bookId, "pdf-a4", await renderPdf(data, { kind: "a4" }), "pdf", "application/pdf");
   await saveFile(bookId, "pdf-print-210", await renderPdf(data, { kind: "print", wMm: 210, hMm: 210 }), "pdf", "application/pdf");
   await saveFile(bookId, "pdf-print-150", await renderPdf(data, { kind: "print", wMm: 150, hMm: 150 }), "pdf", "application/pdf");
-  // Для печати в типографии — блок и обложка заказанного формата
-  const fmtItem = order?.items.find((i) => i.kind === "format" && i.refKey !== "pdf");
-  if (fmtItem) {
-    const f = await db.productFormat.findUnique({ where: { key: fmtItem.refKey } });
-    if (f?.widthMm && f.heightMm) {
-      await saveFile(bookId, "print-block", await renderPdf(data, { kind: "print", wMm: f.widthMm, hMm: f.heightMm }), "pdf", "application/pdf");
-      await saveFile(bookId, "print-cover", await renderPdf(data, { kind: "cover", wMm: f.widthMm, hMm: f.heightMm, hard: f.cover === "HARD", pages: 26 }), "pdf", "application/pdf");
-    }
+  if (order) await renderPrintFiles(bookId, order, data);
+}
+
+/** Для печати в типографии — только блок и обложка заказанного формата (иллюстрации и PDF не трогаем). */
+export async function renderPrintFiles(bookId: string, order: { publicCode: string; items: { kind: string; refKey: string }[] }, data?: BookPageData) {
+  const fmtItem = order.items.find((i) => i.kind === "format" && i.refKey !== "pdf");
+  if (!fmtItem) return false;
+  const f = await db.productFormat.findUnique({ where: { key: fmtItem.refKey } });
+  if (!f?.widthMm || !f.heightMm) return false;
+  const d = data ?? (await bookPdfData(bookId, order.publicCode));
+  await saveFile(bookId, "print-block", await renderPdf(d, { kind: "print", wMm: f.widthMm, hMm: f.heightMm }), "pdf", "application/pdf");
+  await saveFile(bookId, "print-cover", await renderPdf(d, { kind: "cover", wMm: f.widthMm, hMm: f.heightMm, hard: f.cover === "HARD", pages: 26 }), "pdf", "application/pdf");
+  return true;
+}
+
+/**
+ * Книга уже готова (оплачен PDF, теперь — печать или допы): ничего не перерисовываем и не пересобираем PDF —
+ * только файлы этого заказа (блок и обложка печати, аудио, раскраска, мультфильм) и передача в типографию.
+ */
+async function runExtras(bookId: string, orderId: string) {
+  const order = await db.order.findUnique({ where: { id: orderId }, include: { items: true } });
+  if (!order) return;
+  const mine = order.items.filter((i) => !i.bookId || i.bookId === bookId);
+  const files = new Set((await db.bookFile.findMany({ where: { bookId }, select: { kind: true } })).map((f) => f.kind));
+  if (order.whoPrints === "bookimi") await renderPrintFiles(bookId, { publicCode: order.publicCode, items: mine });
+  if (mine.some((i) => i.refKey === "audiobook") && !files.has("audio")) await runAudio(bookId);
+  if (mine.some((i) => i.refKey === "coloring") && !files.has("coloring")) await renderColoring(bookId);
+  if (mine.some((i) => i.refKey === "cartoon" || i.refKey === "cartoon-own-voice")) {
+    const { onCartoonPaid } = await import("../cartoon");
+    await onCartoonPaid(bookId, mine, { fromFull: true }).catch((e) => alertOwner("Мультфильм не поставлен в очередь", `${bookId}: ${(e as Error).message}`));
+  }
+  if (order.whoPrints === "bookimi") {
+    const { sendToPrint } = await import("../print");
+    await sendToPrint(order.id).catch((e) => alertOwner("Не удалось передать заказ в печать", `${order.publicCode}: ${(e as Error).message}`));
   }
 }
 
 export async function runFull(bookId: string, orderId?: string) {
+  const state = await db.book.findUniqueOrThrow({ where: { id: bookId }, select: { status: true, fullReadyAt: true, text: true } });
+  if (orderId && state.status === "FULL_READY" && state.fullReadyAt) return runExtras(bookId, orderId);
   // Копии «для каждого» после оплаты: текста ещё нет — сначала сочиняем
-  if (!(await db.book.findUniqueOrThrow({ where: { id: bookId }, select: { text: true } })).text) await runText(bookId);
+  if (!state.text) await runText(bookId);
   const book = await db.book.findUniqueOrThrow({ where: { id: bookId }, include: { pages: true } });
   await db.book.update({ where: { id: bookId }, data: { status: "FULL_QUEUED", progress: 5, error: null } });
   const have = new Set(book.pages.filter((p) => p.imageKey).map((p) => p.index));
@@ -352,7 +386,7 @@ export async function runFull(bookId: string, orderId?: string) {
   if (order?.items.some((i) => i.refKey === "coloring")) await renderColoring(bookId);
   await db.book.update({ where: { id: bookId }, data: { status: "FULL_READY", fullReadyAt: new Date(), progress: 100 } });
   if (book.userId) {
-    await notifyUser(book.userId, "book_ready", { title: (book.text as unknown as StoryText).title, audio: order?.items.some((i) => i.refKey === "audiobook") ? 1 : undefined });
+    await notifySafe(book.userId, "book_ready", { title: (book.text as unknown as StoryText).title, audio: order?.items.some((i) => i.refKey === "audiobook") ? 1 : undefined });
   }
   // Мультфильм — отдельной задачей (минута-две CPU), когда книга готова
   if (order?.items.some((i) => i.refKey === "cartoon" || i.refKey === "cartoon-own-voice")) {

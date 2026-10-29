@@ -37,8 +37,9 @@ export default async function Page({ params }: { params: Promise<{ slug: string 
     <>
       <Breadcrumbs items={[{ href: "/", label: "Главная" }, { href: "/povody", label: "Поводы" }, { label: occasion.title }]} />
       <JsonLd data={{ "@context": "https://schema.org", "@type": "BreadcrumbList", itemListElement: [
-        { "@type": "ListItem", position: 1, name: "Главная", item: "/" },
-        { "@type": "ListItem", position: 2, name: occasion.title },
+        { "@type": "ListItem", position: 1, name: "Главная", item: `https://${process.env.DOMAIN ?? "bookimi.ru"}/` },
+        { "@type": "ListItem", position: 2, name: "Поводы", item: `https://${process.env.DOMAIN ?? "bookimi.ru"}/povody` },
+        { "@type": "ListItem", position: 3, name: occasion.title, item: `https://${process.env.DOMAIN ?? "bookimi.ru"}/povod/${occasion.slug}` },
       ] }} />
       <section className="section section--tight">
         <div className="wrap">

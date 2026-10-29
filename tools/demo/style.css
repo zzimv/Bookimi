@@ -46,3 +46,12 @@ p.demo-note:not(.muted-panel) { padding-left: 10px; }
 
 /* Картинки демо (SVG) не должны распирать узкий экран */
 .spread-view img, .preview-img, .reader img { max-width: 100%; height: auto; }
+
+/* Версия стенда и «Сбросить лимиты» в полосе демо */
+.demo-rev { display: inline-block; margin-left: 4px; padding: 0 7px; border-radius: var(--r-pill); background: var(--surface); border: 1px solid var(--line); font-size: 12px; font-weight: 800; color: var(--ink); }
+.demo-limits { min-height: 36px; padding: 0 12px; border-radius: var(--r-pill); border: 1px solid var(--line); background: var(--surface); color: var(--ink); font: 700 var(--fs-sm) var(--font-body); cursor: pointer; }
+@media (max-width: 640px) { .demo-limits { flex: 0 0 auto; padding: 0 10px; } .demo-limits__long { display: none; } }
+@media (min-width: 641px) { .demo-limits__short { display: none; } }
+
+/* Плеер мультфильма (tools/demo/cartoon.tsx) */
+.cartoon-demo__canvas { display: block; width: 100%; max-width: 560px; aspect-ratio: 1 / 1; height: auto; border-radius: 14px; background: #0b120f; cursor: pointer; }

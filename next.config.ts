@@ -32,6 +32,9 @@ const config: NextConfig = {
   productionBrowserSourceMaps: false,
   compiler: { removeConsole: isProd ? { exclude: ["error"] } : false },
   images: { formats: ["image/avif", "image/webp"] },
+  // Тело запроса через middleware (у нас — все /api/*) Next по умолчанию обрезает до 10 МБ: фото обещаны до 15 МБ,
+  // multipart добавляет заголовки — лимит 16 МБ. Сам размер файла (15 МБ) проверяет маршрут с понятной ошибкой.
+  experimental: { middlewareClientMaxBodySize: "16mb" },
   // Типы проверяются отдельным шагом CI (npm run typecheck). SKIP_TYPECHECK=1 — только
   // для окружений без движков Prisma, где клиент сгенерирован как заглушка.
   typescript: { ignoreBuildErrors: process.env.SKIP_TYPECHECK === "1" },

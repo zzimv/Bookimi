@@ -32,6 +32,8 @@ export async function POST(req: Request) {
   if (!(await cfg("flags")).photoUploadEnabled) return err("Приём фото пока выключен — опишите героя словами", 403);
   const w = await who();
   if (w.anonId === "no-anon" && !w.userId) return err("Обновите страницу и попробуйте ещё раз", 400);
+  // Больше 16 МБ тело обрезается до разбора — сразу понятная ошибка, а не «выберите файл»
+  if (Number(req.headers.get("content-length") ?? 0) > 16 * 1024 * 1024) return err("Файл больше 15 МБ — уменьшите фото или выберите другое", 413);
   const form = await req.formData().catch(() => null);
   const file = form?.get("file");
   const slot = String(form?.get("slot") ?? "main") as (typeof SLOTS)[number];

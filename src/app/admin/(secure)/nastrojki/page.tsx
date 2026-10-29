@@ -3,6 +3,7 @@ import { requireAdmin } from "@/lib/admin";
 import { getSettings, getSetting, type SettingKey } from "@/lib/settings";
 import { LEGAL } from "@/lib/legal";
 import { legalAction, printHouseAction, settingsAction } from "../../actions";
+import { formatTiers } from "@/lib/settings-validate";
 
 type Field =
   | { p: string; label: string; t?: "text" | "number" | "password" | "email" | "time"; hint?: string }
@@ -78,15 +79,18 @@ const SECTIONS: { key: SettingKey; title: string; note?: string; fields: Field[]
       { p: "redrawPriceRub", label: "Цена перерисовки сверх лимита, ₽", t: "number" },
       { p: "photoTtlDays", label: "Хранить фото, дней", t: "number" },
       { p: "photoTtlNoBookHours", label: "Фото без книги (анкета брошена), часов", t: "number", hint: "Фото загружают на первом шаге анкеты; если книга не создана — удаляем через столько часов." },
+      { p: "moodChangesPreview", label: "Смен настроения до оплаты", t: "number" },
+      { p: "staffDailySpendRub", label: "Расходы сотрудников на тесты в сутки, ₽", t: "number", hint: "Владелец, оператор и маркетолог тестируют без лимитов покупателя; их расходы на ИИ — только в этот лимит и отдельной серией на дашборде." },
     ],
   },
   {
     key: "bulk",
     title: "Книга для каждого в группе",
-    note: "Один заказ — книга каждому ребёнку группы. Скидки по количеству (по умолчанию 5+ −20%, 15+ −30%, 25+ −35%) не суммируются с промокодом; пороги меняются в настройке bulk.tiers.",
+    note: "Один заказ — книга каждому ребёнку группы. Скидки по количеству не суммируются с промокодом и скидкой новичка.",
     fields: [
       { p: "enabled", label: "Предлагать «книгу для каждого»", t: "bool" },
       { p: "previewCopies", label: "Сколько книг рисуем до оплаты (вместе с основной)", t: "number" },
+      { p: "tiers", label: "Скидки по количеству: книг:скидка %", t: "list", hint: "Через запятую, по возрастанию: 5:20, 15:30, 25:35 — от 5 книг −20%, от 15 — −30%, от 25 — −35%. Скидка 1–90%, не больше 6 порогов." },
     ],
   },
   {
@@ -240,8 +244,9 @@ const SECTIONS: { key: SettingKey; title: string; note?: string; fields: Field[]
 
 const get = (o: unknown, path: string) => path.split(".").reduce<unknown>((x, k) => (x as Record<string, unknown>)?.[k], o);
 
-export default async function Page() {
+export default async function Page({ searchParams }: { searchParams: Promise<{ error?: string; saved?: string; sec?: string }> }) {
   await requireAdmin("settings");
+  const sp = await searchParams;
   const s = await getSettings();
   const houses = await db.printHouse.findMany({ orderBy: { name: "asc" } });
   const legal = await Promise.all(Object.keys(LEGAL).map(async (k) => [k, await getSetting<{ markdown: string } | null>(`legal.${k}`, null)] as const));
@@ -249,6 +254,7 @@ export default async function Page() {
   return (
     <>
       <h1 style={{ fontSize: "var(--fs-xl)" }}>Настройки</h1>
+      {sp.error && !sp.sec && <p className="error" role="alert">Не сохранено: {sp.error}</p>}
       <p className="muted">Ключи сервисов (платежи, СДЭК, ИИ, боты) задаются в файле .env на сервере — здесь то, что меняется без программиста.</p>
       {SECTIONS.map((sec) => {
         const values = s[sec.key];
@@ -259,6 +265,8 @@ export default async function Page() {
             <input type="hidden" name="__bools" value={bools.join(",")} />
             <h2 style={{ fontSize: "var(--fs-lg)" }}>{sec.title}</h2>
             {sec.note && <p className="small muted">{sec.note}</p>}
+            {sp.error && sp.sec === sec.key && <p className="error" role="alert">Не сохранено: {sp.error}</p>}
+            {sp.saved === sec.key && <p className="small" role="status">Сохранено.</p>}
             <div className="grid2">
               {sec.fields.map((f) => {
                 const v = get(values, f.p);
@@ -278,7 +286,7 @@ export default async function Page() {
                 return (
                   <label key={f.p} className="field">
                     <span>{f.label}</span>
-                    <input className="input" name={`f.${f.p}`} type={f.t === "list" ? "text" : f.t ?? "text"} defaultValue={f.t === "password" ? "" : Array.isArray(v) ? v.join(", ") : String(v ?? "")} />
+                    <input className="input" name={`f.${f.p}`} type={f.t === "list" ? "text" : f.t ?? "text"} defaultValue={f.t === "password" ? "" : Array.isArray(v) ? (v.length && typeof v[0] === "object" ? formatTiers(v as { min: number; pct: number }[]) : v.join(", ")) : String(v ?? "")} />
                     {f.hint && <small>{f.hint}</small>}
                   </label>
                 );

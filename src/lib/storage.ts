@@ -89,3 +89,18 @@ export function localFile(fullKey: string) {
   if (bucket !== "photos" && bucket !== "books") throw new Error("bad bucket");
   return readFile(localPath(bucket, rest.join("/")));
 }
+
+/** Удалить все файлы с префиксом (папку книги «<bookId>/», черновика «draft/<id>/»). Префикс — непустой, с «/» на конце. */
+export async function deletePrefix(bucket: Bucket, prefix: string) {
+  if (!prefix || !prefix.endsWith("/") || prefix.startsWith("/") || prefix.includes("..")) throw new Error("bad prefix");
+  if (driver() === "local") return rm(localPath(bucket, prefix), { recursive: true, force: true });
+  const { ListObjectsV2Command, DeleteObjectsCommand } = await import("@aws-sdk/client-s3");
+  const c = await client();
+  let token: string | undefined;
+  do {
+    const r = await c.send(new ListObjectsV2Command({ Bucket: bucketName(bucket), Prefix: prefix, ContinuationToken: token }));
+    const keys = (r.Contents ?? []).map((o) => ({ Key: o.Key! }));
+    if (keys.length) await c.send(new DeleteObjectsCommand({ Bucket: bucketName(bucket), Delete: { Objects: keys, Quiet: true } }));
+    token = r.IsTruncated ? r.NextContinuationToken : undefined;
+  } while (token);
+}

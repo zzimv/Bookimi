@@ -1,13 +1,17 @@
 import "server-only";
 import { cookies, headers } from "next/headers";
+import { redirect } from "next/navigation";
 import type { Role, User } from "@prisma/client";
 import { db } from "./db";
 import { hmac, otpCode, sha256, token } from "./crypto";
-import { hit } from "./limits";
+import { hit, pickClientIp } from "./limits";
 
 export const SESSION_COOKIE = "bk_session";
 export const ANON_COOKIE = "bk_anon";
 const SESSION_DAYS = 30;
+/** Сессия сотрудника (владелец, оператор, маркетолог) живёт не дольше 12 часов. */
+export const STAFF_SESSION_HOURS = 12;
+export const isStaffRole = (role: Role | string | null | undefined) => role === "OWNER" || role === "OPERATOR" || role === "MARKETER";
 
 export const isDemo = () => process.env.DEMO_MODE === "1";
 
@@ -20,17 +24,25 @@ export function normalizeTarget(raw: string): { kind: "email" | "phone"; value: 
   return null;
 }
 
+/**
+ * IP покупателя. X-Forwarded-For дописывает каждый прокси справа, поэтому доверяем только последнему звену
+ * (Caddy) — первые элементы присылает клиент и может подделать. TRUSTED_PROXIES — адреса прокси перед Caddy
+ * (CDN, балансировщик; через запятую, допускается префикс «10.0.»), их пропускаем справа налево.
+ */
 export async function clientIp() {
   const h = await headers();
-  return (h.get("x-forwarded-for")?.split(",")[0] ?? h.get("x-real-ip") ?? "0.0.0.0").trim();
+  return pickClientIp(h.get("x-forwarded-for"), h.get("x-real-ip"), process.env.TRUSTED_PROXIES);
 }
 
 export async function anonId() {
   return (await cookies()).get(ANON_COOKIE)?.value ?? "no-anon";
 }
 
-/** Отправка одноразового кода. В демо-режиме код возвращается для показа на экране. */
-export async function requestOtp(raw: string): Promise<{ ok: true; demoCode?: string } | { ok: false; error: string }> {
+/**
+ * Отправка одноразового кода. В демо-режиме код возвращается для показа на экране.
+ * Сбой почты/SMS — понятная ошибка покупателю (status 503), код аннулируется; исключение наружу не уходит.
+ */
+export async function requestOtp(raw: string): Promise<{ ok: true; demoCode?: string } | { ok: false; error: string; status?: number }> {
   const t = normalizeTarget(raw);
   if (!t) return { ok: false, error: "Проверьте email или телефон" };
   const ip = await clientIp();
@@ -38,15 +50,34 @@ export async function requestOtp(raw: string): Promise<{ ok: true; demoCode?: st
     return { ok: false, error: "Слишком много попыток. Попробуйте завтра или напишите в поддержку." };
   }
   const code = otpCode();
-  await db.otpCode.create({
+  const row = await db.otpCode.create({
     data: { target: t.value, codeHash: sha256(`${t.value}:${code}`), expiresAt: new Date(Date.now() + 10 * 60_000) },
   });
-  const { sendOtp } = await import("./notify");
-  await sendOtp(t.kind, t.value, code);
+  const { sendOtp, maskContact } = await import("./notify");
+  try {
+    await sendOtp(t.kind, t.value, code);
+  } catch (e) {
+    // Код, который не дошёл, не должен работать; в журнал — без кода и с замаскированным адресом
+    await db.otpCode.update({ where: { id: row.id }, data: { usedAt: new Date() } }).catch(() => {});
+    console.error("[otp] не отправлен:", maskContact(t.value), (e as Error).message);
+    return {
+      ok: false,
+      status: 503,
+      error: t.kind === "email" ? "Не получилось отправить письмо с кодом. Попробуйте ещё раз через минуту или напишите в поддержку." : "Не получилось отправить SMS с кодом. Попробуйте ещё раз через минуту или войдите по почте.",
+    };
+  }
   return isDemo() ? { ok: true, demoCode: code } : { ok: true };
 }
 
-export async function verifyOtp(raw: string, code: string, opts: { referral?: string; device?: string } = {}) {
+/** «Как к вам обращаться»: до 40 символов — буквы, пробел, дефис (апостроф для «Д'Артаньян» не берём). Пусто — null. */
+export function cleanFirstName(raw: string | null | undefined): string | null | false {
+  const v = (raw ?? "").trim().replace(/\s+/g, " ");
+  if (!v) return null;
+  if (v.length > 40 || !/^[\p{L}]+(?:[ -][\p{L}]+)*$/u.test(v)) return false;
+  return v;
+}
+
+export async function verifyOtp(raw: string, code: string, opts: { referral?: string; device?: string; firstName?: string | null } = {}) {
   const t = normalizeTarget(raw);
   if (!t) return { ok: false as const, error: "Проверьте email или телефон" };
   const row = await db.otpCode.findFirst({
@@ -65,14 +96,18 @@ export async function verifyOtp(raw: string, code: string, opts: { referral?: st
   if (!user) {
     const { attachReferral } = await import("./referral");
     user = await db.user.create({
-      data: { ...where, referralCode: referralCodeFor(t.value), deviceHashes: opts.device ? [opts.device] : [] },
+      data: { ...where, referralCode: referralCodeFor(t.value), deviceHashes: opts.device ? [opts.device] : [], firstName: opts.firstName || null },
     });
     if (opts.referral) await attachReferral(user.id, opts.referral, opts.device);
-  } else if (opts.device && !user.deviceHashes.includes(opts.device)) {
-    await db.user.update({ where: { id: user.id }, data: { deviceHashes: { push: opts.device } } });
+  } else {
+    const data: { deviceHashes?: { push: string }; firstName?: string } = {};
+    if (opts.device && !user.deviceHashes.includes(opts.device)) data.deviceHashes = { push: opts.device };
+    // Имя из формы входа — только если покупатель его указал (пустое поле не стирает сохранённое)
+    if (opts.firstName && opts.firstName !== user.firstName) data.firstName = opts.firstName;
+    if (Object.keys(data).length && !user.deletedAt) user = await db.user.update({ where: { id: user.id }, data });
   }
   if (user.deletedAt) return { ok: false as const, error: "Аккаунт удалён" };
-  await createSession(user.id);
+  await createSession(user.id, user.role);
   // Черновики и книги, созданные до входа, привязываются к аккаунту
   const anon = await anonId();
   await db.book.updateMany({ where: { anonId: anon, userId: null }, data: { userId: user.id } });
@@ -84,17 +119,30 @@ function referralCodeFor(seed: string) {
   return hmac(`ref:${seed}:${Date.now()}`).replace(/[^A-Za-z0-9]/g, "").slice(0, 7).toUpperCase();
 }
 
-export async function createSession(userId: string) {
+/** Срок сессии: покупатель — 30 дней, сотрудник — 12 часов (вход в админку заново с 2FA). */
+export function sessionTtlSeconds(role?: Role | string | null) {
+  return isStaffRole(role) ? STAFF_SESSION_HOURS * 3600 : SESSION_DAYS * 86400;
+}
+
+/** Сессия ещё действует: не истекла, аккаунт не удалён, у сотрудника — не старше 12 часов (даже если роль выдали позже). */
+export function sessionAlive(s: { expiresAt: Date; createdAt: Date; user: { deletedAt: Date | null; role: Role | string } }, now = new Date()) {
+  if (s.expiresAt < now || s.user.deletedAt) return false;
+  if (isStaffRole(s.user.role) && now.getTime() - s.createdAt.getTime() > STAFF_SESSION_HOURS * 3600_000) return false;
+  return true;
+}
+
+export async function createSession(userId: string, role?: Role | string | null) {
   const raw = token();
+  const ttl = sessionTtlSeconds(role);
   await db.session.create({
-    data: { userId, tokenHash: sha256(raw), csrfToken: token(16), expiresAt: new Date(Date.now() + SESSION_DAYS * 86400_000) },
+    data: { userId, tokenHash: sha256(raw), csrfToken: token(16), expiresAt: new Date(Date.now() + ttl * 1000) },
   });
   (await cookies()).set(SESSION_COOKIE, raw, {
     httpOnly: true,
     secure: process.env.NODE_ENV === "production",
     sameSite: "lax",
     path: "/",
-    maxAge: SESSION_DAYS * 86400,
+    maxAge: ttl,
   });
 }
 
@@ -102,8 +150,14 @@ export async function currentSession() {
   const raw = (await cookies()).get(SESSION_COOKIE)?.value;
   if (!raw) return null;
   const s = await db.session.findUnique({ where: { tokenHash: sha256(raw) }, include: { user: true } });
-  if (!s || s.expiresAt < new Date() || s.user.deletedAt) return null;
+  if (!s || !sessionAlive(s)) return null;
   return s;
+}
+
+/** Сотрудник в этой сессии (для тестовых книг без лимитов покупателя — src/lib/staff.ts). */
+export async function currentStaff() {
+  const u = await currentUser();
+  return u && isStaffRole(u.role) ? u : null;
 }
 
 export async function currentUser(): Promise<User | null> {
@@ -131,6 +185,10 @@ export const PERMS = {
   holidaysEdit: ["OWNER", "MARKETER"],
   reviews: ["OWNER", "MARKETER", "OPERATOR"],
   catalog: ["OWNER"],
+  /** Книги покупателей в админке (поддержка): тексты и иллюстрации, PDF. Маркетологу — нет (ПДн). */
+  books: ["OWNER", "OPERATOR"],
+  /** Исходные фото детей — только владелец (оператору хватает иллюстраций). */
+  photos: ["OWNER"],
   settings: ["OWNER"],
   users: ["OWNER"],
   audit: ["OWNER"],
@@ -142,6 +200,13 @@ export const seesPersonalData = (role: Role) => role === "OWNER" || role === "OP
 
 export async function adminSession() {
   const s = await currentSession();
-  if (!s || s.user.role === "CUSTOMER") return null;
+  if (!s || !isStaffRole(s.user.role)) return null;
   return s;
+}
+
+/** Страница кабинета: покупатель или переход ко входу (layout и page рендерятся параллельно — без «!»). */
+export async function userOrLogin(next = "/kabinet") {
+  const u = await currentUser();
+  if (!u) redirect(`/vhod?next=${encodeURIComponent(next)}`);
+  return u;
 }

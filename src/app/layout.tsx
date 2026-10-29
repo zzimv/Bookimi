@@ -8,6 +8,7 @@ import "./globals.css";
 import { Footer, Header, PromoBar } from "@/components/Layout";
 import { CookieBanner } from "@/components/CookieBanner";
 import { Vitals } from "@/components/Vitals";
+import { og } from "@/lib/og";
 
 const domain = process.env.DOMAIN ?? "bookimi.ru";
 
@@ -16,7 +17,7 @@ export const metadata: Metadata = {
   title: { default: "БУКИМИ — книга, где главный герой тот, кого вы любите", template: "%s — БУКИМИ" },
   description:
     "Персональная книга по фото: ребёнок, подросток, близкий взрослый или питомец — главный герой иллюстраций и текста. Бесплатное превью за 5 минут, PDF — 990 ₽, печатная книга — от 2 490 ₽.",
-  openGraph: { type: "website", locale: "ru_RU", siteName: "БУКИМИ" },
+  ...og({ title: "БУКИМИ — книга, где главный герой тот, кого вы любите", description: "Персональная книга по фото: ребёнок, подросток, близкий взрослый или питомец — главный герой. Бесплатное превью за 5 минут.", path: "/" }),
   formatDetection: { telephone: false },
 };
 

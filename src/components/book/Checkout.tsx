@@ -1,7 +1,7 @@
 "use client";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { api, goal, rub } from "@/lib/client";
 import { toggleAddon } from "@/lib/pricing";
 import { addressError, cleanAddress, type Prefill } from "@/lib/delivery";
@@ -48,6 +48,14 @@ interface Addr {
 const EMPTY_ADDR: Addr = { city: "", postalCode: "", street: "", flat: "", comment: "", pvzCode: "", pvzAddress: "" };
 const METHOD_LABEL: Record<string, string> = { cdek_pvz: "СДЭК до пункта", cdek_courier: "Курьер СДЭК", pochta: "Почта России", yandex: "Яндекс Доставка" };
 
+/** «Книга делается специально …» — по аудитории книги. */
+const MADE_FOR: Record<string, string> = {
+  CHILD: "специально для вашего ребёнка",
+  TEEN: "специально для вашего подростка",
+  ADULT: "специально под вашего героя",
+  PET: "специально про вашего питомца",
+};
+
 const SIZES = [
   { id: "mini", label: "Мини 15×15 см" },
   { id: "std", label: "Стандарт 21×21 см" },
@@ -71,6 +79,8 @@ export function Checkout(props: {
   /** Получатель и адрес «из прошлого раза» (src/lib/delivery.ts → pickPrefill). */
   prefill?: Prefill;
   bulk?: CheckoutBulk | null;
+  /** Аудитория книги — для текста про возврат («для вашего ребёнка» / «для вас» / …). */
+  audience?: string;
 }) {
   const router = useRouter();
   const [who, setWho] = useState<"self" | "bookimi">(props.printEnabled ? props.initialWho : "self");
@@ -102,7 +112,8 @@ export function Checkout(props: {
     return props.formats.find((f) => f.key.startsWith(size + "-"))?.key;
   }, [size, cover, props.formats]);
   const coverOptions = props.formats.filter((f) => f.key.startsWith(size + "-")).map((f) => (f.key.endsWith("soft") ? "soft" : "hard"));
-  const availableAddons = props.addons.filter((a) => who === "bookimi" || !a.requiresPrint);
+  // Мемоизация обязательна: новый массив на каждой отрисовке менял payload и запускал пересчёт цены по кругу
+  const availableAddons = useMemo(() => props.addons.filter((a) => who === "bookimi" || !a.requiresPrint), [props.addons, who]);
   // Не больше трёх допов за раз: показываем три, остальное — по кнопке
   const shownAddons = showAllAddons ? availableAddons : availableAddons.slice(0, 3);
 
@@ -122,16 +133,25 @@ export function Checkout(props: {
     [props.bookId, who, formatKey, addons, method, addr, promo, contact, voice, availableAddons, saveAddress, bulkOn],
   );
 
+  // Пересчёт цены — только когда запрос по сути изменился (сравнение по содержимому), с паузой 300 мс после ввода
+  const payloadKey = useMemo(() => JSON.stringify(payload), [payload]);
+  const quoted = useRef("");
   useEffect(() => {
+    if (payloadKey === quoted.current) return;
     const t = setTimeout(async () => {
+      quoted.current = payloadKey;
       try {
-        setQ(await api<Quote>("/api/checkout/quote", payload));
+        const r = await api<Quote>("/api/checkout/quote", JSON.parse(payloadKey));
+        if (quoted.current !== payloadKey) return; // пока считали, условия поменялись — ждём свежий ответ
+        setQ(r);
+        setError("");
       } catch (e) {
+        if (quoted.current === payloadKey) quoted.current = ""; // ошибка — следующее изменение пересчитает
         setError((e as Error).message);
       }
     }, 300);
     return () => clearTimeout(t);
-  }, [payload]);
+  }, [payloadKey]);
 
   async function order() {
     setError("");
@@ -403,7 +423,7 @@ export function Checkout(props: {
         </button>
         {!props.canPay && <p className="small muted" style={{ marginTop: 8 }}>Оплата пока не принимается — превью и книга сохранены в кабинете. Мы сообщим, когда можно будет оформить заказ.</p>}
         <p className="small muted" style={{ marginTop: 10 }}>
-          Книга делается специально для вашего ребёнка, поэтому возврат возможен только при браке — тогда перепечатаем или вернём деньги. <Link href="/vozvrat" target="_blank">Подробнее</Link>
+          Книга делается {MADE_FOR[props.audience ?? "CHILD"] ?? MADE_FOR.CHILD}, поэтому возврат возможен только при браке — тогда перепечатаем или вернём деньги. <Link href="/vozvrat" target="_blank">Подробнее</Link>
         </p>
       </aside>
     </div>

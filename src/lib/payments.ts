@@ -14,7 +14,7 @@ export interface PaymentProvider {
   create(order: Order, payment: Payment): Promise<{ view: PaymentView; externalId?: string; raw?: object }>;
   /** Разбор уведомления (вебхука). Возвращает внешний id и статус либо null, если подпись неверна. */
   webhook?(body: string, headers: Headers): Promise<{ externalId: string; status: "succeeded" | "failed"; amountRub: number; receiptUrl?: string } | null>;
-  refund?(payment: Payment, amountRub: number): Promise<void>;
+  refund?(payment: Payment, amountRub: number): Promise<{ id: string; status: string }>;
 }
 
 export const idempotencyKey = () => token(18);
@@ -112,18 +112,32 @@ export class YooKassaProvider implements PaymentProvider {
     return { view: { type: "redirect" as const, url: j.confirmation.confirmation_url }, externalId: j.id, raw: j };
   }
   async webhook(body: string) {
-    const j = JSON.parse(body) as { event: string; object: { id: string; amount: { value: string } } };
+    let id: unknown;
+    try {
+      id = (JSON.parse(body) as { object?: { id?: unknown } }).object?.id;
+    } catch {
+      return null;
+    }
+    // Идентификатор платежа ЮKassa — UUID-подобная строка; всё остальное не отправляем в API
+    if (typeof id !== "string" || !/^[0-9a-zA-Z-]{8,64}$/.test(id)) return null;
     // ЮKassa рекомендует перепроверять статус запросом к API — делаем это
-    const r = await fetch(`https://api.yookassa.ru/v3/payments/${j.object.id}`, { headers: { Authorization: this.auth() } });
+    const r = await fetch(`https://api.yookassa.ru/v3/payments/${encodeURIComponent(id)}`, { headers: { Authorization: this.auth() } });
     if (!r.ok) return null;
     const p = (await r.json()) as { id: string; status: string; amount: { value: string } };
     return { externalId: p.id, status: p.status === "succeeded" ? ("succeeded" as const) : ("failed" as const), amountRub: Math.round(Number(p.amount.value)) };
   }
+  /** Возврат: ответ проверяется — не 2xx или статус «canceled» → исключение (заказ не помечается возвращённым). */
   async refund(payment: Payment, amountRub: number) {
-    await fetch("https://api.yookassa.ru/v3/refunds", {
+    if (!payment.externalId) throw new Error("у платежа нет идентификатора ЮKassa");
+    const r = await fetch("https://api.yookassa.ru/v3/refunds", {
       method: "POST",
-      headers: { Authorization: this.auth(), "Idempotence-Key": idempotencyKey(), "Content-Type": "application/json" },
+      // Ключ идемпотентности — от платежа: повторное нажатие не создаст второй возврат
+      headers: { Authorization: this.auth(), "Idempotence-Key": `refund-${payment.idempotencyKey}`, "Content-Type": "application/json" },
       body: JSON.stringify({ payment_id: payment.externalId, amount: { value: amountRub.toFixed(2), currency: "RUB" } }),
     });
+    const j = (await r.json().catch(() => ({}))) as { id?: string; status?: string; description?: string };
+    if (!r.ok) throw new Error(`HTTP ${r.status}${j.description ? `: ${j.description}` : ""}`);
+    if (!j.id || !j.status || j.status === "canceled") throw new Error(`возврат не принят (статус ${j.status ?? "неизвестен"})`);
+    return { id: j.id, status: j.status };
   }
 }

@@ -20,6 +20,8 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   if (t) return t;
   const own = await ownBook(id);
   if (!own) return err("Не найдено", 404);
+  // Книга уже нарисована (или рисуется после оплаты) — новые фото ни на что не повлияют, а хранить их незачем
+  if (own.book.paidFull || ["FULL_QUEUED", "FULL_READY"].includes(own.book.status)) return err("Книга уже нарисована — фото больше не нужны", 409);
   const flags = await cfg("flags");
   if (!flags.photoUploadEnabled) return err("Приём фото пока выключен — иллюстрации будут по описанию", 403);
   const anon = await anonId();
@@ -29,6 +31,8 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   });
   if (!consent) return err("Сначала дайте согласие на обработку фото", 403);
 
+  // Больше 16 МБ тело обрезается до разбора — сразу понятная ошибка, а не «выберите файл»
+  if (Number(req.headers.get("content-length") ?? 0) > 16 * 1024 * 1024) return err("Файл больше 15 МБ — уменьшите фото или выберите другое", 413);
   const form = await req.formData().catch(() => null);
   const file = form?.get("file");
   const role = String(form?.get("role") ?? "main");

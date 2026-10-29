@@ -25,6 +25,9 @@ import { bulkCopyAnswers, bulkPct, bulkQuote, DEFAULT_BULK_DEDICATION, groupChil
 import { crowdLooks } from "../../src/content/art/render";
 import { groupMembersMax, groupSpreadIndexes } from "../../src/content/registry";
 import { dedicationText, groupOf } from "../../src/lib/gen/text";
+import { cartoonScript, type Cue } from "../../src/lib/gen/cartoon-script";
+import { plainSpread } from "../../src/lib/spread-markup";
+import { checkFirstName, FIRST_NAME_ERROR } from "../../src/lib/first-name";
 
 // ───────── хранилище ─────────
 export interface DBook {
@@ -75,6 +78,8 @@ export interface DOrder {
   paidAt?: number;
   payMethod?: string;
   receipt?: boolean;
+  /** Заказ только с цифровыми допами к готовой книге (мультфильм из кабинета) — книгу не перерисовываем. */
+  addonsOnly?: boolean;
 }
 export interface DPromo {
   code: string;
@@ -88,7 +93,7 @@ export interface DPromo {
 }
 export interface Store {
   v: 3;
-  user: { email: string; phone: string; name?: string; marketing: boolean } | null;
+  user: { email: string; phone: string; name?: string; firstName?: string; marketing: boolean } | null;
   consent: { pd: boolean; photo: boolean; marketing: boolean; group?: boolean };
   books: DBook[];
   orders: DOrder[];
@@ -102,11 +107,13 @@ export interface Store {
   otp: { email: string; phone: string; code: string } | null;
   /** Адресная книга доставки (как User.savedAddresses): null — ещё не заводилась. */
   addresses?: SavedAddress[] | null;
+  /** Мультфильм по книге: согласие на голос и режим озвучки (диктор / свой голос). Записи голоса — только в памяти вкладки. */
+  cartoons?: Record<string, { consent: boolean; mode: "auto" | "own" }>;
 }
 
 export const KEY = "bookimi.demo.v1";
 /** Ключи сайта в браузере, которые демо тоже чистит при «Начать сначала». */
-export const SITE_KEYS = ["bookimi.quiz.v2", "bookimi.quiz.v1", "bookimi.heroName"];
+export const SITE_KEYS = ["bookimi.quiz.v3", "bookimi.quiz.v2", "bookimi.quiz.v1", "bookimi.heroName"];
 
 const blank = (): Store => ({
   v: 3,
@@ -143,6 +150,7 @@ export function resetStore() {
   jobs.clear();
   photos.clear();
   drafts.clear();
+  voices.clear();
   S = blank();
   applySettings();
 }
@@ -165,7 +173,8 @@ const event = (name: string) => S.events.push({ at: Date.now(), name });
 
 // ───────── настройки (как после scripts/seed-demo.ts) ─────────
 const BASE_PRICES = Object.fromEntries([...FORMATS.map((f) => [f.key, f.price]), ...ADDONS.filter((a) => a.price).map((a) => [a.key, a.price as number])]);
-const BASE_LIMITS = { ...DEFAULTS.limits };
+// Демо для тестирования: тексты, превью, «Переписать», перерисовки и смены настроения — по 999 (сброс — «Сбросить лимиты»)
+const BASE_LIMITS = { ...DEFAULTS.limits, textsPerDevice: 999, textsPerIp: 999, previewsPerContact: 999, rewrites: 999, freeRedraws: 999, moodChangesPreview: 999 };
 
 export function applySettings() {
   Object.assign(DEFAULTS.seller, { fullName: "Иванова Анна Сергеевна (демо)", inn: "770012345606", email: "hello@bookimi.demo", phone: "+7 900 000-00-00" });
@@ -190,6 +199,23 @@ export function setLimits(l: Partial<typeof DEFAULTS.limits>) {
   applySettings();
   // Поднятый лимит расходов выпускает превью из очереди
   for (const b of S.books) if (b.status === "PREVIEW_QUEUED" && b.error === "limit") startJob(b, "preview");
+  commit();
+}
+
+/** «Сбросить лимиты»: настройки лимитов — демо по умолчанию, счётчики за сегодня — с нуля, у книг — снова полные лимиты. */
+export function resetLimits() {
+  S.limits = {};
+  applySettings();
+  S.counters = {};
+  const l = DEFAULTS.limits;
+  for (const b of S.books) {
+    b.rewritesLeft = l.rewrites;
+    b.redrawsLeft = l.freeRedraws;
+    b.moodChangesPreview = 0;
+    b.moodChangesFull = 0;
+    if (b.status === "PREVIEW_QUEUED" && b.error === "limit") startJob(b, "preview");
+  }
+  log(`Лимиты сброшены: сказок, превью, «Переписать», перерисовок и смен настроения — по ${l.textsPerDevice} в сутки`);
   commit();
 }
 
@@ -241,7 +267,7 @@ function extraLook(e: ExtraV2T, a: QuizAnswers): DemoLook {
   return { gender: g === "n" ? undefined : g, age, species: e.species, thing: e.what || (e.role === "toy" ? e.name : undefined), furColor: e.role === "pet" ? e.description : undefined };
 }
 const IDEA_THEME: Record<string, string> = { CHILD: "dragon", TEEN: "city-night", ADULT: "home", PET: "pet-home" };
-function plotInfo(a: QuizAnswers) {
+export function plotInfo(a: QuizAnswers) {
   const plot = plotForAnswers(a);
   const heroKind: HeroKind = HERO_KIND_BY_AUDIENCE[a.audience];
   return plot ? { slug: plot.slug, theme: plot.theme, heroKind: plot.heroKind } : { slug: "svoya-ideya", theme: IDEA_THEME[a.audience] ?? "meadow", heroKind };
@@ -518,7 +544,7 @@ export function demoPrefill(methods: string[]) {
   return pickPrefill({
     saved: S.addresses ?? null,
     lastOrder: last ? { contactName: last.contactName, contactPhone: last.contactPhone, shipment: { method: last.shipment!.method, address: last.shipment!.address } } : null,
-    profile: { name: S.user?.name, phone: S.user?.phone },
+    profile: { name: S.user?.name || S.user?.firstName, phone: S.user?.phone },
     methods,
   });
 }
@@ -584,6 +610,11 @@ export function markPaid(orderId: string, by?: string) {
     if (p) p.usedCount++;
   }
   event("pay");
+  if (o.addonsOnly) {
+    log(`${o.publicCode}: оплачено ${o.totalRub.toLocaleString("ru-RU")} ₽ — ${o.items.map((i) => i.title.replace(/^Изготовление на заказ: /, "")).join(", ")} · чек «Мой налог» (демо)`);
+    commit();
+    return o;
+  }
   log(`${o.publicCode}: оплачено ${o.totalRub.toLocaleString("ru-RU")} ₽${by ? ` (перевод подтвердил ${by})` : " по QR"} · чек «Мой налог» (демо, не фискальный) · уведомление «Оплата получена»`);
   for (const id of o.bookIds ?? [o.bookId]) {
     const b = bookById(id);
@@ -850,6 +881,60 @@ async function handle(method: string, path: string, q: URLSearchParams, body: un
     if (seg[3] === "action" && method === "POST") return bookAction(book, b0 ?? {});
   }
 
+  if (path === "/api/me") {
+    if (!S.user) return err("Войдите", 401);
+    if (method === "GET") return ok(exportData());
+    const act = String(b0?.action ?? "");
+    if (act === "name") {
+      const n = checkFirstName(b0?.firstName as string | undefined);
+      if (n === false) return err(FIRST_NAME_ERROR);
+      S.user.firstName = n || undefined;
+      log(n ? `«Как к вам обращаться»: ${n}` : "«Как к вам обращаться» — очищено");
+      commit();
+      return ok({ ok: true });
+    }
+    if (act === "address" || act === "addressDelete") {
+      const list = S.addresses ?? [];
+      const i = list.findIndex((a) => a.id === b0?.id);
+      if (i < 0) return err("Адрес не найден", 404);
+      if (act === "addressDelete") list.splice(i, 1);
+      else {
+        const patch = (b0?.patch ?? {}) as Record<string, string>;
+        const clean = Object.fromEntries(Object.entries(patch).filter(([k]) => ["name", "phone", "street", "flat", "comment", "postalCode"].includes(k)).map(([k, v]) => [k, String(v ?? "").trim().slice(0, 200)]));
+        if (clean.phone && !normalizePhone(clean.phone)) return err("Проверьте телефон: +7 9XX XXX-XX-XX");
+        list[i] = { ...list[i], ...clean };
+      }
+      S.addresses = list;
+      log(act === "addressDelete" ? "Адрес доставки удалён («Мои данные»)" : "Адрес доставки изменён («Мои данные»)");
+      commit();
+      return ok({ ok: true });
+    }
+    if (act === "revoke") {
+      if (b0?.type === "MARKETING") S.consent.marketing = false;
+      if (b0?.type === "CHILD_PHOTO") {
+        S.consent.photo = false;
+        photos.clear();
+        drafts.clear();
+      }
+      log(`Согласие отозвано: ${b0?.type}`);
+      commit();
+      return ok({ ok: true });
+    }
+    if (act === "delete") {
+      if (b0?.confirm !== "УДАЛИТЬ") return err("Напишите УДАЛИТЬ");
+      resetStore();
+      afterDelete();
+      return ok({ ok: true });
+    }
+    return err("Некорректный запрос");
+  }
+
+  if (seg[1] === "books" && seg[2] && seg[3] === "cartoon") {
+    const book = bookById(seg[2]);
+    if (!book) return err("Не найдено", 404);
+    return cartoonApi(book, method, seg[4], q, body);
+  }
+
   if (path === "/api/auth/request" && method === "POST") {
     const email = String(b0?.email ?? "").trim().toLowerCase();
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(email)) return err("Проверьте адрес почты");
@@ -872,7 +957,11 @@ async function handle(method: string, path: string, q: URLSearchParams, body: un
     if (!S.otp || S.otp.email !== email || String(b0?.code) !== S.otp.code) return err("Неверный или устаревший код");
     const phone = (b0?.phone ? normalizePhone(String(b0.phone)) : null) ?? S.otp.phone ?? S.user?.phone ?? "";
     const same = S.user?.email === email;
-    S.user = { email, phone: phone || (same ? S.user!.phone : ""), name: same ? S.user?.name : undefined, marketing: Boolean(b0?.marketing) || (same && S.user!.marketing) || false };
+    // «Как к вам обращаться» (необязательно) — как User.firstName на сайте: приветствие и получатель при оформлении
+    const fn = checkFirstName(b0?.firstName as string | undefined);
+    if (fn === false) return err(FIRST_NAME_ERROR);
+    const firstName = fn || (same ? S.user?.firstName : undefined);
+    S.user = { email, phone: phone || (same ? S.user!.phone : ""), name: same ? S.user?.name : undefined, firstName, marketing: Boolean(b0?.marketing) || (same && S.user!.marketing) || false };
     if (b0?.consentPd && !S.consent.pd) S.consent.pd = true;
     if (b0?.marketing) S.consent.marketing = true;
     S.otp = null;
@@ -1084,6 +1173,145 @@ function bookAction(book: DBook, b: Record<string, unknown>): R {
       if (book.status !== "FAILED") return err("Повтор не нужен");
       book.status = book.textApprovedAt ? (book.paidFull ? "FULL_QUEUED" : "PREVIEW_QUEUED") : "TEXT_QUEUED";
       startJob(book, book.textApprovedAt ? (book.paidFull ? "full" : "preview") : "text");
+      commit();
+      return ok({ ok: true });
+  }
+  return err("Некорректный запрос");
+}
+
+// ───────── «Мои данные»: выгрузка ─────────
+export function exportData() {
+  return {
+    exportedAt: new Date().toISOString(),
+    note: "Демо-стенд: данные этого окна браузера (на сайте — всё, что хранится о вас на сервере).",
+    user: S.user,
+    consents: S.consent,
+    savedAddresses: S.addresses ?? [],
+    books: S.books.map((b) => ({ id: b.id, createdAt: new Date(b.createdAt).toISOString(), status: b.status, hero: b.params.hero.name, title: b.text?.title ?? null, text: b.text?.spreads.map((s) => s.text) ?? [] })),
+    orders: S.orders.map((o) => ({ publicCode: o.publicCode, status: o.status, totalRub: o.totalRub, createdAt: new Date(o.createdAt).toISOString(), contactName: o.contactName, contactPhone: o.contactPhone, contactEmail: o.contactEmail, shipment: o.shipment ?? null })),
+  };
+}
+let afterDelete: () => void = () => {};
+/** Удаление аккаунта в демо = «Начать демо сначала» без вопроса (тема и праздники — в app.tsx). */
+export function onAccountDeleted(fn: () => void) {
+  afterDelete = fn;
+}
+
+// ───────── «Мультфильм по книге» (как /api/books/[id]/cartoon и cartoon/voice) ─────────
+// Ролик в демо не рендерится: плеер в кабинете (tools/demo/cartoon.tsx) показывает мультфильм прямо в браузере —
+// canvas по разворотам книги + озвучка голосом браузера или вашими записями.
+const voices = new Map<string, Map<number, { url: string; sec: number }>>();
+export const voiceOf = (bookId: string) => voices.get(bookId) ?? new Map<number, { url: string; sec: number }>();
+export function cartoonOf(b: DBook) {
+  const paid = S.orders.filter((o) => (o.bookId === b.id || o.bookIds?.includes(b.id)) && o.paidAt && !["REFUNDED", "CANCELLED"].includes(o.status)).flatMap((o) => o.items.map((i) => i.refKey));
+  const st = S.cartoons?.[b.id] ?? { consent: false, mode: "auto" as const };
+  return { bought: paid.includes("cartoon"), ownVoice: paid.includes("cartoon-own-voice"), ...st };
+}
+/** Сценарий мультфильма — та же функция, что на сайте (14 реплик, ~2 минуты); подписи комикса — без скобок. */
+export function scriptOf(b: DBook): Cue[] {
+  if (!b.text) return [];
+  return cartoonScript({ title: b.text.title, spreads: b.text.spreads.map((s) => ({ index: s.index, text: plainSpread(s.text) })), dedication: dedicationText(b.params) }).cues;
+}
+function setCartoon(b: DBook, patch: Partial<{ consent: boolean; mode: "auto" | "own" }>) {
+  S.cartoons = { ...(S.cartoons ?? {}), [b.id]: { consent: false, mode: "auto", ...S.cartoons?.[b.id], ...patch } };
+}
+const recordedOf = (b: DBook) => Object.fromEntries([...voiceOf(b.id)].map(([n, v]) => [String(n), { sec: v.sec, warnings: [] as string[] }]));
+async function audioSec(blob: Blob) {
+  try {
+    const ctx = new AudioContext();
+    const a = await ctx.decodeAudioData(await blob.arrayBuffer());
+    ctx.close().catch(() => {});
+    return Math.round(a.duration * 10) / 10;
+  } catch {
+    return Math.round((blob.size / 16000) * 10) / 10; // ~128 кбит/с
+  }
+}
+async function cartoonApi(b: DBook, method: string, sub: string | undefined, q: URLSearchParams, body: unknown): Promise<R> {
+  const c = cartoonOf(b);
+  const cfg = DEFAULTS.cartoon;
+  const b0 = body as Record<string, unknown> | undefined;
+  if (sub === "voice") {
+    if (!c.ownVoice) return err("Сначала добавьте «Озвучить своим голосом»", 403);
+    const map = voices.get(b.id) ?? new Map();
+    voices.set(b.id, map);
+    if (method === "GET") {
+      const v = map.get(Number(q.get("n")));
+      return v ? ok({ url: v.url }) : err("Записи нет", 404);
+    }
+    if (method === "DELETE") {
+      map.delete(Number(q.get("n")));
+      return ok({ recorded: recordedOf(b) });
+    }
+    if (!c.consent) return err("Отметьте согласие на обработку голоса", 403);
+    const fd = body as FormData;
+    const file = fd?.get?.("file");
+    const cue = String(fd?.get?.("cue") ?? "");
+    if (!(file instanceof Blob)) return err("Нет записи");
+    if (cue === "all") return err("В демо одна общая запись не режется на реплики — запишите по репликам кнопками «Записать».");
+    const sec = await audioSec(file);
+    if (sec < 0.5) return err("Запись слишком короткая — попробуйте ещё раз");
+    const old = map.get(Number(cue));
+    if (old) URL.revokeObjectURL(old.url);
+    map.set(Number(cue), { url: URL.createObjectURL(file), sec });
+    const total = [...map.values()].reduce((s, v) => s + v.sec, 0);
+    return ok({ recorded: recordedOf(b), overLimit: total > 180 });
+  }
+  if (method === "GET") {
+    // Купленный мультфильм показывает плеер демо (cartoon.tsx) — панель сайта скрываем, чтобы не было двух блоков
+    return ok({
+      enabled: !c.bought && cfg.enabled,
+      status: "NONE",
+      progress: 0,
+      error: null,
+      voiceMode: c.mode,
+      voice: null,
+      subtitles: true,
+      ownVoicePaid: c.ownVoice,
+      rerendersLeft: 1,
+      ownBuildsLeft: 3,
+      durationSec: null,
+      bought: { cartoon: false, ownVoice: c.ownVoice },
+      share: null,
+      urls: { video: null, poster: null, vertical: null },
+      prices: { cartoon: cfg.priceRub, ownVoice: cfg.ownVoiceRub },
+      voices: DEFAULTS.audio.voices,
+    });
+  }
+  switch (b0?.action) {
+    case "buy": {
+      if (!S.user) return err("Войдите по коду", 401);
+      if (b.status !== "FULL_READY" || !b.paidFull) return err("Мультфильм собирается по готовой книге — сначала купите книгу");
+      const keys = [...(c.bought ? [] : ["cartoon"]), ...(b0.ownVoice && !c.ownVoice ? ["cartoon-own-voice"] : [])];
+      if (!keys.length) return err("Уже куплено");
+      const items = keys.map((k) => ({ kind: "addon", refKey: k, title: `Изготовление на заказ: ${ADDONS.find((a) => a.key === k)?.title ?? k}`, priceRub: k === "cartoon" ? cfg.priceRub : cfg.ownVoiceRub }));
+      const total = items.reduce((x, i) => x + i.priceRub, 0);
+      const o: DOrder = { id: uuid(), publicCode: publicCode(), createdAt: Date.now(), whoPrints: "self", bookId: b.id, items, subtotalRub: total, discountRub: 0, pdfCreditRub: 0, shippingRub: 0, totalRub: total, contactName: S.user.name ?? S.user.firstName ?? "", contactPhone: S.user.phone, contactEmail: S.user.email, status: "PENDING_PAYMENT", addonsOnly: true };
+      S.orders.unshift(o);
+      log(`Заказ ${o.publicCode}: ${keys.includes("cartoon") ? "мультфильм по книге" : "мультфильм своим голосом"} — ${total.toLocaleString("ru-RU")} ₽`);
+      commit();
+      return ok({ orderId: o.id });
+    }
+    case "consent":
+      setCartoon(b, { consent: Boolean(b0.granted) });
+      if (!b0.granted) voices.delete(b.id);
+      log(b0.granted ? "Согласие на обработку голоса — дано" : "Согласие на голос отозвано, записи удалены");
+      commit();
+      return ok({ ok: true });
+    case "deleteVoice":
+      voices.delete(b.id);
+      setCartoon(b, { mode: "auto" });
+      commit();
+      return ok({ ok: true });
+    case "submitOwn": {
+      const cues = scriptOf(b);
+      if (cues.some((x) => !voiceOf(b.id).has(x.n))) return err("Запишите все реплики");
+      setCartoon(b, { mode: "own" });
+      log("Мультфильм своим голосом собран (в демо — играет в браузере)");
+      commit();
+      return ok({ ok: true });
+    }
+    case "settings":
+      if (b0.voiceMode === "auto") setCartoon(b, { mode: "auto" });
       commit();
       return ok({ ok: true });
   }

@@ -13,6 +13,7 @@ import { enqueue, QUEUES } from "@/lib/queue";
 import { track } from "@/lib/events";
 import { attachPhotosToBook } from "@/lib/draft";
 import { ensureBulkCopies } from "@/lib/bulk-server";
+import { isStaff } from "@/lib/staff";
 import { groupMembersMax } from "@/content/registry";
 
 const Input = z.object({
@@ -63,19 +64,23 @@ export async function POST(req: Request) {
   ]);
   if (bad) return err("Пожалуйста, уберите из анкеты недопустимые слова или ссылки");
   if (!a.story.slug && !a.story.idea) return err("Выберите сюжет или опишите свою идею");
+  // Подростковые книги — для 11–17 лет (как обещано в анкете)
+  if (a.audience === "TEEN" && (a.hero.age === undefined || a.hero.age < 11 || a.hero.age > 17)) return err("Укажите возраст: от 11 до 17 лет");
 
   const limits = await cfg("limits");
-  if (!(await hit(await deviceKey(), "text", limits.textsPerDevice))) {
+  const [user, anon] = await Promise.all([currentUser(), anonId()]);
+  // Сотрудники тестируют без лимитов устройства и сети (расходы ИИ — в свой суточный лимит, src/lib/staff.ts)
+  const staff = isStaff(user?.role);
+  if (!staff && !(await hit(await deviceKey(), "text", limits.textsPerDevice))) {
     return err(`Сегодня можно сочинить не больше ${limits.textsPerDevice} сказок. Возвращайтесь завтра — черновик сохранится.`, 429);
   }
   // Второй, более высокий лимит — по подсети IP: сброс cookie устройства его не обходит
-  if (!(await hit(`textip:${ipSubnet(await clientIp())}`, "text-ip", limits.textsPerIp))) {
+  if (!staff && !(await hit(`textip:${ipSubnet(await clientIp())}`, "text-ip", limits.textsPerIp))) {
     return err(`Сегодня с вашей сети сочинили уже много сказок. Возвращайтесь завтра — черновик сохранится.`, 429);
   }
 
   const story = await db.story.findUnique({ where: { slug: a.story.slug || "svoya-ideya" } });
   if (!story) return err("Сюжет не найден");
-  const [user, anon] = await Promise.all([currentUser(), anonId()]);
   const book = await db.book.create({
     data: {
       userId: user?.id,

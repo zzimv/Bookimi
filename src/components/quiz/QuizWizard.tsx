@@ -165,6 +165,29 @@ function Chips<T extends string>({ items, value, onChange, multi = false, max = 
 
 const asItems = (xs: readonly string[]) => xs.map((x) => ({ key: x, label: x }));
 
+// Шаг анкеты в адресе (?step=): «Назад»/«Вперёд» браузера ходят по шагам, ответы остаются (черновик — в localStorage).
+// На сайте — обычный ?step=, в демо-стенде адрес живёт в hash (#/sozdat?step=…).
+const FLOW_KEYS: FlowStep[] = ["heroes", "occasion", "book", "group", "details"];
+function stepFromUrl(): FlowStep | null {
+  if (typeof window === "undefined") return null;
+  const h = window.location.hash;
+  const qs = h.startsWith("#/") ? h.split("?")[1] ?? "" : window.location.search.slice(1);
+  const k = new URLSearchParams(qs).get("step") as FlowStep | null;
+  return k && FLOW_KEYS.includes(k) ? k : null;
+}
+function urlWithStep(k: FlowStep): string {
+  const { pathname, search, hash } = window.location;
+  if (hash.startsWith("#/")) {
+    const [p, q = ""] = hash.slice(1).split("?");
+    const sp = new URLSearchParams(q);
+    sp.set("step", k);
+    return `${pathname}${search}#${p}?${sp.toString()}`;
+  }
+  const sp = new URLSearchParams(search);
+  sp.set("step", k);
+  return `${pathname}?${sp.toString()}${hash}`;
+}
+
 export function QuizWizard({
   stories,
   styles,
@@ -231,13 +254,16 @@ export function QuizWizard({
         return { ...base };
       });
       if (saved?.stepKey && (!fromLink || saved.fromLink === `${initial.story?.slug ?? ""}|${initial.audience ?? ""}|${initial.occasion?.key ?? ""}`)) {
-        if (["heroes", "occasion", "book", "group", "details"].includes(saved.stepKey)) setStepKey(saved.stepKey);
+        if (FLOW_KEYS.includes(saved.stepKey)) setStepKey(saved.stepKey);
         if (!fromLink) setOccChosen(Boolean(saved.occChosen));
         setOwn(Boolean(saved.own));
         setModes(saved.modes ?? {});
         setBulk(Boolean(saved.bulk));
       }
     } catch {}
+    // Шаг из адреса (Назад/Вперёд браузера, перезагрузка) важнее сохранённого
+    const fromUrl = stepFromUrl();
+    if (fromUrl) setStepKey(fromUrl);
     setLoaded(true);
     goal("quiz_start");
     api<ConsentState>("/api/draft/consent").then(setConsent).catch(() => {});
@@ -316,6 +342,25 @@ export function QuizWizard({
     if (loaded) h1.current?.focus({ preventScroll: true });
   }, [step, loaded]);
 
+  // Адрес ↔ шаг: первый шаг — без новой записи; «Назад»/«Вперёд» браузера → шаг из адреса
+  const pushedRef = useRef(0);
+  const stepRef = useRef(step);
+  stepRef.current = step;
+  useEffect(() => {
+    if (!loaded) return;
+    if (!stepFromUrl()) window.history.replaceState(null, "", urlWithStep(stepRef.current));
+    const onPop = () => {
+      const k = stepFromUrl();
+      if (!k) return;
+      const from = FLOW_KEYS.indexOf(stepRef.current);
+      pushedRef.current = Math.max(0, pushedRef.current + (FLOW_KEYS.indexOf(k) < from ? -1 : 1));
+      setError("");
+      setStepKey(k);
+    };
+    window.addEventListener("popstate", onPop);
+    return () => window.removeEventListener("popstate", onPop);
+  }, [loaded]);
+
   const age = typeof a.hero.age === "number" ? a.hero.age : undefined;
   const heroAgeNum = aud === "CHILD" ? AGE_GROUPS.find((g) => g.key === a.hero.ageGroup)?.age : age;
 
@@ -351,7 +396,9 @@ export function QuizWizard({
     fur: FUR.includes(a.pet.furColor ?? "") ? a.pet.furColor : undefined,
     extras: a.extras.map((e) => e.role),
   };
-  const coverTitle = story ? fill(titleTemplate(story.title)) : own ? "Своя история" : "";
+  // До ввода имени — «Ваш ребёнок и …» (как в каталоге), а не «Имя и …»
+  const named = Boolean(a.hero.name?.trim());
+  const coverTitle = story ? fill(named ? titleTemplate(story.title) : titleForCatalog(story.title, aud)) : own ? a.story.ideaChoice?.title || "Своя история" : "";
   const coverName = a.hero.name?.trim() || HERO_WORD[aud];
   const mode = (k: string): Mode => modes[k] ?? (photoEnabled ? "photo" : "describe");
 
@@ -380,7 +427,7 @@ export function QuizWizard({
       if (aud === "PET" && !a.pet.species) return "Кто это: собака или кошка?";
       if (!a.hero.gender) return aud === "PET" ? "Мальчик или девочка?" : `Выберите: ${GENDER[aud][0].toLowerCase()} или ${GENDER[aud][1].toLowerCase()}`;
       if (aud === "CHILD" && !a.hero.ageGroup && !a.hero.birthDate) return "Укажите возраст или дату рождения";
-      if (aud === "TEEN" && (a.hero.age === undefined || a.hero.age < 10 || a.hero.age > 18)) return "Укажите возраст: от 11 до 17 лет";
+      if (aud === "TEEN" && (a.hero.age === undefined || a.hero.age < 11 || a.hero.age > 17)) return "Укажите возраст: от 11 до 17 лет";
       if (!extrasNamed()) return "Укажите имя каждого героя (для «своего варианта» — кто это) или уберите лишнего";
     }
     if (s === "occasion" && occChosen && a.occasion.key === "svoj" && !a.occasion.custom?.trim()) return "Напишите, какой у вас повод";
@@ -405,7 +452,19 @@ export function QuizWizard({
   function go(k: FlowStep) {
     setError("");
     setStepKey(k);
+    // Новая запись в истории — «Назад» браузера вернёт на предыдущий шаг (Next подхватывает pushState)
+    if (stepFromUrl() !== k) {
+      window.history.pushState(null, "", urlWithStep(k));
+      pushedRef.current = Math.max(0, pushedRef.current + (FLOW_KEYS.indexOf(k) > FLOW_KEYS.indexOf(stepRef.current) ? 1 : -1));
+    }
     window.scrollTo({ top: 0, behavior: "smooth" });
+  }
+  /** Кнопка «Назад» анкеты — как «Назад» браузера, если предыдущий шаг уже в истории. */
+  function back() {
+    const prev = steps[stepIdx - 1];
+    if (!prev) return;
+    if (pushedRef.current > 0) window.history.back();
+    else go(prev);
   }
 
   function next() {
@@ -1007,7 +1066,7 @@ export function QuizWizard({
 
         {withPreview && (
           <aside className="quiz__preview" aria-label="Обложка, пример">
-            <Cover theme={story?.coverTheme ?? ""} title={coverTitle} sample={sampleUrl({ ...previewLook, style, mood: a.mood })} name={coverTitle.includes(a.hero.name?.trim() || "\u0000") ? "" : coverName} eager />
+            <Cover theme={story?.coverTheme ?? ""} title={coverTitle} sample={sampleUrl({ ...previewLook, style, mood: a.mood })} name={named ? (coverTitle.includes(a.hero.name!.trim()) ? "" : coverName) : /ваш/i.test(coverTitle) ? "" : coverName} eager />
             <p className="small muted">
               Обложка-пример: меняется по вашим ответам. {(a.hero.photoIds?.length ?? 0) > 0 ? "По вашему фото нейросеть нарисует героя похожим — на шаге превью." : aud === "PET" ? "По фото питомца нейросеть нарисует ещё точнее." : "По фото нейросеть нарисует героя ещё точнее."}
             </p>
@@ -1018,7 +1077,7 @@ export function QuizWizard({
       <div className="flow-nav">
         <div className="in">
           {stepIdx > 0 && (
-            <button type="button" className="btn btn--ghost" onClick={() => go(steps[stepIdx - 1])}>
+            <button type="button" className="btn btn--ghost" onClick={back}>
               Назад
             </button>
           )}

@@ -126,7 +126,7 @@ export async function dashboard(f: Filters) {
     sources: [...sources.entries()].sort((a, b) => b[1].revenue - a[1].revenue),
     referral: { invited, refPaid, bonusIssued, bonusUsed },
     unit: { genRub, printCost, shipRub: ship._sum.shippingRub ?? 0, margin, perOrder: cur.orders ? Math.round(margin / cur.orders) : 0 },
-    ops: { genQueue, transfers, printDelays, reviews, tickets, spentToday: await spentTodayRub(), dailyLimit: (await cfg("limits")).dailySpendRub },
+    ops: { genQueue, transfers, printDelays, reviews, tickets, spentToday: await spentTodayRub(), staffSpentToday: await spentTodayRub({ staff: true }), dailyLimit: (await cfg("limits")).dailySpendRub },
     vitals: { LCP: p75("LCP"), INP: p75("INP"), CLS: p75("CLS"), TTFB: p75("TTFB"), n: vitals.length },
     costByDay: [...byDay.entries()].sort(),
   };
@@ -257,10 +257,13 @@ export async function dashboardCharts(f: Filters, now = new Date()) {
     })),
   );
 
-  // Расходы ИИ по дням против суточного лимита (30 дней)
-  const costs = await db.generationCost.findMany({ where: { createdAt: { gte: series30From } }, select: { createdAt: true, costKopecks: true } });
-  const spend = dailySeries(costs.map((c) => ({ at: c.createdAt, value: c.costKopecks / 100 })), 30, now).map((d) => ({ ...d, value: Math.round(d.value) }));
-  const dailyLimit = (await cfg("limits")).dailySpendRub;
+  // Расходы ИИ по дням против суточного лимита (30 дней): покупатели — против лимита, тесты сотрудников — отдельной серией
+  const costs = await db.generationCost.findMany({ where: { createdAt: { gte: series30From } }, select: { createdAt: true, costKopecks: true, staff: true } });
+  const spend = dailySeries(costs.filter((c) => !c.staff).map((c) => ({ at: c.createdAt, value: c.costKopecks / 100 })), 30, now).map((d) => ({ ...d, value: Math.round(d.value) }));
+  const staffSpend = dailySeries(costs.filter((c) => c.staff).map((c) => ({ at: c.createdAt, value: c.costKopecks / 100 })), 30, now).map((d) => ({ ...d, value: Math.round(d.value) }));
+  const limitsCfg = await cfg("limits");
+  const dailyLimit = limitsCfg.dailySpendRub;
+  const staffDailyLimit = limitsCfg.staffDailySpendRub ?? 1000;
 
   // НПД
   const tax = await cfg("tax");
@@ -286,5 +289,5 @@ export async function dashboardCharts(f: Filters, now = new Date()) {
     console.error("[dashboard] audience:", (e as Error).message);
   }
 
-  return { days, revenue, byStatus, funnel, spend, dailyLimit, npd, sources, audiences };
+  return { days, revenue, byStatus, funnel, spend, staffSpend, dailyLimit, staffDailyLimit, npd, sources, audiences };
 }

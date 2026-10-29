@@ -10,6 +10,8 @@ export interface Bar {
   value: number;
   note?: string; // доп. подпись справа от значения (например, выручка или доля)
   hint?: string;
+  /** ColumnChart: вторая серия поверх столбца (например, тесты сотрудников) — не сравнивается с лимитом. */
+  extra?: number;
 }
 
 export function BarChart({ title, sub, bars, unit = "", empty = "Пока нет данных за этот период" }: { title: string; sub?: string; bars: Bar[]; unit?: string; empty?: string }) {
@@ -55,6 +57,7 @@ export function ColumnChart({
   bars,
   unit = "",
   limit,
+  extraLabel,
   height = 170,
   xLabels = 5,
 }: {
@@ -63,18 +66,20 @@ export function ColumnChart({
   bars: Bar[];
   unit?: string;
   limit?: { value: number; label: string };
+  /** Подпись второй серии (Bar.extra) в легенде. */
+  extraLabel?: string;
   height?: number;
   xLabels?: number;
 }) {
   const id = useId();
   const n = bars.length;
-  const max = niceMax(Math.max(0, limit?.value ?? 0, ...bars.map((b) => b.value)) * 1.05);
+  const max = niceMax(Math.max(0, limit?.value ?? 0, ...bars.map((b) => b.value + (b.extra ?? 0))) * 1.05);
   const y = (v: number) => H - (v / max) * H;
   const slot = n ? W / n : W;
   const gap = Math.min(slot * 0.28, 14);
   const over = limit ? bars.filter((b) => b.value > limit.value).length : 0;
   const step = Math.max(1, Math.ceil(n / xLabels));
-  const empty = !n || bars.every((b) => b.value === 0);
+  const empty = !n || bars.every((b) => b.value === 0 && !b.extra);
   return (
     <figure className="chart" aria-labelledby={`${id}t`}>
       <div className="chart__head">
@@ -97,8 +102,9 @@ export function ColumnChart({
                 return (
                   <g key={i}>
                     {b.value > 0 && <rect className={`col${isOver ? " is-over" : ""}`} x={i * slot + gap / 2} width={slot - gap} y={y(b.value)} height={Math.max(h, 0.6)} />}
+                    {(b.extra ?? 0) > 0 && <rect className="col col--extra" style={{ opacity: 0.45 }} x={i * slot + gap / 2} width={slot - gap} y={y(b.value + b.extra!)} height={Math.max(H - y(b.extra!), 0.6)} />}
                     <rect className="hit" x={i * slot} width={slot} y={0} height={H}>
-                      <title>{`${b.hint ?? b.label}: ${fmtNum(b.value, unit)}${isOver ? " — выше лимита" : ""}`}</title>
+                      <title>{`${b.hint ?? b.label}: ${fmtNum(b.value, unit)}${isOver ? " — выше лимита" : ""}${b.extra ? `; ${extraLabel ?? "ещё"}: ${fmtNum(b.extra, unit)}` : ""}`}</title>
                     </rect>
                   </g>
                 );
@@ -114,13 +120,14 @@ export function ColumnChart({
           {limit && (
             <div className="chart__legend">
               <span><i />расход за день</span>
+              {extraLabel && bars.some((b) => b.extra) && <span><i style={{ opacity: 0.45 }} />{extraLabel}</span>}
               <span><i className="is-limit" />{limit.label.toLowerCase()}</span>
               {over > 0 && <span><i className="is-bad" />выше лимита: {over} дн.</span>}
             </div>
           )}
           <table className="chart-sr">
             <caption>{title}</caption>
-            <tbody>{bars.map((b, i) => <tr key={i}><th scope="row">{b.hint ?? b.label}</th><td>{fmtNum(b.value, unit)}</td></tr>)}</tbody>
+            <tbody>{bars.map((b, i) => <tr key={i}><th scope="row">{b.hint ?? b.label}</th><td>{fmtNum(b.value, unit)}{b.extra ? ` + ${extraLabel ?? ""} ${fmtNum(b.extra, unit)}` : ""}</td></tr>)}</tbody>
           </table>
         </>
       )}

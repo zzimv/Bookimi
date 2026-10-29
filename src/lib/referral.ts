@@ -43,7 +43,7 @@ export async function onOrderPaid(userId: string, orderId: string) {
 export async function issueDueBonuses() {
   const due = await db.referral.findMany({ where: { bonusIssueAt: { lte: new Date() }, bonusPromoId: null } });
   const pct = (await cfg("referral")).bonusPct;
-  const { notifyUser } = await import("./notify");
+  const { notifySafe } = await import("./notify");
   for (const r of due) {
     const order = r.orderId ? await db.order.findUnique({ where: { id: r.orderId } }) : null;
     if (!order || order.status === "REFUNDED" || order.status === "CANCELLED") {
@@ -55,6 +55,6 @@ export async function issueDueBonuses() {
       data: { code, percentOff: pct, ownerId: r.inviterId, source: "referral_bonus", maxUses: 1 },
     });
     await db.referral.update({ where: { id: r.id }, data: { bonusPromoId: promo.id } });
-    await notifyUser(r.inviterId, "referral_bonus", { pct, code });
+    await notifySafe(r.inviterId, "referral_bonus", { pct, code });
   }
 }

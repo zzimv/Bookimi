@@ -103,3 +103,18 @@ export function totpVerify(secretB32: string, code: string) {
   const now = Date.now();
   return [-30_000, 0, 30_000].some((d) => totpAt(secretB32, now + d) === code.trim());
 }
+
+// ── Коды восстановления 2FA: 10 одноразовых кодов «xxxx-xxxx», в БД — только хэши ──
+const RC = "abcdefghjkmnpqrstuvwxyz23456789"; // без 0/o/1/l/i — не перепутать при вводе
+
+export function recoveryCodes(n = 10) {
+  return Array.from({ length: n }, () => {
+    const s = Array.from({ length: 8 }, () => RC[randomInt(0, RC.length)]).join("");
+    return `${s.slice(0, 4)}-${s.slice(4)}`;
+  });
+}
+
+export const normalizeRecovery = (code: string) => code.trim().toLowerCase().replace(/[^a-z0-9]/g, "");
+export const recoveryHash = (userId: string, code: string) => sha256(`rc:${userId}:${normalizeRecovery(code)}`);
+/** Похоже на код восстановления (8 символов алфавита), а не на 6 цифр TOTP. */
+export const looksLikeRecovery = (code: string) => /^[a-z0-9]{8}$/.test(normalizeRecovery(code)) && !/^\d{6}$/.test(code.trim());

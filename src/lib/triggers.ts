@@ -4,8 +4,10 @@
 // Автоостановка правила, если после его рассылок растут отписки.
 import { db } from "./db";
 import { hmac } from "./crypto";
-import { notifyUser, alertOwner } from "./notify";
+import { notifySafe, alertOwner } from "./notify";
 import { birthdayReminders, fmtDay } from "./holidays-core";
+import { declineName, guessGender, isFeminine, type Case } from "./declension";
+import { caseAfter } from "../content/title";
 import { getLeadTimes } from "./holidays";
 
 export const TRIGGER_EVENTS = {
@@ -19,7 +21,7 @@ export const TRIGGER_EVENTS = {
 export type TriggerEvent = keyof typeof TRIGGER_EVENTS;
 
 export const DEFAULT_RULES: { name: string; event: TriggerEvent; delayMinutes: number; template: string; promoPercent?: number }[] = [
-  { name: "Брошенная сказка, 1 час", event: "text_abandoned", delayMinutes: 60, template: "Сказка про {name} уже ждёт вас. Осталось добавить фото — и мы нарисуем обложку и первые развороты: {link}" },
+  { name: "Брошенная сказка, 1 час", event: "text_abandoned", delayMinutes: 60, template: "{Book} про {name} уже ждёт вас. Осталось добавить фото — и мы нарисуем обложку и первые развороты: {link}" },
   { name: "Брошенное превью, 1 час", event: "preview_abandoned", delayMinutes: 60, template: "Превью книги «{title}» готово. Посмотрите, как {name} выглядит на обложке: {link}" },
   { name: "Брошенное превью, 24 часа, промокод", event: "preview_abandoned", delayMinutes: 1440, template: "Книга «{title}» всё ещё ждёт. Дарим −10% по промокоду {promo} на 3 дня: {link}", promoPercent: 10 },
   { name: "Брошенное превью, 72 часа", event: "preview_abandoned", delayMinutes: 4320, template: "Напоминаем о книге «{title}». Превью сохранено ещё 4 дня: {link}" },
@@ -29,7 +31,7 @@ export const DEFAULT_RULES: { name: string; event: TriggerEvent; delayMinutes: n
     name: "День рождения героя через 21 день",
     event: "hero_birthday",
     delayMinutes: 0,
-    template: "{date} — день рождения у {name}. Новая книга, где {name} — главный герой, станет тёплым подарком. Печатную успеем, если заказать до {deadline}: {link}",
+    template: "{date} — день рождения у {name}. Новая книга, где {name} — {hero_role}, станет тёплым подарком. Печатную успеем, если заказать до {deadline}: {link}",
   },
 ];
 
@@ -58,20 +60,25 @@ async function candidates(event: TriggerEvent, delayMinutes: number): Promise<Ca
   const notOlder = new Date(Date.now() - (delayMinutes + 7 * 1440) * 60_000);
   const titleOf = (t: unknown) => (t as { title?: string } | null)?.title ?? "ваша книга";
   const nameOf = (p: unknown) => (p as { hero?: { name?: string } } | null)?.hero?.name ?? "героя";
+  // Имя склоняется при подстановке (fill), слово «сказка/книга» — по аудитории книги
+  const who = (p: unknown) => {
+    const x = (p ?? {}) as { hero?: { gender?: string }; audience?: string };
+    return { gender: x.hero?.gender ?? "", audience: x.audience ?? "CHILD" };
+  };
   switch (event) {
     case "text_abandoned": {
       const books = await db.book.findMany({
         where: { userId: { not: null }, status: { in: ["TEXT_READY", "TEXT_APPROVED"] }, createdAt: { lte: before, gte: notOlder } },
         take: 200,
       });
-      return books.map((b) => ({ userId: b.userId!, subjectId: `book:${b.id}`, vars: { name: nameOf(b.params), title: titleOf(b.text), link: `${site()}/kniga/${b.id}` } }));
+      return books.map((b) => ({ userId: b.userId!, subjectId: `book:${b.id}`, vars: { name: nameOf(b.params), ...who(b.params), title: titleOf(b.text), link: `${site()}/kniga/${b.id}` } }));
     }
     case "preview_abandoned": {
       const books = await db.book.findMany({
         where: { userId: { not: null }, status: "PREVIEW_READY", previewReadyAt: { lte: before, gte: notOlder }, orderItems: { none: {} } },
         take: 200,
       });
-      return books.map((b) => ({ userId: b.userId!, subjectId: `book:${b.id}`, vars: { name: nameOf(b.params), title: titleOf(b.text), link: `${site()}/kniga/${b.id}/kupit` } }));
+      return books.map((b) => ({ userId: b.userId!, subjectId: `book:${b.id}`, vars: { name: nameOf(b.params), ...who(b.params), title: titleOf(b.text), link: `${site()}/kniga/${b.id}/kupit` } }));
     }
     case "pdf_only": {
       const orders = await db.order.findMany({
@@ -105,23 +112,54 @@ async function candidates(event: TriggerEvent, delayMinutes: number): Promise<Ca
       // Сохранённые герои (кабинет → «Мои герои»): за 21 день по Москве, окно 2 дня на случай лимита «1 в сутки»
       const heroes = await db.hero.findMany({
         where: { role: "main", birthDate: { not: null }, userId: { not: null }, user: { deletedAt: null, marketingOk: true } },
-        select: { id: true, userId: true, name: true, birthDate: true },
+        select: { id: true, userId: true, name: true, birthDate: true, gender: true },
         orderBy: { createdAt: "desc" },
         take: 5000,
       });
       const list = birthdayReminders(heroes.map((h) => ({ id: h.id, userId: h.userId, name: h.name, birthDate: h.birthDate! })), new Date(), 21, 2, await getLeadTimes());
+      const genderOf = new Map(heroes.map((h) => [h.id, h.gender ?? ""]));
       return list.map((b) => ({
         userId: b.userId!,
         subjectId: b.subjectId,
         global: true,
-        vars: { name: b.name, date: fmtDay(b.date), deadline: fmtDay(b.deadline), link: `${site()}/sozdat?povod=den-rozhdeniya${b.id ? `&geroj=${b.id}` : ""}` },
+        vars: { name: b.name, gender: (b.id && genderOf.get(b.id)) || "", audience: "", date: fmtDay(b.date), deadline: fmtDay(b.deadline), link: `${site()}/sozdat?povod=den-rozhdeniya${b.id ? `&geroj=${b.id}` : ""}` },
       }));
     }
   }
 }
 
-function fill(t: string, vars: Record<string, string>) {
-  return t.replace(/\{(\w+)\}/g, (_, k) => vars[k] ?? "");
+/** «Сказка» — для детских книг, «книга» — для подростков, взрослых, питомцев и неизвестной аудитории. */
+export const bookWord = (audience?: string) => (audience === "CHILD" ? "сказка" : "книга");
+
+/**
+ * Подстановка в текст правила: {name} склоняется по предлогу перед ним («про Машу», «у Маши», «о Льве»),
+ * {name.род} — явный падеж; {book}/{Book} — «сказка»/«книга» по аудитории; {hero_role} — «главный герой» /
+ * «главная героиня». Старые тексты правил («Сказка про {name}», «— главный герой») правятся на лету.
+ */
+export function fill(t: string, vars: Record<string, string>) {
+  const gender = vars.gender || (vars.name ? guessGender(vars.name) : "");
+  const word = bookWord(vars.audience);
+  const vowel = /^[аеёиоуыэюяaeiou]/i;
+  const tpl = t
+    .replace(/(^|[.!?]\s+)Сказка про \{name\}/g, "$1{Book} про {name}")
+    .replace(/— главный герой(?![а-яё])/g, "— {hero_role}");
+  const extra: Record<string, string> = {
+    book: word,
+    Book: word[0].toUpperCase() + word.slice(1),
+    hero_role: isFeminine(gender) ? "главная героиня" : "главный герой",
+  };
+  return tpl.replace(/(\S+\s+)?\{(\w+)(?:\.(им|род|дат|вин|тв|пр))?\}/g, (m, before: string | undefined, k: string, c?: Case) => {
+    const prefix = before ?? "";
+    if (k === "name" && vars.name) {
+      const prev = prefix.trim().replace(/[^А-Яа-яЁё]/g, "");
+      const cs = c ?? (caseAfter(prev) as Case);
+      const n = declineName(vars.name, cs, gender);
+      // «о Ане» → «об Ане»
+      const fixed = /^о$/i.test(prev) && vowel.test(n) ? prefix.replace(/о(\s+)$/i, (x, sp: string) => (x[0] === "О" ? "Об" : "об") + sp) : prefix;
+      return fixed + n;
+    }
+    return prefix + (vars[k] ?? extra[k] ?? "");
+  });
 }
 
 export const THANKS_PROMO_PCT = 10;
@@ -175,7 +213,7 @@ export async function sendDeliveredThanks(now = new Date()) {
       });
       promo = `И промокод ${code} — −${THANKS_PROMO_PCT}% на следующую книгу, действует до ${validTo.toLocaleDateString("ru-RU", { day: "numeric", month: "long", timeZone: "Europe/Moscow" })}: ${site()}/sozdat`;
     }
-    await notifyUser(order.userId, "thanks_delivered", { title, coloring, code: order.publicCode }, { promo });
+    await notifySafe(order.userId, "thanks_delivered", { title, coloring, code: order.publicCode }, { promo });
   }
 }
 
@@ -208,7 +246,7 @@ export async function runTriggers() {
       }
       await db.triggerRun.create({ data: { ruleId: rule.id, subjectId: c.subjectId, isControl, sentAt: isControl ? null : new Date() } });
       if (isControl) continue;
-      await notifyUser(c.userId, "marketing", { subject: "БУКИМИ", text: fill(rule.template, vars) }, { marketing: rule.isMarketing });
+      await notifySafe(c.userId, "marketing", { subject: "БУКИМИ", text: fill(rule.template, vars) }, { marketing: rule.isMarketing });
       await db.auditLog.create({ data: { action: "trigger.sent", entity: "user", entityId: c.userId, details: { rule: rule.name } } });
     }
     await autoStop(rule.id, rule.name);
@@ -229,9 +267,9 @@ async function autoStop(ruleId: string, name: string) {
 
 export async function sendTestTrigger(ruleId: string, userId: string) {
   const rule = await db.triggerRule.findUniqueOrThrow({ where: { id: ruleId } });
-  await notifyUser(userId, "marketing", {
+  await notifySafe(userId, "marketing", {
     subject: `[тест] ${rule.name}`,
-    text: fill(rule.template, { name: "Маша", title: "Новогоднее путешествие с Дедом Морозом", link: site(), promo: "TEST-10", review: site(), ref: site(), date: "20 ноября", deadline: "6 ноября" }),
+    text: fill(rule.template, { name: "Маша", gender: "girl", audience: "CHILD", title: "Новогоднее путешествие с Дедом Морозом", link: site(), promo: "TEST-10", review: site(), ref: site(), date: "20 ноября", deadline: "6 ноября" }),
   });
 }
 

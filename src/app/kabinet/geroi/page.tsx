@@ -1,12 +1,12 @@
 import Link from "next/link";
 import { db } from "@/lib/db";
-import { currentUser } from "@/lib/auth";
+import { userOrLogin } from "@/lib/auth";
 import { upcomingBirthdays } from "@/lib/holidays-core";
 import { getLeadTimes } from "@/lib/holidays";
 import { HeroBirthdays } from "../Birthdays";
 
 export default async function Page() {
-  const user = (await currentUser())!;
+  const user = await userOrLogin();
   const heroes = await db.hero.findMany({ where: { userId: user.id, role: "main" }, orderBy: { createdAt: "desc" } });
   const uniq = heroes.filter((h, i) => heroes.findIndex((x) => x.name === h.name) === i);
   const birthdays = upcomingBirthdays(

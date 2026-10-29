@@ -20,7 +20,7 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
   const { id } = await params;
   const own = await ownBook(id);
   if (!own) return new NextResponse("Не найдено", { status: 404 });
-  if (!own.book.paidFull && !own.admin) return new NextResponse("Файл доступен после оплаты", { status: 403 });
+  if (!own.book.paidFull) return new NextResponse("Файл доступен после оплаты", { status: 403 });
   const kind = new URL(req.url).searchParams.get("kind") ?? "pdf-screen";
   if (!NAMES[kind]) return new NextResponse("Неизвестный формат", { status: 400 });
   const f = await db.bookFile.findFirst({ where: { bookId: id, kind }, orderBy: { createdAt: "desc" } });

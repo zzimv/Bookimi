@@ -2,6 +2,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { api } from "@/lib/client";
+import { checkFirstName, FIRST_NAME_ERROR, typeFirstName } from "@/lib/first-name";
 
 export function CopyField({ value, label }: { value: string; label: string }) {
   const [ok, setOk] = useState(false);
@@ -58,6 +59,36 @@ export function Prefs({ prefs, telegramLink, marketingOk, hasEmail }: { prefs: {
       {!marketingOk && <p className="small">Новости и скидки приходят только с вашего согласия — его можно дать выше, отметив «Новости и скидки».</p>}
       {msg && <p className="error">{msg}</p>}
     </>
+  );
+}
+
+/** «Как к вам обращаться» — имя для приветствия в кабинете и получателя при оформлении (необязательно). */
+export function NameForm({ initial }: { initial: string }) {
+  const router = useRouter();
+  const [v, setV] = useState(initial);
+  const [msg, setMsg] = useState("");
+  async function save() {
+    setMsg("");
+    const name = checkFirstName(v);
+    if (name === false) return setMsg(FIRST_NAME_ERROR);
+    try {
+      await api("/api/me", { action: "name", firstName: name ?? "" });
+      setMsg(v.trim() ? "Сохранили." : "Имя убрали.");
+      router.refresh();
+    } catch (e) {
+      setMsg((e as Error).message);
+    }
+  }
+  return (
+    <form className="panel" onSubmit={(e) => { e.preventDefault(); save(); }}>
+      <b>Как к вам обращаться</b>
+      <p className="small muted">Так поздороваемся в кабинете и подставим получателя при оформлении. Необязательно; буквы, пробел или дефис.</p>
+      <div className="row">
+        <input className="input" name="first-name" autoComplete="given-name" maxLength={40} value={v} onChange={(e) => setV(typeFirstName(e.target.value))} placeholder="Анна" style={{ flex: "1 1 200px", maxWidth: 320 }} />
+        <button className="btn btn--ghost btn--sm">Сохранить</button>
+      </div>
+      {msg && <p className="small ok">{msg}</p>}
+    </form>
   );
 }
 

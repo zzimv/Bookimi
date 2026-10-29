@@ -31,7 +31,7 @@ export function HomeHero({ season, rating }: { season: Season | null; rating: { 
           <Link href={cta.href} className="btn btn--primary btn--lg">
             {cta.label}
           </Link>
-          <p className="hhero__note small">Превью бесплатно и без регистрации · PDF от 990 ₽ · печатная книга от 2 490 ₽</p>
+          <p className="hhero__note small">Превью бесплатно, вход по коду на почту · PDF от 990 ₽ · печатная книга от 2 490 ₽</p>
           {rating && (
             <p className="hhero__rating" aria-label={`Оценка ${rating.avg} из 5 по ${rating.count} отзывам`}>
               <span aria-hidden="true">★★★★★</span> {rating.avg.toFixed(1).replace(".", ",")} — {rating.count} {plural(rating.count, "отзыв", "отзыва", "отзывов")} покупателей

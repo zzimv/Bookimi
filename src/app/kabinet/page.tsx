@@ -1,7 +1,7 @@
 import Link from "next/link";
 import type { OrderStatus } from "@prisma/client";
 import { db } from "@/lib/db";
-import { currentUser } from "@/lib/auth";
+import { userOrLogin } from "@/lib/auth";
 import { signedUrl } from "@/lib/storage";
 import { cfg } from "@/lib/settings";
 import { declineName } from "@/lib/declension";
@@ -33,7 +33,7 @@ function firstName(s?: string | null) {
 }
 
 export default async function Page() {
-  const user = (await currentUser())!;
+  const user = await userOrLogin();
   const [books, heroes, lastOrder, ref, orders] = await Promise.all([
     db.book.findMany({
       where: { userId: user.id },
@@ -50,7 +50,8 @@ export default async function Page() {
     }),
   ]);
 
-  const name = firstName(user.name) ?? firstName(lastOrder?.contactName);
+  // «Как к вам обращаться» со входа → имя из профиля → получатель прошлого заказа
+  const name = firstName(user.firstName) ?? firstName(user.name) ?? firstName(lastOrder?.contactName);
   const paidCount = books.filter((b) => b.paidFull).length;
 
   // Ближайший повод: дни рождения героев (из «Моих героев» и анкет книг) + поводы прошлых книг

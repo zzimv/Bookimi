@@ -208,6 +208,8 @@ const demoPlugin = {
     b.onResolve({ filter: /^server-only$/ }, () => ({ path: shim("empty.cjs") }));
     b.onResolve({ filter: /^node:/ }, () => ({ path: shim("empty.cjs") }));
     b.onResolve({ filter: /^@prisma\/client$/ }, () => ({ path: shim("empty.cjs") }));
+    // Серверные зависимости (очередь, почта, драйвер БД) — если их потянет общий модуль, в браузере они не нужны
+    b.onResolve({ filter: /^(pg|pg-boss|nodemailer|@prisma\/adapter-pg)$/ }, () => ({ path: shim("empty.cjs") }));
     // База данных: в демо её нет (hasDatabase = false → настройки и каталог по умолчанию)
     b.onResolve({ filter: /(^|\/)db$/ }, (a) => (a.importer.includes(`${join(root, "src")}`) ? { path: shim("db.ts") } : undefined));
     b.onResolve({ filter: /(^|\/)prisma-client$/ }, () => ({ path: shim("empty.cjs") }));
@@ -253,6 +255,17 @@ const js = res.outputFiles[0].text.replace(/<\/script/gi, "<\\/script");
 const cssFiles = ["src/app/globals.css", "src/components/charts/charts.css", "src/app/zakaz/journey.css", "src/app/kabinet/kabinet.css"].map((f) => readFileSync(join(root, f), "utf8"));
 const css = (await transform([...cssFiles, readFileSync(join(here, "style.css"), "utf8")].join("\n"), { loader: "css", minify: true, charset: "utf8" })).code;
 
+// Шрифты — свои, без Google Fonts: подмножества Nunito 800 и Manrope 400/700 (tools/demo/fonts/subset.sh).
+// Nunito 700 и Manrope 600 браузер берёт из ближайшего более жирного начертания.
+const CYR = "U+0401,U+0410-044F,U+0451,U+2116";
+const LAT = "U+0020-007E,U+00A0,U+00AB,U+00BB,U+00B7,U+00D7,U+00A9,U+2010-2014,U+2018-201E,U+2026,U+20BD,U+2212,U+2190-2193,U+00B0,U+2009,U+202F";
+const fontCss = [["Nunito", "nunito", 800], ["Manrope", "manrope", 400], ["Manrope", "manrope", 700]]
+  .flatMap(([family, file, w]) => [["cyr", CYR], ["lat", LAT]].map(([sub, range]) => {
+    const b64 = readFileSync(join(here, "fonts", `${file}-${sub}-${w}.woff2`)).toString("base64");
+    return `@font-face{font-family:${family};font-style:normal;font-weight:${w};font-display:swap;src:url(data:font/woff2;base64,${b64}) format("woff2");unicode-range:${range}}`;
+  }))
+  .join("");
+
 // Тема до первой отрисовки — как THEME_SCRIPT в src/app/layout.tsx
 const themeScript = `try{var t=localStorage.getItem("bk_theme");if(t==="light"||t==="dark")document.documentElement.dataset.theme=t}catch(e){}`;
 const html = `<!doctype html>
@@ -260,14 +273,11 @@ const html = `<!doctype html>
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Демо-стенд БУКИМИ</title>
+<title>БУКИМИ демо rev 03</title>
 <meta name="description" content="Интерактивный демо-стенд БУКИМИ: витрина, анкета, книга, оплата, кабинет и админка — без сервера.">
 <meta name="claude:viewport-fit-sides" content="cover">
 <script>${themeScript}</script>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;600;700&family=Nunito:wght@700;800&display=swap">
-<style>${css}</style>
+<style>${fontCss}${css}</style>
 </head>
 <body>
 <div id="app"><p style="padding:40px 16px;text-align:center;font-family:system-ui">Загружаем демо-стенд…</p></div>
@@ -287,5 +297,5 @@ if (process.argv.includes("--sizes")) {
     agg[key] = (agg[key] ?? 0) + v.bytesInOutput;
   }
   console.log(Object.entries(agg).sort((a, b) => b[1] - a[1]).slice(0, 90).map(([k, v]) => `${String((v / 1024).toFixed(1)).padStart(7)} КБ  ${k}`).join("\n"));
-  console.log(`css ${(Buffer.byteLength(css) / 1024).toFixed(0)} КБ`);
+  console.log(`css ${(Buffer.byteLength(css) / 1024).toFixed(0)} КБ, шрифты ${(Buffer.byteLength(fontCss) / 1024).toFixed(0)} КБ`);
 }

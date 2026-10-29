@@ -1,8 +1,9 @@
 // Регрессия по ревью на настоящей PostgreSQL (DATABASE_URL). Без БД — пропускается.
 // Промокод «−300 ₽» против скидки новичка, атомарный учёт промокода (maxUses), гонки лимитов
 // смены настроения и перерисовок, суточный лимит расходов для текста.
-import { afterAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { randomUUID } from "node:crypto";
+import { setupSellerAndPayments } from "./helpers/db-setup";
 
 const enabled = Boolean(process.env.DATABASE_URL);
 const d = enabled ? describe : describe.skip;
@@ -32,13 +33,15 @@ d("ревью: БД", async () => {
     await orders.markPaid((await db.payment.findFirstOrThrow({ where: { orderId } })).id);
   }
 
+  // Свои реквизиты продавца и способы оплаты: без них приём оплаты выключен (раньше их задавал другой файл)
+  beforeAll(setupSellerAndPayments);
+
   afterAll(async () => {
     const { getBoss } = await import("@/lib/queue");
     await (await getBoss()).stop({ graceful: false }).catch(() => {});
   });
 
   it("фиксированный промокод против скидки новичка: побеждает больший в рублях, промокод записан и засчитан", async () => {
-    await saveSetting("payments", { sbpQr: { enabled: true, provider: "demo" }, transfer: { enabled: false, phone: "", card: "", bank: "", holder: "", cancelHours: 24 }, yookassa: { enabled: false } });
     const inviter = await user("inv");
     const friend = await user("fr");
     expect(await attachReferral(friend.id, inviter.referralCode, `fr-dev-${tag}`)).toBe(true);

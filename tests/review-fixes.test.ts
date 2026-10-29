@@ -192,7 +192,14 @@ describe("6. повод в тексте", () => {
     const plot = PLOTS.find((p) => p.audience === "CHILD" && !textStyle(p.textStyle)?.verse && !p.spreads.some((s) => /\{ДОП/.test(s.text)) && p.extras.max >= 2)!;
     const a = AnswersV2.parse({ hero: { name: "Аня", gender: "girl", ageGroup: "4-5" }, story: { slug: plot.slug }, extras: [{ role: "custom", name: "Облако", gender: "n" }, { role: plot.extras.roles.includes("toy") ? "toy" : "custom", name: "Робот Бип" }] });
     const t = personalize((await new DemoTextProvider().write(a, plot, 0)).raw, a);
-    expect(t.spreads[10].text).toContain("И Облако, и Робот Бип — тоже рядом.");
+    const all = t.spreads.map((s) => s.text).join("\n");
+    // Каждый герой упомянут в начале и в финале, без механического «Рядом, конечно, был…» и без повторов фраз
+    expect(t.spreads[0].text).toMatch(/Облак/);
+    expect(t.spreads[1].text).toMatch(/Робот/);
+    expect((all.match(/Облак/g) ?? []).length).toBeGreaterThanOrEqual(2);
+    expect((all.match(/Робот/g) ?? []).length).toBeGreaterThanOrEqual(2);
+    expect(all).not.toMatch(/Рядом, конечно|тоже рядом/);
+    expect(all).not.toMatch(/[{}]/);
   });
 });
 

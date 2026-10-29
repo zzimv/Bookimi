@@ -9,15 +9,35 @@ import { METHOD_TITLES } from "./shipping";
 
 const WEEK = 7 * 86400; // максимальный срок подписанной ссылки S3
 
-export async function sendToPrint(orderId: string, operatorId?: string) {
+/**
+ * Можно ли передавать заказ в типографию: заказ с печатью, оплачен (или перепечатка уже напечатанного),
+ * все книги заказа готовы (FULL_READY — не посреди генерации или смены настроения), блок и обложка есть.
+ */
+export async function printFilesReady(orderId: string, opts: { reprint?: boolean } = {}): Promise<{ ok: true; bookId: string } | { ok: false; error: string }> {
+  const order = await db.order.findUnique({ where: { id: orderId }, include: { items: { include: { book: { select: { id: true, status: true } } } } } });
+  if (!order) return { ok: false, error: "Заказ не найден" };
+  if (order.whoPrints !== "bookimi") return { ok: false, error: "Заказ без печати" };
+  const allowed = opts.reprint ? ["PAID", "IN_PRINT", "PACKED", "SHIPPED", "DELIVERED"] : ["PAID"];
+  if (!allowed.includes(order.status)) return { ok: false, error: "Передать в печать можно только оплаченный заказ" };
+  const books = order.items.map((i) => i.book).filter(Boolean) as { id: string; status: string }[];
+  if (!books.length) return { ok: false, error: "В заказе нет книги" };
+  if (books.some((b) => b.status !== "FULL_READY")) return { ok: false, error: "Книга ещё готовится — передать в печать можно, когда она будет готова" };
+  const bookId = books[0].id;
+  const kinds = new Set((await db.bookFile.findMany({ where: { bookId, kind: { in: ["print-block", "print-cover"] } }, select: { kind: true } })).map((f) => f.kind));
+  if (!kinds.has("print-block") || !kinds.has("print-cover")) return { ok: false, error: "Файлы для печати ещё не готовы" };
+  return { ok: true, bookId };
+}
+
+export async function sendToPrint(orderId: string, operatorId?: string, opts: { reprint?: boolean } = {}) {
   const order = await db.order.findUniqueOrThrow({ where: { id: orderId }, include: { items: true, shipment: true, printJob: true } });
   if (order.whoPrints !== "bookimi") throw new Error("Заказ без печати");
   if (order.printJob) return order.printJob;
+  const ready = await printFilesReady(orderId, opts);
+  if (!ready.ok) throw new Error(ready.error);
   const ph = await db.printHouse.findFirst({ where: { isActive: true } });
   if (!ph) throw new Error("Нет активной типографии");
-  const bookId = order.items.find((i) => i.bookId)?.bookId;
-  const files = bookId ? await db.bookFile.findMany({ where: { bookId, kind: { in: ["print-block", "print-cover"] } } }) : [];
-  if (files.length < 2) throw new Error("Файлы для печати ещё не готовы");
+  const bookId = ready.bookId;
+  const files = await db.bookFile.findMany({ where: { bookId, kind: { in: ["print-block", "print-cover"] } } });
   const links = await Promise.all(files.map(async (f) => `${f.kind === "print-block" ? "Блок" : "Обложка"}: ${await signedUrl("books", f.storageKey, WEEK)}`));
   const qty = 1 + (order.items.some((i) => i.refKey === "second-copy") ? 1 : 0);
   const format = order.items.find((i) => i.kind === "format")?.title ?? "";
@@ -58,7 +78,7 @@ export async function sendToPrint(orderId: string, operatorId?: string) {
     throw new Error("У типографии не указан email или API — передайте заказ вручную");
   }
   const job = await db.printJob.create({ data: { orderId, printHouseId: ph.id, status: "sent", externalId, sentAt: new Date() } });
-  await setStatus(orderId, "IN_PRINT", operatorId);
+  if (order.status === "PAID") await setStatus(orderId, "IN_PRINT", operatorId);
   await audit(operatorId ?? null, "print.send", "order", orderId, { printHouse: ph.name });
   return job;
 }

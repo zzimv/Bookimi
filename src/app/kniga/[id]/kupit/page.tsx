@@ -9,6 +9,7 @@ import { availableMethods, METHOD_TITLES } from "@/lib/shipping";
 import { signedUrl } from "@/lib/storage";
 import { parseAddressBook, pickPrefill } from "@/lib/delivery";
 import { bulkState } from "@/lib/bulk-server";
+import { AnswersV2 } from "@/lib/quiz";
 
 export const metadata: Metadata = { title: "Оформление", robots: { index: false } };
 export const dynamic = "force-dynamic";
@@ -44,7 +45,7 @@ export default async function Page({ params, searchParams }: { params: Promise<{
   const prefill = pickPrefill({
     saved: parseAddressBook(user.savedAddresses),
     lastOrder,
-    profile: { name: user.name, phone: user.phone },
+    profile: { name: user.name || user.firstName, phone: user.phone },
     draft: { phone: draft?.phone },
     methods,
   });
@@ -75,10 +76,11 @@ export default async function Page({ params, searchParams }: { params: Promise<{
         voices={audio.voices}
         canPay={canPay}
         printEnabled={flags.printEnabled}
-        contact={{ name: user.name ?? "", phone: user.phone ?? "", email: user.email ?? "" }}
+        contact={{ name: user.name || user.firstName || "", phone: user.phone ?? "", email: user.email ?? "" }}
         pdfPaid={await pdfPaidFor(id, user.id)}
         prefill={prefill}
         bulk={bulk}
+        audience={AnswersV2.safeParse(own.book.params).data?.audience ?? "CHILD"}
       />
     </div>
   );

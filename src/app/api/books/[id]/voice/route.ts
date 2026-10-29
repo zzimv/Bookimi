@@ -7,7 +7,7 @@ async function allowed(bookId: string) {
   const own = await ownBook(bookId);
   if (!own) return null;
   const bought = await db.orderItem.findFirst({ where: { bookId, refKey: "audio-self", order: { paidAt: { not: null }, status: { notIn: ["REFUNDED", "CANCELLED"] } } } });
-  return bought || own.admin ? own : null;
+  return bought ? own : null;
 }
 
 export async function GET(_: Request, { params }: { params: Promise<{ id: string }> }) {

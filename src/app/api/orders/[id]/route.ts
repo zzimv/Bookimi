@@ -10,7 +10,7 @@ async function ownOrder(id: string) {
   if (!user) return null;
   const order = await db.order.findUnique({ where: { id } });
   // Чужой заказ не открывается — 404, а не 403, чтобы не подтверждать существование
-  if (!order || (order.userId !== user.id && user.role === "CUSTOMER")) return null;
+  if (!order || order.userId !== user.id) return null;
   return { order, user };
 }
 

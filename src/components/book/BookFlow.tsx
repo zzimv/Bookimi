@@ -1,5 +1,6 @@
 "use client";
 import Link from "next/link";
+import { SpreadText } from "@/components/SpreadText";
 import { useCallback, useEffect, useState } from "react";
 import { api, goal } from "@/lib/client";
 import { OtpForm } from "@/components/OtpForm";
@@ -170,7 +171,7 @@ export function BookFlow({
       {b.status === "TEXT_READY" && b.text && (
         <section>
           <h1>{b.text.title}</h1>
-          {dedication && <p className="dedication">{dedication}</p>}
+          {dedication && <p className="dedication" style={{ whiteSpace: "pre-line" }}>{dedication}</p>}
           <p className="muted">Прочитайте сказку. Любой разворот можно поправить вручную — бесплатно.</p>
           <div className="story-text">
             {b.text.spreads.map((s) => (
@@ -184,7 +185,7 @@ export function BookFlow({
                   )}
                 </header>
                 {edit[s.index] === undefined ? (
-                  <p>{s.text}</p>
+                  <p><SpreadText text={s.text} /></p>
                 ) : (
                   <textarea className="textarea" value={edit[s.index]} maxLength={600} onChange={(e) => setEdit({ ...edit, [s.index]: e.target.value })} />
                 )}
@@ -256,7 +257,7 @@ export function BookFlow({
                   // eslint-disable-next-line @next/next/no-img-element
                   <img className="preview-img" src={p.url} alt={p.index === 0 ? "Обложка" : `Разворот ${p.index}`} loading={p.index > 0 ? "lazy" : "eager"} />
                 )}
-                {p.index > 0 && <figcaption>{p.text}</figcaption>}
+                {p.index > 0 && <figcaption><SpreadText text={p.text} /></figcaption>}
               </figure>
             ))}
           </div>

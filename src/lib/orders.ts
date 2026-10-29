@@ -6,7 +6,7 @@ import { pickDiscount, type CatalogAddon, type CatalogFormat, etaDate, ruDate } 
 import { SbpQrProvider, TransferProvider, YooKassaProvider, idempotencyKey, type PaymentProvider, type PaymentView } from "./payments";
 import { issueReceipt, cancelReceipts } from "./npd";
 import { newbieDiscountPct, onOrderPaid } from "./referral";
-import { notifyUser, alertOwner, orderHeroAcc } from "./notify";
+import { notifySafe, alertOwner, orderHeroAcc } from "./notify";
 import { track } from "./events";
 import { shipQuote, type ShipAddress, type ShipMethod } from "./shipping";
 import { hmac } from "./crypto";
@@ -60,12 +60,26 @@ export async function cartoonPaidFor(bookId: string) {
   return n > 0;
 }
 
-/** Сколько уже заплачено за PDF этой книги (для зачёта при заказе печати). */
+/**
+ * Сколько фактически заплачено за PDF этой книги (для зачёта при заказе печати): цена PDF минус его доля
+ * скидки заказа (промокод, скидка новичка), за вычетом зачёта, уже использованного в оплаченных заказах печати.
+ */
 export async function pdfPaidFor(bookId: string, userId: string) {
+  const live = { userId, paidAt: { not: null }, status: { notIn: ["REFUNDED", "CANCELLED"] as OrderStatus[] } };
   const items = await db.orderItem.findMany({
-    where: { bookId, kind: "format", refKey: "pdf", order: { userId, paidAt: { not: null }, status: { notIn: ["REFUNDED", "CANCELLED"] } } },
+    where: { bookId, kind: "format", refKey: "pdf", order: live },
+    include: { order: { select: { subtotalRub: true, pdfCreditRub: true, discountRub: true } } },
   });
-  return items.reduce((s, i) => s + i.priceRub, 0);
+  const paid = items.reduce((sum, i) => sum + pdfPaidShare(i.priceRub, i.order), 0);
+  const used = await db.order.aggregate({ where: { ...live, whoPrints: "bookimi", items: { some: { bookId, kind: "format" } } }, _sum: { pdfCreditRub: true } });
+  return Math.max(0, paid - (used._sum.pdfCreditRub ?? 0));
+}
+
+/** Доля строки заказа после скидки: скидка распределяется пропорционально цене строк (без зачёта PDF). */
+export function pdfPaidShare(priceRub: number, o: { subtotalRub: number; pdfCreditRub: number; discountRub: number }) {
+  const goods = o.subtotalRub - o.pdfCreditRub;
+  if (goods <= 0) return 0;
+  return Math.max(0, Math.round(priceRub - (o.discountRub * priceRub) / goods));
 }
 
 export interface CheckoutInput {
@@ -254,20 +268,39 @@ export async function availableProviders(): Promise<PaymentProvider[]> {
   return list;
 }
 
-/** Создаёт платёж выбранным способом. Повторный вызов возвращает уже созданный (идемпотентность). */
+/**
+ * Создаёт платёж выбранным способом. Идемпотентно: пока заказ ждёт оплаты и срок не вышел, повторное «Оплатить»
+ * тем же способом возвращает тот же платёж (тот же ключ идемпотентности у провайдера), а не плодит новые.
+ */
 export async function startPayment(order: Order, method: string): Promise<PaymentView> {
   if (!(await canAcceptPayments())) throw new Error("Приём оплаты пока выключен");
   if (order.status !== "PENDING_PAYMENT") throw new Error("Заказ не ожидает оплаты");
   const provider = (await availableProviders()).find((p) => p.name === method);
   if (!provider) throw new Error("Способ оплаты недоступен");
-  const pay = await db.payment.create({
-    data: { orderId: order.id, provider: provider.name, idempotencyKey: idempotencyKey(), amountRub: order.totalRub, status: "created" },
+  const { pay, reused, fresh } = await db.$transaction(async (tx) => {
+    // Блокировка заказа: два одновременных «Оплатить» не создадут два платежа
+    await tx.$queryRaw`SELECT "id" FROM "Order" WHERE "id" = ${order.id}::uuid FOR UPDATE`;
+    const o = await tx.order.findUniqueOrThrow({ where: { id: order.id } });
+    if (o.status !== "PENDING_PAYMENT") throw new Error("Заказ не ожидает оплаты");
+    const live = !o.expiresAt || o.expiresAt > new Date();
+    const existing = live
+      ? await tx.payment.findFirst({ where: { orderId: o.id, provider: provider.name, status: { in: ["created", "pending"] }, amountRub: o.totalRub }, orderBy: { createdAt: "desc" } })
+      : null;
+    if (existing) return { pay: existing, reused: true, fresh: o };
+    const created = await tx.payment.create({
+      data: { orderId: o.id, provider: provider.name, idempotencyKey: idempotencyKey(), amountRub: o.totalRub, status: "created" },
+    });
+    return { pay: created, reused: false, fresh: o };
   });
-  const res = await provider.create(order, pay);
-  await db.payment.update({ where: { id: pay.id }, data: { externalId: res.externalId, raw: res.raw as object | undefined, status: "pending" } });
-  const p = await cfg("payments");
-  const ttl = provider.name === "transfer" ? p.transfer.cancelHours * 60 : 60;
-  await db.order.update({ where: { id: order.id }, data: { expiresAt: new Date(Date.now() + ttl * 60_000) } });
+  const res = await provider.create(fresh, pay);
+  if (!reused || !pay.externalId) {
+    await db.payment.update({ where: { id: pay.id }, data: { externalId: res.externalId, raw: res.raw as object | undefined, status: "pending" } });
+  }
+  if (!reused || !fresh.expiresAt) {
+    const p = await cfg("payments");
+    const ttl = provider.name === "transfer" ? p.transfer.cancelHours * 60 : 60;
+    await db.order.update({ where: { id: order.id }, data: { expiresAt: new Date(Date.now() + ttl * 60_000) } });
+  }
   return res.view;
 }
 
@@ -275,84 +308,158 @@ export async function startPayment(order: Order, method: string): Promise<Paymen
 export async function claimTransfer(orderId: string, userId: string) {
   const o = await db.order.findFirst({ where: { id: orderId, userId, status: "PENDING_PAYMENT" } });
   if (!o) return null;
-  const up = await db.order.update({ where: { id: o.id }, data: { status: "AWAITING_CONFIRMATION" } });
-  await notifyUser(userId, "transfer_waiting", { code: o.publicCode });
-  await alertOwner("Перевод на подтверждении", `Заказ ${o.publicCode}, ${o.totalRub} ₽. Проверьте поступление и подтвердите в админке.`);
+  const r = await db.order.updateMany({ where: { id: o.id, status: "PENDING_PAYMENT" }, data: { status: "AWAITING_CONFIRMATION" } });
+  if (r.count !== 1) return null;
+  const up = await db.order.findUniqueOrThrow({ where: { id: o.id } });
+  await notifySafe(userId, "transfer_waiting", { code: o.publicCode });
+  await alertOwner("Перевод на подтверждении", `Заказ ${o.publicCode}, ${o.totalRub} ₽. Проверьте поступление и подтвердите в админке.`).catch(() => {});
   return up;
 }
 
+export const PAYABLE: OrderStatus[] = ["PENDING_PAYMENT", "AWAITING_CONFIRMATION", "CANCELLED"];
+export const PAID_STATUSES: OrderStatus[] = ["PAID", "IN_PRINT", "PACKED", "SHIPPED", "DELIVERED"];
+
+/** Выполнить шаг после оплаты; сбой (почта, чек, реферал) не ломает оплату — только в журнал и владельцу. */
+async function step(label: string, orderCode: string, fn: () => Promise<unknown>) {
+  try {
+    await fn();
+  } catch (e) {
+    console.error(`[markPaid] ${label}:`, (e as Error).message);
+    await alertOwner("Сбой после оплаты", `Заказ ${orderCode}: шаг «${label}» не выполнен (${(e as Error).message}). Оплата и книга не затронуты.`).catch(() => {});
+  }
+}
+
 /**
- * Оплата прошла (вебхук QR или подтверждение оператором). Идемпотентно: повторный вызов ничего не меняет.
- * Дальше: чек НПД, уведомление, реферал, полная генерация книги, триггеры (конверсия).
+ * Оплата прошла (вебхук QR или подтверждение оператором). Идемпотентно и без гонок:
+ *  • платёж и заказ блокируются (SELECT … FOR UPDATE), статус меняется условно PENDING → PAID;
+ *  • в той же транзакции: платёж «succeeded», промокод, paidFull, задачи генерации (outbox через pg-boss) —
+ *    книга будет сделана, даже если дальше упадёт почта;
+ *  • второй успешный платёж по уже оплаченному заказу → платёж «needs_refund», владельцу «вернуть деньги»,
+ *    без второго чека, промокода и писем;
+ *  • после коммита: чек НПД, письма (сбой → очередь повторов), реферал, триггеры — каждый шаг отдельно.
  */
 export async function markPaid(paymentId: string, opts: { receiptUrl?: string; confirmedBy?: string; client?: PrismaClient } = {}) {
-  const res = await db.$transaction(async (tx) => {
-    const p = await tx.payment.findUnique({ where: { id: paymentId }, include: { order: true } });
-    if (!p) throw new Error("Платёж не найден");
-    if (p.status === "succeeded") return { already: true, order: p.order };
-    await tx.payment.update({ where: { id: p.id }, data: { status: "succeeded", confirmedById: opts.confirmedBy } });
-    if (!["PENDING_PAYMENT", "AWAITING_CONFIRMATION", "CANCELLED"].includes(p.order.status)) return { already: true, order: p.order };
-    const order = await tx.order.update({ where: { id: p.orderId }, data: { status: "PAID", paidAt: new Date() } });
-    // Промокод засчитывается атомарно и не сверх maxUses (два заказа с одним промокодом оплачены одновременно)
-    const promoOverLimit = order.promoCodeId ? !(await usePromo(order.promoCodeId, tx)) : false;
-    return { already: false, order, promoOverLimit };
-  });
-  if (res.already) return res.order;
+  const { QUEUES, enqueueInTx, getBoss } = await import("./queue");
+  await getBoss(); // запуск pg-boss — до транзакции (создание очередей не должно держать блокировки)
+  const res = await db.$transaction(
+    async (tx) => {
+      const [locked] = await tx.$queryRaw<{ id: string; status: string; orderId: string }[]>`SELECT "id", "status", "orderId" FROM "Payment" WHERE "id" = ${paymentId}::uuid FOR UPDATE`;
+      if (!locked) throw new Error("Платёж не найден");
+      await tx.$queryRaw`SELECT "id" FROM "Order" WHERE "id" = ${locked.orderId}::uuid FOR UPDATE`;
+      const order0 = await tx.order.findUniqueOrThrow({ where: { id: locked.orderId } });
+      if (["succeeded", "needs_refund", "refunded"].includes(locked.status)) return { kind: "already" as const, order: order0 };
+      if (!PAYABLE.includes(order0.status)) {
+        await tx.payment.update({ where: { id: locked.id }, data: { status: "needs_refund", confirmedById: opts.confirmedBy } });
+        return { kind: "duplicate" as const, order: order0 };
+      }
+      const upd = await tx.order.updateMany({ where: { id: order0.id, status: { in: PAYABLE } }, data: { status: "PAID", paidAt: new Date() } });
+      if (upd.count !== 1) {
+        await tx.payment.update({ where: { id: locked.id }, data: { status: "needs_refund", confirmedById: opts.confirmedBy } });
+        return { kind: "duplicate" as const, order: order0 };
+      }
+      await tx.payment.update({ where: { id: locked.id }, data: { status: "succeeded", confirmedById: opts.confirmedBy } });
+      const order = await tx.order.findUniqueOrThrow({ where: { id: order0.id } });
+      // Промокод засчитывается атомарно и не сверх maxUses (два заказа с одним промокодом оплачены одновременно)
+      const promoOverLimit = order.promoCodeId ? !(await usePromo(order.promoCodeId, tx)) : false;
+      const items = await tx.orderItem.findMany({ where: { orderId: order.id } });
+      const bookIds = [...new Set(items.map((i) => i.bookId).filter(Boolean))] as string[];
+      if (bookIds.length) await tx.book.updateMany({ where: { id: { in: bookIds } }, data: { paidFull: true } });
+      // Задачи — в той же транзакции: оплата без задачи генерации невозможна. Уже готовая книга (печать
+      // после PDF, докупка мультфильма) — только недостающие файлы, без перерисовки (runFull, режим extras).
+      for (const id of bookIds) {
+        await enqueueInTx(tx, QUEUES.generateFull, { bookId: id, orderId: order.id }, { retryLimit: 3, retryDelay: 120, singletonKey: `full-${id}-${order.id}` });
+      }
+      return { kind: "paid" as const, order, promoOverLimit };
+    },
+    { timeout: 20_000 },
+  );
   const order = res.order;
-  if ("promoOverLimit" in res && res.promoOverLimit) {
-    await alertOwner("Промокод сверх лимита", `Заказ ${order.publicCode} оплачен со скидкой по промокоду, у которого уже исчерпан лимит использований.`);
+  if (res.kind === "already") return order;
+  if (res.kind === "duplicate") {
+    await audit(opts.confirmedBy ?? null, "payment.duplicate", "order", order.id, { paymentId, status: order.status });
+    await alertOwner(
+      "Повторная оплата — вернуть деньги",
+      `Заказ ${order.publicCode} уже оплачен, но пришёл ещё один платёж (${paymentId}). Верните деньги покупателю: платёж отмечен «needs_refund», чек и письма не отправлялись.`,
+    ).catch(() => {});
+    return order;
   }
-  const receipt = await issueReceipt(order.id, { urlFromPayment: opts.receiptUrl });
-  await notifyUser(order.userId, "payment_received", { code: order.publicCode, orderId: order.id, whoPrints: order.whoPrints, heroAcc: await orderHeroAcc(order.id) });
-  if (receipt?.url) await notifyUser(order.userId, "receipt", { code: order.publicCode, url: receipt.url });
-  await onOrderPaid(order.userId, order.id);
-  await track("pay", { userId: order.userId, props: { orderId: order.id, total: order.totalRub } });
-  // Конверсия триггеров: последняя рассылка этому покупателю за 7 дней
-  const run = await db.triggerRun.findFirst({
-    where: { subjectId: order.userId, sentAt: { gte: new Date(Date.now() - 7 * 86400_000) }, converted: false },
-    orderBy: { sentAt: "desc" },
+  if (res.promoOverLimit) {
+    await alertOwner("Промокод сверх лимита", `Заказ ${order.publicCode} оплачен со скидкой по промокоду, у которого уже исчерпан лимит использований.`).catch(() => {});
+  }
+  let receiptUrl: string | null | undefined;
+  await step("чек", order.publicCode, async () => {
+    receiptUrl = (await issueReceipt(order.id, { urlFromPayment: opts.receiptUrl }))?.url;
   });
-  if (run) await db.triggerRun.update({ where: { id: run.id }, data: { converted: true, revenueRub: order.totalRub } });
-  const items = await db.orderItem.findMany({ where: { orderId: order.id } });
-  const bookIds = [...new Set(items.map((i) => i.bookId).filter(Boolean))] as string[];
-  const { getBoss, QUEUES } = await import("./queue");
-  const boss = await getBoss();
-  const hasFormat = items.some((i) => i.kind === "format");
-  for (const id of bookIds) {
-    // Докупка из кабинета (без формата): книга уже готова — собираем только купленное (мультфильм)
-    if (!hasFormat) {
-      const { onCartoonPaid } = await import("./cartoon");
-      if (await onCartoonPaid(id, items)) continue;
-    }
-    await db.book.update({ where: { id }, data: { paidFull: true } });
-    await boss.send(QUEUES.generateFull, { bookId: id, orderId: order.id }, { retryLimit: 3, retryDelay: 120, singletonKey: `full-${id}` });
-  }
-  await checkNpdLimit();
+  await step("письмо об оплате", order.publicCode, async () =>
+    notifySafe(order.userId, "payment_received", { code: order.publicCode, orderId: order.id, whoPrints: order.whoPrints, heroAcc: await orderHeroAcc(order.id) }),
+  );
+  if (receiptUrl) await notifySafe(order.userId, "receipt", { code: order.publicCode, url: receiptUrl });
+  await step("реферал", order.publicCode, () => onOrderPaid(order.userId, order.id));
+  await step("аналитика", order.publicCode, () => track("pay", { userId: order.userId, props: { orderId: order.id, total: order.totalRub } }));
+  // Конверсия триггеров: последняя рассылка этому покупателю за 7 дней
+  await step("триггеры", order.publicCode, async () => {
+    const run = await db.triggerRun.findFirst({
+      where: { subjectId: order.userId, sentAt: { gte: new Date(Date.now() - 7 * 86400_000) }, converted: false },
+      orderBy: { sentAt: "desc" },
+    });
+    if (run) await db.triggerRun.update({ where: { id: run.id }, data: { converted: true, revenueRub: order.totalRub } });
+  });
+  await step("лимит НПД", order.publicCode, () => checkNpdLimit());
   return order;
 }
 
+/** Оператор подтвердил перевод. Заказ уже оплачен (двойной клик, оплата по QR) — ничего не делаем. */
 export async function confirmTransfer(orderId: string, operatorId: string) {
+  const pay = await db.$transaction(async (tx) => {
+    await tx.$queryRaw`SELECT "id" FROM "Order" WHERE "id" = ${orderId}::uuid FOR UPDATE`;
+    const order = await tx.order.findUniqueOrThrow({ where: { id: orderId } });
+    if (!PAYABLE.includes(order.status)) return null;
+    const existing = await tx.payment.findFirst({ where: { orderId, provider: "transfer", status: { in: ["created", "pending"] } }, orderBy: { createdAt: "desc" } });
+    return existing ?? tx.payment.create({ data: { orderId, provider: "transfer", idempotencyKey: idempotencyKey(), amountRub: order.totalRub, status: "pending" } });
+  });
   const order = await db.order.findUniqueOrThrow({ where: { id: orderId } });
-  let pay = await db.payment.findFirst({ where: { orderId, provider: "transfer" }, orderBy: { createdAt: "desc" } });
-  if (!pay) {
-    pay = await db.payment.create({
-      data: { orderId, provider: "transfer", idempotencyKey: idempotencyKey(), amountRub: order.totalRub, status: "pending" },
-    });
-  }
+  if (!pay) return order;
   await audit(operatorId, "transfer.confirm", "order", orderId, { amount: order.totalRub });
   return markPaid(pay.id, { confirmedBy: operatorId });
 }
 
-export async function refundOrder(orderId: string, operatorId: string, reason: string) {
-  const order = await db.order.findUniqueOrThrow({ where: { id: orderId }, include: { payments: true } });
+/**
+ * Возврат — только из оплаченных статусов. ЮKassa: ответ провайдера проверяется (ошибка — возврат не проведён).
+ * После полного возврата доступ к файлам книги закрывается (paidFull = false), если её не оплатили другим заказом.
+ */
+export async function refundOrder(orderId: string, operatorId: string, reason: string): Promise<{ ok: true } | { ok: false; error: string }> {
+  const order = await db.order.findUniqueOrThrow({ where: { id: orderId }, include: { payments: true, items: true } });
+  if (!PAID_STATUSES.includes(order.status)) return { ok: false, error: order.status === "REFUNDED" ? "Заказ уже возвращён" : "Вернуть можно только оплаченный заказ" };
   const pay = order.payments.find((p) => p.status === "succeeded");
-  if (pay?.provider === "yookassa") await new YooKassaProvider().refund(pay, order.totalRub);
+  let providerRefund: object | undefined;
+  if (pay?.provider === "yookassa") {
+    try {
+      providerRefund = await new YooKassaProvider().refund(pay, order.totalRub);
+    } catch (e) {
+      await audit(operatorId, "order.refund_failed", "order", orderId, { reason, provider: pay.provider, error: (e as Error).message });
+      return { ok: false, error: `ЮKassa не провела возврат: ${(e as Error).message}. Деньги не возвращены, заказ не изменён.` };
+    }
+  }
   // СБП-QR — возврат через сервис; перевод — обратный перевод вручную (в карточке заказа — напоминание)
-  await db.order.update({ where: { id: orderId }, data: { status: "REFUNDED", refundedAt: new Date(), comment: reason } });
+  const r = await db.order.updateMany({ where: { id: orderId, status: { in: PAID_STATUSES } }, data: { status: "REFUNDED", refundedAt: new Date(), comment: reason } });
+  if (r.count !== 1) return { ok: false, error: "Заказ уже возвращён" };
   if (pay) await db.payment.update({ where: { id: pay.id }, data: { status: "refunded" } });
-  await cancelReceipts(orderId);
-  await notifyUser(order.userId, "refund", { code: order.publicCode, amount: order.totalRub });
-  await audit(operatorId, "order.refund", "order", orderId, { reason, provider: pay?.provider });
+  // Доступ к PDF и файлам — только если книга оплачена другим, не возвращённым заказом с форматом
+  const bookIds = [...new Set(order.items.map((i) => i.bookId).filter(Boolean))] as string[];
+  for (const bookId of bookIds) {
+    const other = await db.orderItem.count({ where: { bookId, kind: "format", order: { id: { not: orderId }, paidAt: { not: null }, status: { in: PAID_STATUSES } } } });
+    if (!other) await db.book.update({ where: { id: bookId }, data: { paidFull: false } });
+  }
+  let receiptError: string | undefined;
+  try {
+    await cancelReceipts(orderId);
+  } catch (e) {
+    receiptError = (e as Error).message;
+    await alertOwner("Чек не аннулирован", `Заказ ${order.publicCode}: ${receiptError}. Аннулируйте чек в «Мой налог» вручную.`).catch(() => {});
+  }
+  await notifySafe(order.userId, "refund", { code: order.publicCode, amount: order.totalRub });
+  await audit(operatorId, "order.refund", "order", orderId, { reason, provider: pay?.provider, amount: order.totalRub, providerRefund, receiptError, accessClosed: bookIds.length });
+  return { ok: true };
 }
 
 export const STATUS_FLOW: OrderStatus[] = ["PAID", "IN_PRINT", "PACKED", "SHIPPED", "DELIVERED"];
@@ -361,7 +468,7 @@ export async function setStatus(orderId: string, status: OrderStatus, operatorId
   const order = await db.order.update({ where: { id: orderId }, data: { status }, include: { shipment: true } });
   if (track_ && order.shipment) await db.shipment.update({ where: { orderId }, data: { trackNumber: track_, status: "in_transit" } });
   if (operatorId) await audit(operatorId, "order.status", "order", orderId, { status, track: track_ });
-  await notifyUser(order.userId, track_ ? "track" : "status", {
+  await notifySafe(order.userId, track_ ? "track" : "status", {
     code: order.publicCode,
     orderId,
     status,

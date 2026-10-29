@@ -62,9 +62,27 @@ export function rateLimit(key: string, max: number, windowMs: number): boolean {
   return b.n <= max;
 }
 
-/** Расходы на генерацию за сегодня (МСК), ₽. */
-export async function spentTodayRub() {
+/**
+ * Расходы на генерацию за сегодня (МСК), ₽. Покупательский лимит (limits.dailySpendRub) считает только книги
+ * покупателей; тестовые книги сотрудников — отдельно (staff: true, лимит limits.staffDailySpendRub).
+ */
+export async function spentTodayRub(opts: { staff?: boolean } = {}) {
   const from = new Date(`${mskDay()}T00:00:00+03:00`);
-  const r = await db.generationCost.aggregate({ where: { createdAt: { gte: from } }, _sum: { costKopecks: true } });
+  const r = await db.generationCost.aggregate({ where: { createdAt: { gte: from }, staff: Boolean(opts.staff) }, _sum: { costKopecks: true } });
   return Math.round((r._sum.costKopecks ?? 0) / 100);
+}
+
+/**
+ * IP клиента из X-Forwarded-For: каждый прокси дописывает адрес справа, левые элементы может подделать клиент.
+ * Берём самый правый адрес, пропуская доверенные прокси (trusted: «1.2.3.4,10.0.» — адреса или префиксы).
+ * Без X-Forwarded-For — X-Real-IP.
+ */
+export function pickClientIp(xff: string | null | undefined, realIp?: string | null, trusted?: string | null): string {
+  const list = (xff ?? "").split(",").map((x) => x.trim()).filter(Boolean);
+  const proxies = (trusted ?? "").split(",").map((x) => x.trim()).filter(Boolean);
+  const isTrusted = (ip: string) => proxies.some((p) => (p.endsWith(".") || p.endsWith(":") ? ip.startsWith(p) : ip === p));
+  for (let i = list.length - 1; i >= 0; i--) {
+    if (!isTrusted(list[i])) return list[i];
+  }
+  return (list[0] ?? realIp ?? "0.0.0.0").trim() || "0.0.0.0";
 }

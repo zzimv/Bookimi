@@ -33,7 +33,7 @@ export default async function Page({ params }: { params: Promise<{ id: string }>
   if (!user) redirect(`/vhod?next=/zakaz/${id}`);
   if (!/^[0-9a-f-]{36}$/.test(id)) notFound();
   const order = await db.order.findUnique({ where: { id }, include: { items: true, receipts: true, shipment: true } });
-  if (!order || (order.userId !== user.id && user.role === "CUSTOMER")) notFound();
+  if (!order || order.userId !== user.id) notFound();
   const providers = (await canAcceptPayments()) ? await availableProviders() : [];
   const NOTES: Record<string, [string, string]> = {
     sbp_qr: ["СБП по QR-коду", "Оплата в приложении банка за минуту, чек — автоматически"],

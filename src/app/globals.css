@@ -6,6 +6,7 @@
   --gold: #c8952f;
   --gold-soft: #f3e4c2;
   --gold-ink: #6b4a0e;      /* текст на gold-soft */
+  --gold-mark: #a87a1c;     /* мелкое золото на светлом: звёзды, точка логотипа (≥ 3:1 к paper, surface, gold-soft) */
   --paper: #fcfbf7;         /* фон страницы */
   --paper-glass: rgba(252, 251, 247, 0.95); /* липкая шапка и нижние панели */
   --surface: #ffffff;       /* карточки, поля ввода */
@@ -51,6 +52,7 @@
   --gold: #d9a948;
   --gold-soft: #3b311c;
   --gold-ink: #f0d08a;
+  --gold-mark: #d9a948;
   --paper: #111916;
   --paper-glass: rgba(17, 25, 22, 0.94);
   --surface: #19241f;
@@ -74,6 +76,7 @@
     --gold: #d9a948;
     --gold-soft: #3b311c;
     --gold-ink: #f0d08a;
+    --gold-mark: #d9a948;
     --paper: #111916;
     --paper-glass: rgba(17, 25, 22, 0.94);
     --surface: #19241f;
@@ -154,7 +157,8 @@ p { margin: 0 0 1em; max-width: 66ch; }
 .header { position: sticky; top: 0; z-index: 20; background: var(--paper-glass); backdrop-filter: blur(8px); border-bottom: 1px solid var(--line); }
 .header__in { display: flex; align-items: center; justify-content: space-between; height: 64px; }
 .logo { font: 800 1.7rem/1 var(--font-head); color: var(--forest); text-decoration: none; letter-spacing: -0.02em; }
-.logo span { color: var(--gold); }
+.logo span { color: var(--gold-mark); }
+.footer .logo span { color: var(--gold); }
 .nav { display: none; gap: 20px; align-items: center; }
 .nav a { color: var(--ink); text-decoration: none; font-weight: 600; font-size: 0.95rem; white-space: nowrap; }
 .nav a:hover { color: var(--forest); text-decoration: underline; text-underline-offset: 4px; }
@@ -278,7 +282,7 @@ html:not(.has-name) .name-slot::before { content: attr(data-ph); }
 /* Отзывы */
 .reviews { display: grid; gap: 16px; grid-template-columns: repeat(auto-fill, minmax(min(100%, 300px), 1fr)); }
 .review { background: var(--surface); padding: 20px; border-radius: var(--r-ui); border: 1.5px solid var(--line); }
-.review__stars { color: var(--gold); letter-spacing: 2px; }
+.review__stars { color: var(--gold-mark); letter-spacing: 2px; }
 
 /* FAQ */
 .faq > details { max-width: 820px; }
@@ -338,6 +342,14 @@ html:not(.has-name) .name-slot::before { content: attr(data-ph); }
 .cookie__row { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
 .cookie .btn { min-height: 44px; padding: 0 18px; font-size: var(--fs-sm); }
 @media (min-width: 760px) { .cookie { bottom: 20px; } }
+/* Над липкой панелью анкеты/книги («Дальше») и кнопкой «Создать книгу» — баннер не закрывает кнопки; на телефоне — компактный */
+body:has(.flow-nav) .cookie, body:has(.sticky-cta) .cookie { bottom: calc(92px + env(safe-area-inset-bottom, 0px)); }
+@media (min-width: 760px) { body:has(.sticky-cta):not(:has(.flow-nav)) .cookie { bottom: 20px; } }
+@media (max-width: 759px) {
+  .cookie { padding: 12px 14px; font-size: 13px; line-height: 1.4; }
+  .cookie__row { margin-top: 8px; flex-wrap: nowrap; }
+  .cookie .btn { flex: 1; min-height: 40px; padding: 0 10px; }
+}
 
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { transition: none !important; animation: none !important; }
@@ -410,6 +422,15 @@ html:not(.has-name) .name-slot::before { content: attr(data-ph); }
 .preview-img { width: 100%; border-radius: 10px; display: block; background: var(--sage); }
 .spread-view { position: relative; }
 .spread-view figcaption { padding: 10px 2px 0; font-size: 1rem; line-height: 1.6; }
+/* Текст разворота (src/components/SpreadText.tsx, разбор — src/lib/spread-markup.ts): строки стихов отдельно,
+   подписи комикса [..] — плашками, звуки ВЖЖЖ! — жирным. Те же правила в PDF (SPREAD_PDF_CSS). */
+.sp-text { display: block; white-space: pre-line; }
+.sp-line, .sp-thought { display: block; }
+.sp-gap { display: block; height: .6em; }
+.sp-thought { font-style: italic; color: var(--ink-soft); }
+.sp-cap { display: table; margin: 6px 0; padding: 3px 10px; background: var(--gold-soft); color: var(--gold-ink); border: 1.5px solid currentColor; border-radius: 4px; font-weight: 600; font-size: .94em; box-shadow: 2px 2px 0 currentColor; }
+.sp-cap:first-child { margin-top: 0; }
+.sp-sound { font-family: var(--font-head); font-weight: 800; letter-spacing: .03em; color: var(--danger); font-size: 1.1em; }
 .photos { display: flex; gap: 10px; flex-wrap: wrap; }
 .photo { position: relative; width: 96px; height: 96px; border-radius: 10px; overflow: hidden; background: var(--sage); }
 .photo img { width: 100%; height: 100%; object-fit: cover; }
@@ -505,7 +526,7 @@ details.edit summary { cursor: pointer; color: var(--forest); font-weight: 600; 
 .hhero .lead { margin-bottom: 22px; }
 .hhero__note { color: var(--ink-soft); margin: 14px 0 0; }
 .hhero__rating { margin: 10px 0 0; font-weight: 600; font-size: var(--fs-sm); }
-.hhero__rating span { color: var(--gold); letter-spacing: 1px; }
+.hhero__rating span { color: var(--gold-mark); letter-spacing: 1px; }
 .hhero__art { position: relative; aspect-ratio: 1.25; max-width: 560px; width: 100%; justify-self: center; }
 .hhero__book { position: absolute; }
 .hhero__book--1 { width: 58%; left: 21%; top: 2%; z-index: 2; transform: rotate(-2deg); }
@@ -829,3 +850,22 @@ details.edit summary { cursor: pointer; color: var(--forest); font-weight: 600; 
   .adult-row { grid-template-columns: minmax(200px, 1fr) 36px; }
 }
 .dedication-sample { background: var(--surface); border-radius: 8px; padding: 8px 10px; color: var(--ink); }
+
+/* Узкие экраны (360–375 px): поля и списки не шире колонки, таблицы прокручиваются внутри панели, а не всей страницей */
+.select, .input, .textarea { max-width: 100%; }
+.cab > *, .grid2 > *, .buy > * { min-width: 0; }
+.panel:has(> .tbl), .panel:has(> table) { overflow-x: auto; }
+.tbl-wrap { max-width: 100%; }
+/* Таблица → карточки на телефоне (заказы покупателя, команда): строка — карточка, у ячейки — подпись столбца */
+@media (max-width: 599px) {
+  .tbl-wrap:has(.tbl--cards) { border: 0; overflow: visible; }
+  .tbl--cards, .tbl--cards tbody, .tbl--cards tr, .tbl--cards td { display: block; width: 100%; }
+  .tbl--cards thead { display: none; }
+  .tbl--cards { background: none; }
+  .tbl--cards tr { background: var(--surface); border: 1.5px solid var(--line); border-radius: var(--r-ui); padding: 6px 14px; margin-bottom: 10px; }
+  .tbl--cards td { border: 0; padding: 6px 0; display: grid; grid-template-columns: 96px 1fr; gap: 8px; }
+  .tbl--cards td[data-label=""] { grid-template-columns: 1fr; }
+  .tbl--cards td::before { content: attr(data-label); color: var(--ink-soft); font-size: 12px; font-weight: 700; padding-top: 2px; }
+  .tbl--cards td[data-label=""]::before { display: none; }
+  .tbl--cards .select { width: 100% !important; }
+}

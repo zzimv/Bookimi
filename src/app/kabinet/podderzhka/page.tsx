@@ -1,9 +1,9 @@
 import { db } from "@/lib/db";
-import { currentUser } from "@/lib/auth";
+import { userOrLogin } from "@/lib/auth";
 import { SupportForm } from "../Forms";
 
 export default async function Page() {
-  const user = (await currentUser())!;
+  const user = await userOrLogin();
   const orders = await db.order.findMany({ where: { userId: user.id }, orderBy: { createdAt: "desc" }, take: 10 });
   const tg = process.env.TELEGRAM_SUPPORT_URL;
   const max = process.env.MAX_SUPPORT_URL;

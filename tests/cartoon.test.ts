@@ -254,12 +254,18 @@ d("мультфильм: БД", async () => {
   const tag = randomUUID().slice(0, 8);
   let user: { id: string };
   let book: { id: string };
-  beforeAll(async () => {
-    user = await db.user.create({ data: { email: `cartoon-${tag}@test.local`, referralCode: `C${tag}`.slice(0, 12).toUpperCase() } });
+  /** Своя готовая книга (и мультфильм) для теста — тесты не зависят от порядка (vitest --sequence.shuffle). */
+  async function readyBook(withCartoon = false) {
     const story = await db.story.findFirstOrThrow({ where: { isActive: true } });
-    book = await db.book.create({
+    const b = await db.book.create({
       data: { userId: user.id, storyId: story.id, styleKey: "kind-classic", params: { hero: { name: "Маша", gender: "girl" } }, status: "FULL_READY", paidFull: true, text: { title: "Тест", spreads: [] } },
     });
+    if (withCartoon) await db.cartoon.create({ data: { bookId: b.id, ownVoicePaid: true } });
+    return b;
+  }
+  beforeAll(async () => {
+    user = await db.user.create({ data: { email: `cartoon-${tag}@test.local`, referralCode: `C${tag}`.slice(0, 12).toUpperCase() } });
+    book = await readyBook();
   });
 
   afterAll(async () => {
@@ -293,6 +299,7 @@ d("мультфильм: БД", async () => {
   });
 
   it("записи голоса удаляются по сроку, мультфильм остаётся", async () => {
+    const book = await readyBook(true);
     const key = `${book.id}/cartoon-voice/cartoon-cue-01-test.webm`;
     await putFile("books", key, Buffer.from("OggS-test"), "audio/ogg");
     await db.bookFile.create({ data: { bookId: book.id, kind: cartoon.cueKind(1), storageKey: key } });
@@ -310,6 +317,7 @@ d("мультфильм: БД", async () => {
   });
 
   it("ссылка «Поделиться»: 30 дней, только готовый мультфильм, отзыв", async () => {
+    const book = await readyBook(true);
     await db.cartoon.update({ where: { bookId: book.id }, data: { status: "READY" } });
     const s = await cartoon.createShare(book.id);
     expect(s.token.length).toBeGreaterThanOrEqual(22);

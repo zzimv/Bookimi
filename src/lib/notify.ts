@@ -7,16 +7,33 @@ import { cfg } from "./settings";
 import { declineName } from "./declension";
 
 const site = () => `https://${process.env.DOMAIN ?? "bookimi.ru"}`;
+/** Абсолютная ссылка для писем: относительные пути сайта (/chek/…, /zakaz/…) — с доменом. */
+export const absUrl = (u: string | number | undefined) => {
+  const v = String(u ?? "");
+  return v.startsWith("/") ? `${site()}${v}` : v;
+};
 
-async function logOutbox(channel: string, to: string, subject: string, text: string) {
-  await db.auditLog.create({ data: { action: `outbox.${channel}`, entity: "notification", details: { to, subject, text: text.slice(0, 2000) } } });
-  if (process.env.NODE_ENV !== "production" || process.env.DEMO_MODE === "1") console.error(`[outbox:${channel}] → ${to}: ${subject}`);
+/** Адрес в журнал без ПДн: «an***@mail.ru», «+7******67». */
+export function maskContact(v: string) {
+  const t = v.trim();
+  const at = t.indexOf("@");
+  if (at > 0) return `${t.slice(0, Math.min(2, at))}***${t.slice(at)}`;
+  const d = t.replace(/\D/g, "");
+  return d.length >= 4 ? `+${d[0]}******${d.slice(-2)}` : "***";
 }
 
-export async function sendEmail(to: string, subject: string, text: string, html?: string) {
+/** Секреты (коды входа) в журнал не пишем: заменяем на точки. */
+const hideSecrets = (text: string, secrets: string[]) => secrets.reduce((t, x) => (x ? t.split(x).join("••••••") : t), text);
+
+async function logOutbox(channel: string, to: string, subject: string, text: string, secrets: string[] = []) {
+  await db.auditLog.create({ data: { action: `outbox.${channel}`, entity: "notification", details: { to, subject: hideSecrets(subject, secrets), text: hideSecrets(text, secrets).slice(0, 2000) } } });
+  if (process.env.NODE_ENV !== "production" || process.env.DEMO_MODE === "1") console.error(`[outbox:${channel}] → ${maskContact(to)}: ${hideSecrets(subject, secrets)}`);
+}
+
+export async function sendEmail(to: string, subject: string, text: string, html?: string, opts: { secrets?: string[] } = {}) {
   const n = await cfg("notifications");
   const host = n.smtpHost || process.env.SMTP_HOST;
-  if (!host) return logOutbox("email", to, subject, text);
+  if (!host) return logOutbox("email", to, subject, text, opts.secrets);
   const nodemailer = await import("nodemailer");
   const t = nodemailer.createTransport({
     host,
@@ -47,10 +64,10 @@ export async function sendMax(chatId: string, text: string) {
   });
 }
 
-async function sendSms(phone: string, text: string) {
+async function sendSms(phone: string, text: string, secrets: string[] = []) {
   const p = process.env.SMS_PROVIDER;
   const key = process.env.SMS_API_KEY;
-  if (!p || !key) return logOutbox("sms", phone, "код входа", text);
+  if (!p || !key) return logOutbox("sms", phone, "код входа", text, secrets);
   if (p === "smsru") {
     await fetch(`https://sms.ru/sms/send?api_id=${key}&to=${encodeURIComponent(phone)}&msg=${encodeURIComponent(text)}&json=1`);
   } else {
@@ -61,8 +78,8 @@ async function sendSms(phone: string, text: string) {
 
 export async function sendOtp(kind: "email" | "phone", target: string, code: string) {
   const text = `Код для входа в БУКИМИ: ${code}. Никому его не сообщайте.`;
-  if (kind === "email") return sendEmail(target, `Код входа: ${code}`, `${text}\n\nЕсли вы не запрашивали код, просто проигнорируйте письмо.`);
-  return sendSms(target, text);
+  if (kind === "email") return sendEmail(target, `Код входа: ${code}`, `${text}\n\nЕсли вы не запрашивали код, просто проигнорируйте письмо.`, undefined, { secrets: [code] });
+  return sendSms(target, text, [code]);
 }
 
 export const unsubscribeUrl = (userId: string) => `${site()}/otpiska?t=${signToken(`unsub:${userId}`)}`;
@@ -135,7 +152,7 @@ export function renderTemplate(t: Template, d: Data): { s: string; b: string } {
     case "transfer_waiting":
       return { s: `Спасибо! Проверяем перевод по заказу ${d.code}`, b: `Мы получили отметку об оплате. Подтверждение обычно занимает до 2 часов в рабочее время — сразу после него начнём рисовать.` };
     case "receipt":
-      return { s: `Чек по заказу ${d.code}`, b: `Чек сформирован в «Мой налог»: ${d.url}` };
+      return { s: `Чек по заказу ${d.code}`, b: `Чек сформирован в «Мой налог»: ${absUrl(d.url)}` };
     case "status":
       switch (String(d.status)) {
         case "IN_PRINT":
@@ -192,6 +209,7 @@ export async function notifyUser(userId: string, t: Template, data: Record<strin
   const withPromo = (channelMarketing: boolean) => (opts.promo && user.marketingOk && channelMarketing ? `${body}\n\n${opts.promo}${opts.marketing ? "" : unsub}` : body);
   const prefs = user.notifyPrefs.filter((p) => p.isActive && (!opts.marketing || p.marketing));
   let sent = false;
+  let lastError: Error | null = null;
   for (const p of prefs) {
     const b = withPromo(p.marketing);
     try {
@@ -201,11 +219,34 @@ export async function notifyUser(userId: string, t: Template, data: Record<strin
       else continue;
       sent = true;
     } catch (e) {
+      lastError = e as Error;
       console.error("[notify]", p.channel, (e as Error).message);
     }
   }
-  // Канал недоступен или не выбран — email
+  // Канал недоступен или не выбран — email; не ушло никуда — исключение (notifySafe поставит повтор)
   if (!sent && user.email) await sendEmail(user.email, s, withPromo(true) + footer);
+  else if (!sent && lastError) throw lastError;
+}
+
+/**
+ * Уведомление, которое никогда не ломает вызывающий код (оплату, оформление, возврат): сбой отправки —
+ * в очередь повторов `send-notification` (до 6 попыток с нарастающей паузой). Если и очередь недоступна — в журнал.
+ */
+export async function notifySafe(userId: string, t: Template, data: Record<string, string | number | undefined>, opts: { marketing?: boolean; promo?: string } = {}) {
+  try {
+    await notifyUser(userId, t, data, opts);
+    return true;
+  } catch (e) {
+    console.error("[notify] не отправлено, в очередь повторов:", t, (e as Error).message);
+    try {
+      const { enqueue, QUEUES } = await import("./queue");
+      await enqueue(QUEUES.sendNotification, { userId, t, data, opts }, { retryLimit: 6, retryDelay: 60, retryBackoff: true });
+    } catch (q) {
+      console.error("[notify] очередь недоступна:", (q as Error).message);
+      await db.auditLog.create({ data: { action: "notify.failed", entity: "user", entityId: userId, details: { template: t, error: (e as Error).message.slice(0, 200) } } }).catch(() => {});
+    }
+    return false;
+  }
 }
 
 /** Имя героя книги заказа в винительном падеже («про Машу») — для тёплых сообщений. Ошибки не мешают отправке. */
@@ -221,7 +262,7 @@ export async function orderHeroAcc(orderId: string): Promise<string | undefined>
 
 /** Алерт владельцу: на почту из настроек + в Telegram-чат. */
 export async function alertOwner(subject: string, text: string) {
-  const a = await cfg("alerts");
+  const a = await cfg("alerts").catch(() => ({ telegramChatId: "", email: "" }));
   const chat = a.telegramChatId || process.env.TELEGRAM_ALERT_CHAT_ID || "";
   const tasks: Promise<unknown>[] = [];
   if (a.email) tasks.push(sendEmail(a.email, `[БУКИМИ] ${subject}`, text));

@@ -6,11 +6,13 @@ import { PriceSection } from "@/components/Sections";
 import { getMinPrice } from "@/lib/catalog";
 import { OCCASIONS as OCCASION_KEYS, SEGMENTS } from "@/content/profiles";
 import { audiencePage } from "@/lib/storefront";
+import { og } from "@/lib/og";
 
 export const metadata: Metadata = {
   title: "Все книги: детям, подросткам, взрослым и о питомцах",
   description: "Персональные книги для детей, подростков, взрослых и о питомцах: сказки, приключения, истории любви и семейные былины. Превью бесплатно, PDF 990 ₽.",
   alternates: { canonical: "/skazki" },
+  ...og({ title: "Все книги БУКИМИ: детям, подросткам, взрослым и о питомцах", description: "Персональные книги: сказки, приключения, истории любви и семейные былины. Превью бесплатно.", path: "/skazki" }),
 };
 
 export default async function Page({ searchParams }: { searchParams: Promise<SP> }) {
@@ -28,8 +30,8 @@ export default async function Page({ searchParams }: { searchParams: Promise<SP>
     <>
       <Breadcrumbs items={[{ href: "/", label: "Главная" }, ...(page ? [{ href: "/skazki", label: "Книги" }, { label: page.nav }] : [{ label: "Книги" }])]} />
       <JsonLd data={{ "@context": "https://schema.org", "@type": "BreadcrumbList", itemListElement: [
-        { "@type": "ListItem", position: 1, name: "Главная", item: "/" },
-        { "@type": "ListItem", position: 2, name: "Книги", item: "/skazki" },
+        { "@type": "ListItem", position: 1, name: "Главная", item: `https://${process.env.DOMAIN ?? "bookimi.ru"}/` },
+        { "@type": "ListItem", position: 2, name: "Книги", item: `https://${process.env.DOMAIN ?? "bookimi.ru"}/skazki` },
       ] }} />
       <section className="section section--tight">
         <div className="wrap">

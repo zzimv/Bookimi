@@ -4,53 +4,85 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import type { OrderStatus, Role } from "@prisma/client";
 import { db } from "@/lib/db";
-import { requireAdmin } from "@/lib/admin";
-import { currentSession } from "@/lib/auth";
-import { audit, confirmTransfer, refundOrder, setStatus } from "@/lib/orders";
+import { mfaFresh, recordTotpFailure, requireAdmin, safeAdminNext, totpFailures } from "@/lib/admin";
+import { clientIp, currentSession, isStaffRole } from "@/lib/auth";
+import { audit, confirmTransfer, refundOrder, setStatus, STATUS_FLOW } from "@/lib/orders";
 import { sendToPrint } from "@/lib/print";
 import { attachManualReceipt } from "@/lib/npd";
 import { DEFAULTS, cfg, saveSetting, type SettingKey } from "@/lib/settings";
 import { enqueue, QUEUES } from "@/lib/queue";
-import { encrypt, totpSecret, totpVerify } from "@/lib/crypto";
+import { decrypt, encrypt, looksLikeRecovery, recoveryCodes, recoveryHash, totpSecret, totpVerify } from "@/lib/crypto";
 import { sendTestTrigger } from "@/lib/triggers";
 import { pingIndexNow } from "@/lib/indexnow";
+import { optNum, parseTiers, validatePromo, validateSettings } from "@/lib/settings-validate";
 
 const s = (f: FormData, k: string) => String(f.get(k) ?? "").trim();
 const n = (f: FormData, k: string) => Number(f.get(k) ?? 0);
 const b = (f: FormData, k: string) => f.get(k) === "on" || f.get(k) === "true";
 
+/** Ошибка проверки — обратно на страницу с понятным текстом (страница показывает ?error=). */
+function fail(path: string, error: string, anchor = ""): never {
+  redirect(`${path}?error=${encodeURIComponent(error)}${anchor ? `#${anchor}` : ""}`);
+}
+
+/** Разделы настроек, которые меняют деньги и реквизиты: нужен свежий код 2FA. */
+const SENSITIVE_SETTINGS: SettingKey[] = ["seller", "tax", "payments", "notifications", "audio", "cartoon", "bulk", "referral", "alerts"];
+
 // ── Заказы ──
 export async function confirmTransferAction(f: FormData) {
-  const u = await requireAdmin("transfers");
+  const u = await requireAdmin("transfers", { fresh: true });
   await confirmTransfer(s(f, "orderId"), u.id);
   revalidatePath("/admin");
 }
 
 export async function sendToPrintAction(f: FormData) {
   const u = await requireAdmin("print");
-  await sendToPrint(s(f, "orderId"), u.id);
-  revalidatePath(`/admin/zakazy/${s(f, "orderId")}`);
+  const id = s(f, "orderId");
+  let error = "";
+  try {
+    await sendToPrint(id, u.id);
+  } catch (e) {
+    error = (e as Error).message;
+  }
+  revalidatePath(`/admin/zakazy/${id}`);
+  if (error) fail(`/admin/zakazy/${id}`, error);
 }
 
 export async function setStatusAction(f: FormData) {
   const u = await requireAdmin("orders");
-  await setStatus(s(f, "orderId"), s(f, "status") as OrderStatus, u.id, s(f, "track") || undefined);
+  const status = s(f, "status") as OrderStatus;
+  // Вручную — только шаги после оплаты (PAID → … → DELIVERED); оплату и возврат меняют свои действия
+  if (!STATUS_FLOW.includes(status)) fail(`/admin/zakazy/${s(f, "orderId")}`, "Такой статус вручную не ставится");
+  const cur = await db.order.findUnique({ where: { id: s(f, "orderId") }, select: { status: true } });
+  if (!cur || !STATUS_FLOW.includes(cur.status)) fail(`/admin/zakazy/${s(f, "orderId")}`, "Статус меняется только у оплаченного заказа");
+  await setStatus(s(f, "orderId"), status, u.id, s(f, "track") || undefined);
   revalidatePath(`/admin/zakazy/${s(f, "orderId")}`);
 }
 
 export async function refundAction(f: FormData) {
-  const u = await requireAdmin("orders");
-  await refundOrder(s(f, "orderId"), u.id, s(f, "reason") || "возврат");
-  revalidatePath(`/admin/zakazy/${s(f, "orderId")}`);
+  const u = await requireAdmin("orders", { fresh: true });
+  const id = s(f, "orderId");
+  const r = await refundOrder(id, u.id, s(f, "reason") || "возврат");
+  revalidatePath(`/admin/zakazy/${id}`);
+  if (!r.ok) fail(`/admin/zakazy/${id}`, r.error);
 }
 
 export async function reprintAction(f: FormData) {
   const u = await requireAdmin("orders");
   const id = s(f, "orderId");
+  const { printFilesReady } = await import("@/lib/print");
+  const ready = await printFilesReady(id, { reprint: true });
+  if (!ready.ok) fail(`/admin/zakazy/${id}`, ready.error);
   await db.printJob.deleteMany({ where: { orderId: id } });
   await audit(u.id, "order.reprint", "order", id, { reason: s(f, "reason") });
-  await sendToPrint(id, u.id);
+  let error = "";
+  try {
+    await sendToPrint(id, u.id, { reprint: true });
+  } catch (e) {
+    error = (e as Error).message;
+  }
   revalidatePath(`/admin/zakazy/${id}`);
+  if (error) fail(`/admin/zakazy/${id}`, error);
 }
 
 export async function attachReceiptAction(f: FormData) {
@@ -101,17 +133,24 @@ export async function storyAction(f: FormData) {
 }
 
 export async function formatAction(f: FormData) {
-  const u = await requireAdmin("catalog");
-  await db.productFormat.update({ where: { id: s(f, "id") }, data: { priceRub: n(f, "priceRub"), isActive: b(f, "isActive"), title: s(f, "title") } });
+  const u = await requireAdmin("catalog", { fresh: true });
+  const price = optNum(f.get("priceRub"));
+  if (price == null || !Number.isInteger(price) || price < 1 || price > 1_000_000) fail("/admin/katalog", "Цена формата: целое число рублей от 1");
+  if (!s(f, "title")) fail("/admin/katalog", "Название формата не может быть пустым");
+  await db.productFormat.update({ where: { id: s(f, "id") }, data: { priceRub: price, isActive: b(f, "isActive"), title: s(f, "title") } });
   await audit(u.id, "catalog.format", "format", s(f, "id"), { price: n(f, "priceRub") });
   revalidatePath("/", "layout");
 }
 
 export async function addonAction(f: FormData) {
-  const u = await requireAdmin("catalog");
+  const u = await requireAdmin("catalog", { fresh: true });
+  const price = optNum(f.get("priceRub"));
+  const pct = optNum(f.get("percentOff"));
+  if (price != null && (!Number.isInteger(price) || price < 0 || price > 1_000_000)) fail("/admin/katalog", "Цена допа: целое число рублей, не меньше 0");
+  if (pct != null && (!Number.isInteger(pct) || pct < 1 || pct > 90)) fail("/admin/katalog", "Скидка допа: от 1 до 90%");
   await db.addon.update({
     where: { id: s(f, "id") },
-    data: { priceRub: f.get("priceRub") ? n(f, "priceRub") : null, percentOff: f.get("percentOff") ? n(f, "percentOff") : null, isActive: b(f, "isActive"), title: s(f, "title") },
+    data: { priceRub: price, percentOff: pct, isActive: b(f, "isActive"), title: s(f, "title") },
   });
   await audit(u.id, "catalog.addon", "addon", s(f, "id"));
   revalidatePath("/admin/katalog");
@@ -131,17 +170,23 @@ export async function promoAction(f: FormData) {
   if (id) {
     await db.promoCode.update({ where: { id }, data: { isActive: b(f, "isActive") } });
   } else {
-    await db.promoCode.create({
-      data: {
-        code: s(f, "code").toUpperCase(),
-        percentOff: f.get("percentOff") ? n(f, "percentOff") : null,
-        amountOffRub: f.get("amountOffRub") ? n(f, "amountOffRub") : null,
-        maxUses: f.get("maxUses") ? n(f, "maxUses") : null,
-        validTo: s(f, "validTo") ? new Date(s(f, "validTo")) : null,
-        blogger: s(f, "blogger") || null,
-        source: s(f, "blogger") ? "blogger" : "manual",
-      },
-    });
+    const maxPrice = (await db.productFormat.aggregate({ where: { isActive: true }, _max: { priceRub: true } }))._max.priceRub ?? 990;
+    const v = validatePromo(
+      { code: s(f, "code"), percentOff: optNum(f.get("percentOff")), amountOffRub: optNum(f.get("amountOffRub")), maxUses: optNum(f.get("maxUses")), validFrom: s(f, "validFrom") || null, validTo: s(f, "validTo") || null, blogger: s(f, "blogger") },
+      maxPrice,
+    );
+    if (!v.ok) fail("/admin/promokody", v.error);
+    if (await db.promoCode.findUnique({ where: { code: v.value.code } })) fail("/admin/promokody", `Промокод ${v.value.code} уже есть — придумайте другой код`);
+    let dup = false;
+    try {
+      await db.promoCode.create({
+        data: { ...v.value, validFrom: v.value.validFrom ?? undefined, source: v.value.blogger ? "blogger" : "manual" },
+      });
+    } catch (e) {
+      if ((e as { code?: string }).code !== "P2002") throw e;
+      dup = true;
+    }
+    if (dup) fail("/admin/promokody", `Промокод ${v.value.code} уже есть — придумайте другой код`);
   }
   await audit(u.id, "promo.save", "promo", id || s(f, "code"));
   revalidatePath("/admin/promokody");
@@ -225,7 +270,8 @@ function parseSection(key: SettingKey, f: FormData) {
     const path = name.slice(2);
     const def = get(path);
     const v = String(raw);
-    if (typeof def === "number") set(path, Number(v));
+    if (typeof def === "number") set(path, v.trim() === "" ? NaN : Number(v.replace(",", ".")));
+    else if (Array.isArray(def) && def[0] && typeof def[0] === "object") set(path, parseTiers(v));
     else if (Array.isArray(def)) set(path, v.split(",").map((x) => x.trim()).filter(Boolean).map((x) => (typeof def[0] === "number" ? Number(x) : x)));
     else set(path, v);
   }
@@ -235,9 +281,10 @@ function parseSection(key: SettingKey, f: FormData) {
 }
 
 export async function settingsAction(f: FormData) {
-  const u = await requireAdmin("settings");
   const key = s(f, "__key") as SettingKey;
   if (!(key in DEFAULTS)) return;
+  // Реквизиты, способы оплаты, цены — только со свежим кодом 2FA
+  const u = await requireAdmin("settings", { fresh: SENSITIVE_SETTINGS.includes(key) });
   const current = (await cfg(key)) as Record<string, unknown>;
   const next = { ...current, ...parseSection(key, f) } as Record<string, unknown>;
   // Пароль SMTP шифруется; пустое поле — оставить прежний
@@ -246,13 +293,20 @@ export async function settingsAction(f: FormData) {
     next.smtpPassword = pw ? encrypt(pw) : current.smtpPassword;
   }
   if (key === "seller" && typeof next.inn === "string") next.inn = next.inn.replace(/\D/g, "");
-  await saveSetting(key, next);
+  if (key === "payments") {
+    const t = next.transfer as Record<string, unknown> | undefined;
+    if (t && typeof t.card === "string") t.card = t.card.replace(/\s/g, "");
+  }
+  const v = validateSettings(key, next);
+  if (!v.ok) redirect(`/admin/nastrojki?sec=${key}&error=${encodeURIComponent(v.error)}#${key}`);
+  await saveSetting(key, v.value);
   await audit(u.id, "settings.save", "setting", key, key === "notifications" ? { smtpHost: next.smtpHost } : undefined);
   revalidatePath("/", "layout");
+  redirect(`/admin/nastrojki?saved=${key}#${key}`);
 }
 
 export async function printHouseAction(f: FormData) {
-  const u = await requireAdmin("settings");
+  const u = await requireAdmin("settings", { fresh: true });
   const id = s(f, "id");
   let costs: Record<string, number> = {};
   for (const line of s(f, "costs").split("\n")) {
@@ -288,33 +342,104 @@ export async function legalAction(f: FormData) {
 
 // ── Команда (подрядчики по ГПХ) ──
 export async function teamAction(f: FormData) {
-  const u = await requireAdmin("users");
+  const u = await requireAdmin("users", { fresh: true });
   const email = s(f, "email").toLowerCase();
   const role = s(f, "role") as Role;
-  if (!["OWNER", "OPERATOR", "MARKETER", "CUSTOMER"].includes(role) || !email.includes("@")) return;
+  if (!["OWNER", "OPERATOR", "MARKETER", "CUSTOMER"].includes(role) || !/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(email)) fail("/admin/komanda", "Проверьте email и роль");
+  if (email === u.email && role !== "OWNER") fail("/admin/komanda", "Нельзя снять роль владельца с самого себя");
   const existing = await db.user.findUnique({ where: { email } });
   if (existing) await db.user.update({ where: { id: existing.id }, data: { role } });
   else await db.user.create({ data: { email, role, referralCode: `T${Date.now().toString(36).toUpperCase()}` } });
+  // Смена роли — все сессии этого человека завершаются (новая роль — новый вход с 2FA)
+  if (existing && existing.role !== role) await db.session.deleteMany({ where: { userId: existing.id } });
   await audit(u.id, "team.role", "user", email, { role });
   revalidatePath("/admin/komanda");
 }
 
 // ── 2FA ──
+/**
+ * Новый ключ 2FA — только пока 2FA не включена. Включена, а сессия без второго фактора (вход только по коду
+ * с почты) — это попытка обхода: на страницу ввода кода. Сменить ключ — через коды восстановления/владельца.
+ */
 export async function totpSetupAction() {
   const sess = await currentSession();
-  if (!sess || sess.user.role === "CUSTOMER") redirect("/vhod");
+  if (!sess || !isStaffRole(sess.user.role)) redirect("/vhod");
+  if (sess.user.totpEnabled) {
+    if (!sess.mfaPassed) await audit(sess.user.id, "security.2fa_setup_blocked", "user", sess.user.id, { ip: await clientIp() });
+    redirect("/admin/2fa");
+  }
   const secret = totpSecret();
-  await db.user.update({ where: { id: sess.user.id }, data: { totpSecret: encrypt(secret), totpEnabled: false } });
+  // Условно: только если 2FA так и не включили (параллельный запрос не перезапишет включённый ключ)
+  await db.user.updateMany({ where: { id: sess.user.id, totpEnabled: false }, data: { totpSecret: encrypt(secret) } });
   redirect("/admin/2fa?setup=1");
 }
 
+/**
+ * Проверка кода: TOTP из приложения или одноразовый код восстановления. Не больше 5 неверных за 15 минут на
+ * сотрудника и на IP; на пятой — блокировка, сессия завершается, владельцу — алерт.
+ * При настройке — включает 2FA и выдаёт 10 кодов восстановления (показываются один раз).
+ */
 export async function totpVerifyAction(f: FormData) {
   const sess = await currentSession();
-  if (!sess || sess.user.role === "CUSTOMER" || !sess.user.totpSecret) redirect("/vhod");
-  const { decrypt } = await import("@/lib/crypto");
-  if (!totpVerify(decrypt(sess.user.totpSecret), s(f, "code"))) redirect("/admin/2fa?error=1");
-  await db.user.update({ where: { id: sess.user.id }, data: { totpEnabled: true } });
-  await db.session.update({ where: { id: sess.id }, data: { mfaPassed: true } });
-  await audit(sess.user.id, "auth.2fa", "user", sess.user.id);
+  if (!sess || !isStaffRole(sess.user.role) || !sess.user.totpSecret) redirect("/vhod");
+  const reauth = s(f, "reauth") === "1";
+  const next = safeAdminNext(s(f, "next"));
+  const back = `/admin/2fa?${reauth ? `reauth=1&next=${encodeURIComponent(next)}&` : ""}`;
+  const ip = await clientIp();
+  if ((await totpFailures(sess.user.id, ip)).blocked) redirect(`${back}locked=1`);
+  const user = sess.user;
+  const setup = !user.totpEnabled;
+  const code = s(f, "code");
+  let ok = totpVerify(decrypt(user.totpSecret!), code);
+  let usedRecovery = false;
+  if (!ok && !setup && looksLikeRecovery(code)) {
+    const h = recoveryHash(user.id, code);
+    // Атомарно: код сгорает при первом использовании
+    const n = await db.$executeRaw`UPDATE "User" SET "totpRecovery" = array_remove("totpRecovery", ${h}) WHERE "id" = ${user.id}::uuid AND ${h} = ANY("totpRecovery")`;
+    ok = usedRecovery = n === 1;
+  }
+  if (!ok) {
+    const r = await recordTotpFailure(user.id, user.email, ip);
+    if (r.blocked) {
+      await db.session.deleteMany({ where: { id: sess.id } });
+      redirect("/vhod?next=/admin&locked=1");
+    }
+    redirect(`${back}error=1`);
+  }
+  const now = new Date();
+  if (setup) {
+    const codes = recoveryCodes(10);
+    await db.user.update({ where: { id: user.id }, data: { totpEnabled: true, totpRecovery: codes.map((c) => recoveryHash(user.id, c)) } });
+    await db.session.update({ where: { id: sess.id }, data: { mfaPassed: true, mfaAt: now, recoveryShow: encrypt(codes.join(" ")) } });
+    await audit(user.id, "auth.2fa_enabled", "user", user.id);
+    redirect("/admin/2fa?codes=1");
+  }
+  await db.session.update({ where: { id: sess.id }, data: { mfaPassed: true, mfaAt: now } });
+  await audit(user.id, reauth ? "auth.2fa_reauth" : "auth.2fa", "user", user.id, usedRecovery ? { recovery: true } : undefined);
+  if (usedRecovery) {
+    const left = (await db.user.findUnique({ where: { id: user.id }, select: { totpRecovery: true } }))?.totpRecovery.length ?? 0;
+    const { alertOwner } = await import("@/lib/notify");
+    await alertOwner("Вход по коду восстановления 2FA", `Сотрудник ${user.email ?? user.id} вошёл по коду восстановления (IP ${ip}). Осталось кодов: ${left}.`).catch(() => {});
+  }
+  redirect(reauth ? next : "/admin");
+}
+
+/** «Я сохранил(а) коды» — коды восстановления больше не показываются. */
+export async function recoveryAckAction() {
+  const sess = await currentSession();
+  if (!sess) redirect("/vhod");
+  await db.session.update({ where: { id: sess.id }, data: { recoveryShow: null } });
   redirect("/admin");
+}
+
+/** Новые коды восстановления (старые перестают действовать) — со свежим кодом 2FA. */
+export async function recoveryRegenerateAction() {
+  const sess = await currentSession();
+  if (!sess || !isStaffRole(sess.user.role) || !sess.user.totpEnabled) redirect("/admin");
+  if (!mfaFresh(sess)) redirect(`/admin/2fa?reauth=1&next=${encodeURIComponent("/admin/2fa?regen=1")}`);
+  const codes = recoveryCodes(10);
+  await db.user.update({ where: { id: sess.user.id }, data: { totpRecovery: codes.map((c) => recoveryHash(sess.user.id, c)) } });
+  await db.session.update({ where: { id: sess.id }, data: { recoveryShow: encrypt(codes.join(" ")) } });
+  await audit(sess.user.id, "auth.2fa_recovery_regenerated", "user", sess.user.id);
+  redirect("/admin/2fa?codes=1");
 }

@@ -2,8 +2,9 @@ import { db } from "@/lib/db";
 import { requireAdmin } from "@/lib/admin";
 import { addonAction, formatAction, storyAction, styleAction } from "../../actions";
 
-export default async function Page() {
+export default async function Page({ searchParams }: { searchParams: Promise<{ error?: string }> }) {
   await requireAdmin("catalog");
+  const { error } = await searchParams;
   const [stories, formats, addons, styles] = await Promise.all([
     db.story.findMany({ orderBy: { sortOrder: "asc" } }),
     db.productFormat.findMany({ orderBy: { sortOrder: "asc" } }),
@@ -14,6 +15,7 @@ export default async function Page() {
   return (
     <>
       <h1 style={{ fontSize: "var(--fs-xl)" }}>Каталог и цены</h1>
+      {error && <p className="error" role="alert">{error}</p>}
       <p className="muted">Изменения появляются на сайте в течение 5 минут, без выкладки.</p>
 
       <h2 style={{ fontSize: "var(--fs-lg)" }}>Форматы</h2>

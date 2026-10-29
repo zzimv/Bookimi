@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { og } from "@/lib/og";
 import { notFound } from "next/navigation";
 import Link from "next/link";
 import { db, hasDatabase } from "@/lib/db";
@@ -14,7 +15,7 @@ async function post(slug: string) {
 
 export async function generateMetadata({ params }: { params: Promise<{ slug: string }> }): Promise<Metadata> {
   const p = await post((await params).slug);
-  return p ? { title: p.title, description: p.description, alternates: { canonical: `/blog/${p.slug}` }, openGraph: { type: "article", title: p.title } } : {};
+  return p ? { title: p.title, description: p.description, alternates: { canonical: `/blog/${p.slug}` }, ...og({ type: "article", title: p.title, description: p.description, path: `/blog/${p.slug}` }) } : {};
 }
 
 export default async function Page({ params }: { params: Promise<{ slug: string }> }) {

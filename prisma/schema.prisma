@@ -28,9 +28,13 @@ model User {
   email         String?   @unique
   phone         String?   @unique
   name          String?
+  /// «Как к вам обращаться»: необязательное имя (до 40 символов: буквы, пробел, дефис) — приветствие и получатель по умолчанию
+  firstName     String?
   role          Role      @default(CUSTOMER)
   totpSecret    String?   // 2FA для админки (шифруется SESSION_SECRET)
   totpEnabled   Boolean   @default(false)
+  /// Коды восстановления 2FA: sha256-хэши, каждый — одноразовый (показываются один раз при настройке)
+  totpRecovery  String[]  @default([])
   marketingOk   Boolean   @default(false)
   referralCode  String    @unique
   referredById  String?   @db.Uuid
@@ -73,6 +77,10 @@ model Session {
   tokenHash  String   @unique
   csrfToken  String
   mfaPassed  Boolean  @default(false)
+  /// Последнее подтверждение кодом 2FA: чувствительные действия админки требуют свежего (src/lib/admin.ts)
+  mfaAt      DateTime?
+  /// Коды восстановления, ещё не показанные после настройки 2FA (зашифрованы; стираются после «Я сохранил(а)»)
+  recoveryShow String?
   expiresAt  DateTime
   createdAt  DateTime @default(now())
 }
@@ -383,6 +391,8 @@ model GenerationCost {
   operation   String   // text | sheet | scene | cover | tts | moderation
   gpuSeconds  Int      @default(0)
   costKopecks Int      @default(0)
+  /// Расход сотрудника (тестовые книги владельца/оператора/маркетолога): свой суточный лимит limits.staffDailySpendRub
+  staff       Boolean  @default(false)
   createdAt   DateTime @default(now())
 
   @@index([createdAt])

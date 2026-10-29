@@ -3,6 +3,7 @@
 // ручной перевод), идемпотентность, чек НПД и его аннулирование, реферальные скидки.
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { randomUUID } from "node:crypto";
+import { setupSellerAndPayments } from "./helpers/db-setup";
 
 const enabled = Boolean(process.env.DATABASE_URL);
 const d = enabled ? describe : describe.skip;
@@ -35,10 +36,7 @@ d("интеграция с БД", async () => {
     });
   }
 
-  beforeAll(async () => {
-    await saveSetting("seller", { fullName: "Тестов Тест Тестович", inn: "770012345606", status: "плательщик НПД", email: "", phone: "" });
-    await saveSetting("payments", { sbpQr: { enabled: true, provider: "demo" }, transfer: { enabled: true, phone: "+79000000000", card: "", bank: "", holder: "", cancelHours: 24 }, yookassa: { enabled: false } });
-  });
+  beforeAll(setupSellerAndPayments);
 
   afterAll(async () => {
     const { getBoss } = await import("@/lib/queue");

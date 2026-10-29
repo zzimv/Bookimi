@@ -46,7 +46,7 @@ export async function POST(req: Request) {
     needsConsent = !(existing && existing.role !== "CUSTOMER") && !(await hasConsent("PERSONAL_DATA", { userId: existing?.id, anonId: await anonId() }));
   }
   const r = await requestOtp(target.value);
-  if (!r.ok) return err(r.error, 429);
+  if (!r.ok) return err(r.error, r.status ?? 429);
   // Подсказка форме: согласие на обработку ПДн уже дано (на шаге фото или раньше) — галочку не показываем
   return json({ ...r, needsConsent });
 }

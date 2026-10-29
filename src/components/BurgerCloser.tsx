@@ -18,7 +18,9 @@ export function BurgerCloser() {
     document.addEventListener("click", onClick, true);
     document.addEventListener("keydown", onKey);
     window.addEventListener("popstate", close);
+    window.addEventListener("hashchange", close); // демо-стенд: адреса в hash
     return () => {
+      window.removeEventListener("hashchange", close);
       document.removeEventListener("click", onClick, true);
       document.removeEventListener("keydown", onKey);
       window.removeEventListener("popstate", close);
