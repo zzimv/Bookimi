@@ -70,6 +70,7 @@ export const unsubscribeUrl = (userId: string) => `${site()}/otpiska?t=${signTok
 export type Template =
   | "preview_ready"
   | "book_ready"
+  | "cartoon_ready"
   | "order_created"
   | "payment_received"
   | "transfer_waiting"
@@ -115,6 +116,11 @@ export function renderTemplate(t: Template, d: Data): { s: string; b: string } {
       return {
         s: `Книга «${d.title}» готова`,
         b: `Книга готова: PDF, читалка${d.audio ? " и аудио" : ""} уже ждут в личном кабинете: ${site()}/kabinet\n\nНадеемся, чтение вслух получится тёплым. Спасибо, что вы с нами.`,
+      };
+    case "cartoon_ready":
+      return {
+        s: `Мультфильм «${d.title}» готов`,
+        b: `Мультфильм по книге «${d.title}»${d.own ? " — вашим голосом —" : ""} готов: смотрите, скачивайте и делитесь ссылкой в личном кабинете: ${site()}/kabinet/kniga/${d.bookId}\n\nПриятного просмотра всей семьёй.`,
       };
     case "order_created":
       return { s: `Заказ ${d.code} оформлен`, b: `Спасибо, что выбрали БУКИМИ. Сумма к оплате — ${d.total} ₽. Оплатить и следить за заказом: ${orderLink(d)}` };

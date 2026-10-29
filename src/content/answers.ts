@@ -51,6 +51,8 @@ export const ExtraV2 = z.object({
   what: str(60).optional().default(""),
   /** Для питомца в роли доп. героя. */
   species: z.enum(["dog", "cat", "other"]).optional(),
+  /** Обработанное фото (id из /api/draft/photos): само фото не в анкете, только id; удаляется через 24 ч без книги, иначе через 7 дней. */
+  photoId: z.string().uuid().optional(),
 });
 export type ExtraV2T = z.infer<typeof ExtraV2>;
 
@@ -62,6 +64,8 @@ export const GroupMemberV2 = z.object({
   photo: z.boolean().optional().default(false),
   /** Пара слов для рисунка: «рыжие кудряшки, очки» — имена отсюда вычищает redact.ts. */
   description: str(200).optional().default(""),
+  /** Обработанное фото (id из /api/draft/photos): само фото не в анкете, только id; удаляется через 24 ч без книги, иначе через 7 дней. */
+  photoId: z.string().uuid().optional(),
 });
 export type GroupMemberV2T = z.infer<typeof GroupMemberV2>;
 
@@ -100,6 +104,8 @@ export const AnswersV2 = z.preprocess(
       birthDate: str(10).optional().default(""),
       /** Возраст числом (подростки, взрослые, питомцы). */
       age: z.number().int().min(0).max(120).optional(),
+      /** Фото героя (id обработанных фото, до 3) — загружены на первом шаге «Герои». */
+      photoIds: z.array(z.string().uuid()).max(3).optional().default([]),
     }),
     appearance: z
       .object({

@@ -281,25 +281,79 @@ export function cartoonTimeline(voiceSec: number[], kinds: CueKind[], t: Cartoon
 
 const round = (x: number) => Math.round(x * 100) / 100;
 
-/** Субтитры реплики: куски ≤ 2 строк по ~maxLine символов, время пропорционально слогам. */
-export function subtitleChunks(text: string, sec: number, maxLine = 36): { text: string; from: number; to: number }[] {
-  const words = text.replace(/\s+/g, " ").trim().split(" ").filter(Boolean);
-  const lines: string[] = [];
-  let cur = "";
+const DANGLING = new Set(["в", "во", "на", "с", "со", "к", "ко", "по", "о", "об", "у", "из", "за", "под", "над", "до", "от", "и", "а", "но", "не", "что", "как", "для", "без", "при"]);
+const PHRASE_START = /^(и|а|но|что|чтобы|когда|который|которая|которое|которые|которую|как|где|если|потому|только)$/i;
+
+/** Перенос длинной фразы по словам: без висячих предлогов в конце строки, лучше — перед «и/который/когда…». */
+function wrapPhrase(words: string[], max: number): string[] {
+  const lines: string[][] = [];
+  let cur: string[] = [];
+  const len = (ws: string[]) => ws.join(" ").length;
   for (const w of words) {
-    if (cur && (cur + " " + w).length > maxLine) {
-      lines.push(cur);
-      cur = w;
-    } else cur = cur ? `${cur} ${w}` : w;
-    // Конец предложения — хорошая граница строки
-    if (/[.!?…]$/.test(w) && cur.length > maxLine * 0.5) {
-      lines.push(cur);
-      cur = "";
-    }
+    if (cur.length && len([...cur, w]) > max) {
+      // Предпочесть разрыв перед союзом, если он в последней трети строки
+      let cut = cur.length;
+      for (let k = cur.length - 1; k >= Math.ceil(cur.length * 0.6); k--) if (PHRASE_START.test(cur[k])) cut = k;
+      // Висячий предлог — на следующую строку
+      while (cut > 1 && DANGLING.has(cur[cut - 1].toLowerCase())) cut--;
+      lines.push(cur.slice(0, cut));
+      cur = [...cur.slice(cut), w];
+    } else cur.push(w);
   }
-  if (cur) lines.push(cur);
+  if (cur.length) lines.push(cur);
+  return lines.map((l) => l.join(" "));
+}
+
+/**
+ * Субтитры реплики: куски не длиннее 2 строк по ~maxLine символов. Строки и куски заканчиваются на границах
+ * фраз (знаки препинания, тире, союзы), новая фраза-предложение — с нового куска; время — пропорционально слогам.
+ */
+export function subtitleChunks(text: string, sec: number, maxLine = 36): { text: string; from: number; to: number }[] {
+  const clean = text.replace(/\s+/g, " ").trim();
+  // Фразы: после , ; : . ! ? … и перед « — » (тире реплики)
+  const phrases = clean
+    .split(/(?<=[,;:.!?…»])\s+|\s+(?=[—–]\s)/)
+    .map((p) => p.trim())
+    .filter(Boolean);
+  // «— Беда! — вздохнул Дед Мороз.»: восклицание перед ремаркой со строчной — не конец предложения
+  const continues = (p?: string) => Boolean(p && /^(?:[—–]\s*)?[a-zа-яё]/u.test(p));
+  type Line = { text: string; endsPhrase: boolean; endsSentence: boolean };
+  const lines: Line[] = [];
+  let cur = "";
+  const flush = (endsSentence: boolean) => {
+    if (cur) lines.push({ text: cur, endsPhrase: true, endsSentence });
+    cur = "";
+  };
+  for (let pi = 0; pi < phrases.length; pi++) {
+    const ph = phrases[pi];
+    const sentenceEnd = /[.!?…]»?$/.test(ph) && !continues(phrases[pi + 1]);
+    // Фраза чуть длиннее строки — оставляем целой (строка до maxLine + 5), длиннее — переносим по словам
+    if (ph.length > maxLine + 5) {
+      flush(false);
+      const parts = wrapPhrase(ph.split(" "), maxLine);
+      parts.forEach((t, i) => lines.push({ text: t, endsPhrase: i === parts.length - 1, endsSentence: i === parts.length - 1 && sentenceEnd }));
+      continue;
+    }
+    if (cur && (cur + " " + ph).length > maxLine) flush(false);
+    cur = cur ? `${cur} ${ph}` : ph;
+    if (sentenceEnd) flush(true);
+  }
+  flush(true);
+  // Куски: до 2 строк; кусок кончается на конце фразы, после конца предложения — новый кусок
   const chunks: string[] = [];
-  for (let i = 0; i < lines.length; i += 2) chunks.push(lines.slice(i, i + 2).join("\n"));
+  let buf: Line[] = [];
+  const out = () => {
+    if (buf.length) chunks.push(buf.map((l) => l.text).join("\n"));
+    buf = [];
+  };
+  for (let i = 0; i < lines.length; i++) {
+    const l = lines[i];
+    buf.push(l);
+    const next = lines[i + 1];
+    if (buf.length === 2 || l.endsSentence || !next) out();
+    else if (l.endsPhrase && next && !next.endsPhrase && buf.length === 1 && lines[i + 2]?.endsPhrase === false) out(); // длинная фраза впереди — пусть начнётся с нового куска
+  }
+  out();
   const weight = chunks.map((c) => Math.max(1, (c.match(VOWELS) ?? []).length + 2));
   const all = weight.reduce((a, b) => a + b, 0);
   let at = 0;

@@ -2,7 +2,7 @@
 // Действует последняя запись по типу (отзыв согласия — запись с granted: false).
 import { db } from "./db";
 
-type ConsentKind = "PERSONAL_DATA" | "CHILD_PHOTO" | "MARKETING";
+type ConsentKind = "PERSONAL_DATA" | "CHILD_PHOTO" | "MARKETING" | "GROUP_PHOTO" | "VOICE";
 
 export async function hasConsent(type: ConsentKind, who: { userId?: string | null; anonId?: string | null }) {
   const or = [...(who.userId ? [{ userId: who.userId }] : []), ...(who.anonId && who.anonId !== "no-anon" ? [{ anonId: who.anonId }] : [])];
@@ -12,8 +12,31 @@ export async function hasConsent(type: ConsentKind, who: { userId?: string | nul
 }
 
 export async function consentState(who: { userId?: string | null; anonId?: string | null }) {
-  const [pd, photo] = await Promise.all([hasConsent("PERSONAL_DATA", who), hasConsent("CHILD_PHOTO", who)]);
-  return { pd, photo };
+  const [pd, photo, group] = await Promise.all([hasConsent("PERSONAL_DATA", who), hasConsent("CHILD_PHOTO", who), hasConsent("GROUP_PHOTO", who)]);
+  return { pd, photo, group };
+}
+
+/**
+ * Записать согласия, которых ещё нет (один раз; повторный вызов дублей не создаёт). group — фото других детей
+ * группы: загрузивший подтверждает, что их родители согласны (отдельная галочка, только перед первым таким фото).
+ */
+export async function grantConsents(
+  who: { userId?: string | null; anonId?: string | null },
+  want: { pd?: boolean; photo?: boolean; group?: boolean },
+  meta: { docVersion: string; userAgent?: string },
+) {
+  const rows: { type: ConsentKind; on?: boolean }[] = [
+    { type: "PERSONAL_DATA", on: want.pd },
+    { type: "CHILD_PHOTO", on: want.photo },
+    { type: "GROUP_PHOTO", on: want.group },
+  ];
+  for (const r of rows) {
+    if (!r.on || (await hasConsent(r.type, who))) continue;
+    await db.consent.create({
+      data: { userId: who.userId ?? undefined, anonId: who.anonId && who.anonId !== "no-anon" ? who.anonId : undefined, type: r.type, docVersion: meta.docVersion, granted: true, userAgent: meta.userAgent },
+    });
+  }
+  return consentState(who);
 }
 
 /** Согласия, данные до входа (по анонимной cookie), закрепляются за аккаунтом. */

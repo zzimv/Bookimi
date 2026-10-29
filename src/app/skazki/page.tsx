@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { CatalogNav } from "@/components/CatalogNav";
-import { filteredStories, parseCatalogQuery, StoryGroups, type SP } from "@/components/StoryGroups";
+import { filteredStories, OccasionSectionsView, parseCatalogQuery, sectionedStories, StoryGroups, type SP } from "@/components/StoryGroups";
 import { Breadcrumbs, JsonLd, StickyCta } from "@/components/Layout";
 import { PriceSection } from "@/components/Sections";
 import { getMinPrice } from "@/lib/catalog";
@@ -16,11 +16,13 @@ export const metadata: Metadata = {
 export default async function Page({ searchParams }: { searchParams: Promise<SP> }) {
   const q = parseCatalogQuery(await searchParams);
   const [{ matching, others }, minPrice] = await Promise.all([filteredStories(q), getMinPrice()]);
+  // С поводом — разделы как в анкете и на странице повода (plotSections)
+  const sections = q.povod ? await sectionedStories(q.povod, q.audience, q.segments) : null;
   const page = q.audience ? audiencePage(q.audience) : null;
   const seg = q.segments.length === 1 ? SEGMENTS.find((s) => s.id === q.segments[0]) : null;
   const occ = q.povod ? OCCASION_KEYS.find((o) => o.key === q.povod) : null;
   const h1 = seg ? seg.title : page ? `Книги: ${page.nav.toLowerCase()}` : "Все книги";
-  const total = matching.length + others.length;
+  const total = sections ? sections.core.length + sections.fits.length + sections.others.length : matching.length + others.length;
 
   return (
     <>
@@ -41,7 +43,7 @@ export default async function Page({ searchParams }: { searchParams: Promise<SP>
           <p className="small muted" aria-live="polite">
             {total} {total % 10 === 1 && total % 100 !== 11 ? "книга" : [2, 3, 4].includes(total % 10) && ![12, 13, 14].includes(total % 100) ? "книги" : "книг"}
           </p>
-          <StoryGroups matching={matching} others={others} povod={q.povod} minPrice={minPrice} />
+          {sections ? <OccasionSectionsView sections={sections} minPrice={minPrice} /> : <StoryGroups matching={matching} others={others} povod={q.povod} minPrice={minPrice} />}
         </div>
       </section>
       <PriceSection />

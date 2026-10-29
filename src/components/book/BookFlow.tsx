@@ -1,6 +1,6 @@
 "use client";
 import Link from "next/link";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { api, goal } from "@/lib/client";
 import { OtpForm } from "@/components/OtpForm";
 
@@ -24,34 +24,6 @@ interface BookState {
 
 type Audience = "CHILD" | "TEEN" | "ADULT" | "PET";
 
-/** Вторая галочка перед загрузкой фото — по аудитории книги (для питомца и взрослого — без слов о ребёнке). */
-const PHOTO_CONSENT: Record<Audience, { title: string; lead: string; label: React.ReactNode; tips: string }> = {
-  CHILD: {
-    title: "Добавим фото ребёнка?",
-    lead: "По фото нейросеть рисует героя похожим на себя. Без фото нарисуем по описанию из анкеты.",
-    label: <>Даю <Link href="/soglasie/foto" target="_blank">согласие на обработку фото ребёнка</Link> как его законный представитель</>,
-    tips: "1–3 фото: лицо крупно, хороший свет, без солнцезащитных очков и других людей в кадре.",
-  },
-  TEEN: {
-    title: "Добавим фото героя?",
-    lead: "По фото нейросеть рисует героя похожим на себя. Без фото нарисуем по описанию из анкеты.",
-    label: <>Даю <Link href="/soglasie/foto" target="_blank">согласие на обработку фото</Link> героя как его законный представитель (или это моё фото и мне есть 18)</>,
-    tips: "1–3 фото: лицо крупно, хороший свет, без других людей в кадре.",
-  },
-  ADULT: {
-    title: "Добавим фото?",
-    lead: "По фото нейросеть рисует героев похожими на себя. Без фото нарисуем по описанию из анкеты.",
-    label: <>Загружаю своё фото или фото людей, которые согласны на это, — <Link href="/soglasie/foto" target="_blank">согласие на обработку фото</Link></>,
-    tips: "1–3 фото героя: лицо крупно, хороший свет. Фото второй половинки и других героев — ниже, по желанию.",
-  },
-  PET: {
-    title: "Добавим фото питомца?",
-    lead: "По фото нейросеть нарисует окрас и приметы как в жизни. Без фото нарисуем по описанию из анкеты.",
-    label: <>Загружаю фото своего питомца; если в кадре есть люди — они согласны (<Link href="/soglasie/foto" target="_blank">согласие на обработку фото</Link>)</>,
-    tips: "1–3 фото: мордочка крупно, при дневном свете; хорошо, если виден окрас целиком.",
-  },
-};
-
 export interface MoodOption {
   id: string;
   title: string;
@@ -69,6 +41,7 @@ export function BookFlow({
   moods = [],
   moodChangesPreview = 2,
   audience = "CHILD",
+  bulkAvailable = false,
 }: {
   bookId: string;
   photoEnabled: boolean;
@@ -78,19 +51,16 @@ export function BookFlow({
   moods?: MoodOption[];
   moodChangesPreview?: number;
   audience?: Audience;
+  /** Книга о группе: можно заказать «для каждого ребёнка» (src/lib/bulk.ts). */
+  bulkAvailable?: boolean;
 }) {
   const [b, setB] = useState<BookState | null>(null);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const [edit, setEdit] = useState<Record<number, string>>({});
-  const [photoStep, setPhotoStep] = useState<"consent" | "upload" | "contact">("consent");
-  const [pd, setPd] = useState(false);
-  const [photoOk, setPhotoOk] = useState(false);
-  const [withPhoto, setWithPhoto] = useState(true);
   const [pdNow, setPdNow] = useState(false);
-  const [hints, setHints] = useState<string[]>([]);
   const [exitShown, setExitShown] = useState(false);
-  const fileRef = useRef<HTMLInputElement>(null);
+  const [bulk, setBulk] = useState<BulkView | null>(null);
 
   const load = useCallback(async () => {
     try {
@@ -155,34 +125,26 @@ export function BookFlow({
     }
   }
 
-  async function upload(files: FileList | null, role = "main") {
-    if (!files?.length) return;
-    setBusy(true);
-    setError("");
-    const all: string[] = [];
-    for (const f of Array.from(files).slice(0, 3)) {
-      const fd = new FormData();
-      fd.append("file", f);
-      fd.append("role", role);
-      try {
-        const r = await api<{ hints: string[] }>(`/api/books/${bookId}/photos`, fd);
-        all.push(...r.hints);
-        goal("photo_upload");
-      } catch (e) {
-        setError((e as Error).message);
-      }
-    }
-    setHints(all);
-    await load();
-    setBusy(false);
-    if (fileRef.current) fileRef.current.value = "";
-  }
+  // «Для каждого в группе»: состояние копий (первые — с превью), опрос, пока они сочиняются и рисуются
+  const showBulk = bulkAvailable && Boolean(b && ["PREVIEW_READY", "FULL_QUEUED", "FULL_READY"].includes(b.status));
+  useEffect(() => {
+    if (!showBulk) return;
+    let stop = false;
+    const tick = () => api<BulkView>(`/api/books/${bookId}/bulk`).then((r) => !stop && setBulk(r)).catch(() => {});
+    tick();
+    const t = setInterval(tick, 4000);
+    return () => {
+      stop = true;
+      clearInterval(t);
+    };
+  }, [showBulk, bookId]);
 
   if (!b) return <div className="flow"><div className="spinner" style={{ margin: "60px auto" }} /></div>;
 
-  const copy = PHOTO_CONSENT[audience];
   const moodLeft = Math.max(0, moodChangesPreview - b.moodChanges.preview);
-  const consentDone = Boolean(b.consent?.pd && b.consent?.photo);
+  void photoEnabled;
+  void extras;
+  void audience;
 
   const generating = (label: string, sub: string) => (
     <div style={{ textAlign: "center", padding: "40px 0" }}>
@@ -246,94 +208,7 @@ export function BookFlow({
 
       {b.status === "TEXT_APPROVED" && (
         <section>
-          {photoStep === "consent" && (
-            <>
-              <h1>{copy.title}</h1>
-              <p>{copy.lead}</p>
-              {photoEnabled ? (
-                <div className="panel consent-panel">
-                  {consentDone ? (
-                    <p className="consent-done">
-                      <span aria-hidden="true">✓</span> Согласия на обработку данных и фото даны. <Link href="/soglasie/foto" target="_blank">Текст согласия</Link>
-                    </p>
-                  ) : (
-                    <>
-                      <p className="small muted">Перед загрузкой — два отдельных согласия. Фото нужно только для иллюстраций: без идентификации личности, хранится в России и удаляется через 7 дней.</p>
-                      {!b.consent?.pd && (
-                        <label className="check">
-                          <input type="checkbox" name="consent-pd" checked={pd} onChange={(e) => setPd(e.target.checked)} />
-                          <span>Даю <Link href="/soglasie/pd" target="_blank">согласие на обработку персональных данных</Link></span>
-                        </label>
-                      )}
-                      <label className="check">
-                        <input type="checkbox" name="consent-photo" checked={photoOk} onChange={(e) => setPhotoOk(e.target.checked)} />
-                        <span>{copy.label}</span>
-                      </label>
-                    </>
-                  )}
-                  <button
-                    className="btn btn--primary btn--block"
-                    disabled={busy || (!consentDone && (!(pd || b.consent?.pd) || !photoOk))}
-                    onClick={async () => {
-                      if (consentDone || (await act({ action: "consent", pd: true, photo: true }))) setPhotoStep("upload");
-                    }}
-                  >
-                    Загрузить фото
-                  </button>
-                </div>
-              ) : (
-                <p className="muted-panel small">Загрузка фото пока выключена — иллюстрации будут по описанию.</p>
-              )}
-              <button className="btn btn--ghost btn--block" style={{ marginTop: 12 }} onClick={() => { setWithPhoto(false); setPhotoStep("contact"); }}>
-                Без фото — нарисовать по описанию
-              </button>
-              {error && <p className="error" role="alert">{error}</p>}
-            </>
-          )}
-
-          {photoStep === "upload" && (
-            <>
-              <h1>{audience === "PET" ? "Фото питомца" : "Фото героя"}</h1>
-              <p className="muted">{copy.tips}</p>
-              <div className="photos" style={{ marginBottom: 12 }}>
-                {b.photos.map((p) => (
-                  <div className="photo" key={p.id}>
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img src={p.url} alt="Загруженное фото" />
-                    <button aria-label="Удалить фото" onClick={async () => { await api(`/api/books/${bookId}/photos?photo=${p.id}`, undefined, "DELETE"); load(); }}>×</button>
-                  </div>
-                ))}
-              </div>
-              {b.photos.length < 3 && (
-                <label className="drop">
-                  <input ref={fileRef} type="file" accept="image/jpeg,image/png,image/webp,image/heic" multiple hidden onChange={(e) => upload(e.target.files)} />
-                  <b>{busy ? "Загружаем…" : "Выбрать фото"}</b>
-                  <small className="muted">JPG, PNG или WebP до 15 МБ</small>
-                </label>
-              )}
-              {hints.length > 0 && <ul className="small">{hints.map((h) => <li key={h}>{h}</li>)}</ul>}
-              {extras.length > 0 && (
-                <div className="panel" style={{ marginTop: 16 }}>
-                  <b>Фото других героев (необязательно)</b>
-                  {extras.map((e) => (
-                    <label key={e.role + e.name} className="row" style={{ margin: "8px 0" }}>
-                      <span className="small">{e.name}</span>
-                      <input type="file" accept="image/*" onChange={(ev) => upload(ev.target.files, e.role)} />
-                    </label>
-                  ))}
-                </div>
-              )}
-              {error && <p className="error">{error}</p>}
-              <div className="flow-nav">
-                <div className="in">
-                  <button className="btn btn--ghost" onClick={() => setPhotoStep("consent")}>Назад</button>
-                  <button className="btn btn--primary" disabled={b.photos.length === 0} onClick={() => { setWithPhoto(true); setPhotoStep("contact"); }}>Дальше</button>
-                </div>
-              </div>
-            </>
-          )}
-
-          {photoStep === "contact" && (
+          {
             <>
               <h1>{b.loggedIn ? "Рисуем превью?" : "Куда прислать превью?"}</h1>
               <p className="muted">
@@ -345,23 +220,24 @@ export function BookFlow({
                 </div>
               ) : (
                 <div className="panel">
+                  {b.consent?.pd && <p className="consent-done small"><span aria-hidden="true">✓</span> Согласие на обработку данных дано{b.consent.photo ? " (и на фото)" : ""}</p>}
                   {!b.consent?.pd && (
                     <label className="check">
                       <input type="checkbox" name="consent-pd" checked={pdNow} onChange={(e) => setPdNow(e.target.checked)} />
                       <span>Даю <Link href="/soglasie/pd" target="_blank">согласие на обработку персональных данных</Link></span>
                     </label>
                   )}
-                  <button className="btn btn--primary btn--block" disabled={busy || (!b.consent?.pd && !pdNow)} onClick={() => act({ action: "preview", withPhoto, ...(pdNow ? { pd: true } : {}) })}>
-                    {withPhoto ? "Нарисовать превью по фото" : "Нарисовать превью по описанию"}
+                  <button className="btn btn--primary btn--block" disabled={busy || (!b.consent?.pd && !pdNow)} onClick={() => act({ action: "preview", withPhoto: b.withPhoto, ...(pdNow ? { pd: true } : {}) })}>
+                    {b.withPhoto ? "Нарисовать превью по фото" : "Нарисовать превью по описанию"}
                   </button>
                 </div>
               )}
-              <p style={{ marginTop: 12 }}>
-                <button className="link-btn" onClick={() => setPhotoStep(withPhoto ? "upload" : "consent")}>← Назад</button>
+              <p className="small muted" style={{ marginTop: 12 }}>
+                {b.withPhoto ? "Нарисуем по фото, которое вы загрузили и мы уже обработали." : "Нарисуем по описанию из анкеты."}
               </p>
               {error && <p className="error" role="alert">{error}</p>}
             </>
-          )}
+          }
         </section>
       )}
 
@@ -438,6 +314,7 @@ export function BookFlow({
               </div>
             </>
           )}
+          {showBulk && bulk?.available && <BulkPanel bookId={b.id} bulk={bulk} onChange={setBulk} />}
           {b.status !== "PREVIEW_READY" && (
             <p style={{ marginTop: 20 }}>
               <Link className="btn btn--primary" href={`/kabinet/kniga/${b.id}`}>Открыть в личном кабинете</Link>
@@ -456,5 +333,69 @@ export function BookFlow({
         </div>
       )}
     </div>
+  );
+}
+
+export interface BulkView {
+  available: boolean;
+  created: boolean;
+  count: number;
+  dedication: string;
+  tiers: { min: number; pct: number }[];
+  previewCopies: number;
+  copies: { id: string; name: string; status: string; statusText: string; title: string | null; dedication: string | null; cover: string | null }[];
+}
+
+/** «Книга для каждого в группе» на странице превью: первые копии с обложкой, остальные — после оплаты. */
+function BulkPanel({ bookId, bulk, onChange }: { bookId: string; bulk: BulkView; onChange: (b: BulkView) => void }) {
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const best = [...bulk.tiers].sort((x, y) => x.min - y.min).reduce((p, t) => (bulk.count >= t.min ? t.pct : p), 0);
+  return (
+    <section className="panel bulk-panel" data-bulk-panel style={{ marginTop: 20 }}>
+      <h2 style={{ fontSize: "var(--fs-lg)", margin: 0 }}>Книга для каждого ребёнка группы</h2>
+      <p className="small" style={{ margin: "6px 0 10px" }}>
+        {bulk.count} книг одним заказом: в каждой главный герой — свой ребёнок, остальные рядом.{best > 0 ? ` Скидка за количество −${best}%.` : ""} Превью — у первых {Math.min(bulk.previewCopies, bulk.count)}, остальные нарисуем после оплаты.
+      </p>
+      {bulk.created ? (
+        <>
+          <ol className="bulk-copies">
+            {bulk.copies.slice(0, 6).map((c, i) => (
+              <li key={c.id} data-copy={i}>
+                {c.cover ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={c.cover} alt={`Обложка: ${c.name}`} width={64} height={64} />
+                ) : (
+                  <span className="bulk-copies__ph" aria-hidden="true">{c.name.slice(0, 1)}</span>
+                )}
+                <span><b>{c.name}</b><small className="muted">{c.statusText}</small></span>
+              </li>
+            ))}
+          </ol>
+          {bulk.copies.length > 6 && <p className="small muted">…и ещё {bulk.copies.length - 6}</p>}
+          <Link className="btn btn--primary" href={`/kniga/${bookId}/kupit?dlya-vseh=1`}>Оформить {bulk.count} книг</Link>
+        </>
+      ) : (
+        <button
+          className="btn btn--primary"
+          data-bulk-start
+          disabled={busy}
+          onClick={async () => {
+            setBusy(true);
+            setError("");
+            try {
+              onChange(await api<BulkView>(`/api/books/${bookId}/bulk`, {}));
+            } catch (e) {
+              setError((e as Error).message);
+            } finally {
+              setBusy(false);
+            }
+          }}
+        >
+          {busy ? "Готовим…" : "Сделать книгу для каждого ребёнка группы"}
+        </button>
+      )}
+      {error && <p className="error">{error}</p>}
+    </section>
   );
 }

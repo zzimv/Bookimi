@@ -42,7 +42,7 @@ describe("город: поиск и ранжирование", () => {
     expect(findCity("Королёв")?.region).toBe("Московская обл.");
   });
   it("меньше двух букв — пусто", () => {
-    expect(searchCities("к")).toEqual([]);
+    expect(searchCities("м")[0].name).toBe("Москва");
     expect(searchCities("  ")).toEqual([]);
   });
   it("«кор» → Королёв первым (префикс, затем население), Коркино в списке", () => {

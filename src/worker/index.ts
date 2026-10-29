@@ -8,6 +8,8 @@ import { issueDueBonuses } from "../lib/referral";
 import { checkNpdLimit } from "../lib/orders";
 import { gpuTick } from "../lib/gen/gpu";
 import { alertOwner } from "../lib/notify";
+import { runCartoon } from "../lib/gen/cartoon";
+import { purgeCartoonVoices } from "../lib/cartoon";
 
 type Job<T> = { id: string; data: T }[];
 
@@ -82,6 +84,11 @@ async function main() {
     for (const j of jobs) await runAudio(j.data.bookId);
   });
 
+  // Мультфильм: по одному за раз (CPU и память воркера), ошибка — владельцу и в карточку мультфильма
+  await boss.work<{ bookId: string }>(QUEUES.generateCartoon, { batchSize: 1 }, async (jobs: Job<{ bookId: string }>) => {
+    for (const j of jobs) await runCartoon(j.data.bookId);
+  });
+
   // ── Регулярные задачи (время — МСК) ──
   const tz = { tz: "Europe/Moscow" };
   await boss.schedule(QUEUES.purgePhotos, "*/30 * * * *", {}, tz);
@@ -90,6 +97,7 @@ async function main() {
   await boss.schedule(QUEUES.referralBonuses, "15 * * * *", {}, tz);
   await boss.schedule(QUEUES.npdLimitCheck, "0 9 * * *", {}, tz);
   await boss.schedule(QUEUES.gpuTick, "*/5 * * * *", {}, tz);
+  await boss.schedule(QUEUES.purgeCartoonVoices, "40 3 * * *", {}, tz);
 
   // Удаление фото старше 7 дней (дублирует lifecycle бакета photos)
   await boss.work(QUEUES.purgePhotos, async () => {
@@ -106,6 +114,10 @@ async function main() {
   await boss.work(QUEUES.referralBonuses, async () => issueDueBonuses());
   await boss.work(QUEUES.npdLimitCheck, async () => checkNpdLimit());
   await boss.work(QUEUES.gpuTick, async () => gpuTick());
+  // Записи своего голоса для мультфильма — удалить через 30 дней после выдачи
+  await boss.work(QUEUES.purgeCartoonVoices, async () => {
+    await purgeCartoonVoices();
+  });
 
   console.error("[worker] запущен");
 }

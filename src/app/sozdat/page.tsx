@@ -9,6 +9,7 @@ import { cfg } from "@/lib/settings";
 import { audienceFromParam, SVOYA_IDEYA } from "@/lib/storefront";
 import { moodSwatch } from "@/lib/mood-swatch";
 import { MOODS } from "@/content/moods";
+import { plotBySlug, sectionPlot } from "@/content/registry";
 
 export const metadata: Metadata = { title: "Создать книгу", robots: { index: false } };
 export const dynamic = "force-dynamic";
@@ -39,9 +40,22 @@ async function quizStyles() {
   }
 }
 
+/** Для шага «Книга» (разделы повода, как на сайте) и шага «Группа»: проекция сюжета без промптов и планов. */
+function groupInfo(slug: string) {
+  const plot = plotBySlug(slug);
+  if (!plot) return { core: [], hooks: [], group: null };
+  const { core, hooks } = sectionPlot(plot);
+  const g = plot.group;
+  return {
+    core,
+    hooks,
+    group: g ? { min: g.min, max: g.max, label: g.label, adultRoles: [...(g.includeAdults?.roles ?? [])], adultsMax: g.includeAdults?.max ?? 0 } : null,
+  };
+}
+
 export default async function Page({ searchParams }: { searchParams: Promise<Record<string, string | undefined>> }) {
   const sp = await searchParams;
-  const [all, styles] = await Promise.all([getStories(), quizStyles()]);
+  const [all, styles, flags, bulk] = await Promise.all([getStories(), quizStyles(), cfg("flags"), cfg("bulk")]);
   const stories = all.filter((s) => s.slug !== SVOYA_IDEYA);
   const initial: Record<string, unknown> = {};
   // ?dlya=ADULT|TEEN|PET|CHILD (или detyam/podrostkam/…) — аудитория; ?skazka=<slug> — книга (аудитория берётся из неё);
@@ -81,6 +95,7 @@ export default async function Page({ searchParams }: { searchParams: Promise<Rec
         artStyles: s.artStyles,
         segments: s.segments,
         extras: s.extras,
+        ...groupInfo(s.slug),
       }))}
       styles={styles}
       moods={MOODS.map((m) => ({ id: m.id, title: m.title, oneLine: m.oneLine, audiences: m.audiences, minAge: m.minAge, swatch: moodSwatch(m) }))}
@@ -89,6 +104,8 @@ export default async function Page({ searchParams }: { searchParams: Promise<Rec
       presetAudience={Boolean(dlya) && !picked}
       presetOccasion={Boolean(povod) && !picked}
       captchaKey={process.env.YANDEX_SMARTCAPTCHA_CLIENT_KEY || undefined}
+      photoEnabled={flags.photoUploadEnabled}
+      bulkTiers={bulk.enabled ? bulk.tiers : []}
     />
   );
 }

@@ -109,10 +109,10 @@ export function matchRank(c: { n: string; words: string[]; rn: string[] }, q: st
   return null;
 }
 
-/** Подсказки по 2+ буквам: ранг совпадения, затем население. */
+/** Подсказки с первой буквы: ранг совпадения, затем население. */
 export function searchCities(query: string, limit = 10): City[] {
   let q = normalizeCity(query);
-  if (q.replace(/\s/g, "").length < 2) return [];
+  if (q.replace(/\s/g, "").length < 1) return [];
   const alt = fromLatinLayout(q);
   const variants = alt ? [q, normalizeCity(alt)] : [q];
   const scored: { c: City; r: number }[] = [];

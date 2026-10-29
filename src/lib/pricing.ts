@@ -28,6 +28,10 @@ export interface QuoteInput {
   discountPct?: number; // промокод или скидка новичка (не суммируются)
   discountRub?: number;
   freeShippingBooks?: number;
+  /** Докупка цифровых допов к уже оплаченной книге (из кабинета): без формата, только цифровые допы. */
+  addonsOnly?: boolean;
+  /** Мультфильм этой книги уже оплачен (тогда «Своим голосом» можно докупить отдельно). */
+  cartoonPaid?: boolean;
 }
 
 export interface QuoteLine {
@@ -49,6 +53,16 @@ export interface Quote {
 }
 
 export const MAX_ADDONS = 3;
+export const CARTOON_ADDON = "cartoon";
+export const CARTOON_OWN_VOICE = "cartoon-own-voice";
+
+/** Выбор допа в корзине: «Своим голосом» добавляет мультфильм, снятый мультфильм снимает «Своим голосом». */
+export function toggleAddon(list: string[], key: string, cartoonPaid = false): string[] {
+  if (list.includes(key)) return list.filter((k) => k !== key && !(key === CARTOON_ADDON && k === CARTOON_OWN_VOICE && !cartoonPaid));
+  const next = [...list, key];
+  if (key === CARTOON_OWN_VOICE && !cartoonPaid && !next.includes(CARTOON_ADDON)) next.unshift(CARTOON_ADDON);
+  return next;
+}
 
 export function quote(input: QuoteInput, formats: CatalogFormat[], addons: CatalogAddon[]): Quote {
   const errors: string[] = [];
@@ -56,7 +70,9 @@ export function quote(input: QuoteInput, formats: CatalogFormat[], addons: Catal
   const pdf = formats.find((f) => f.kind === "PDF");
   let books = 0;
 
-  if (input.whoPrints === "self") {
+  if (input.addonsOnly) {
+    if (!input.addons.length) errors.push("Выберите, что добавить");
+  } else if (input.whoPrints === "self") {
     if (!pdf) errors.push("PDF недоступен");
     else lines.push({ kind: "format", key: pdf.key, title: pdf.title, priceRub: pdf.priceRub });
   } else {
@@ -76,8 +92,17 @@ export function quote(input: QuoteInput, formats: CatalogFormat[], addons: Catal
       errors.push(`Доп «${key}» недоступен`);
       continue;
     }
-    if (a.requiresPrint && input.whoPrints !== "bookimi") {
+    if (a.requiresPrint && (input.whoPrints !== "bookimi" || input.addonsOnly)) {
       errors.push(`«${a.title}» — только для печатной книги`);
+      continue;
+    }
+    // Мультфильм: «Своим голосом» — только вместе с мультфильмом или к уже купленному; дважды не продаём
+    if (key === CARTOON_ADDON && input.cartoonPaid) {
+      errors.push("Мультфильм к этой книге уже куплен");
+      continue;
+    }
+    if (key === CARTOON_OWN_VOICE && !chosen.includes(CARTOON_ADDON) && !input.cartoonPaid) {
+      errors.push("«Своим голосом» — дополнение к мультфильму: добавьте мультфильм");
       continue;
     }
     if (key === "second-copy") {

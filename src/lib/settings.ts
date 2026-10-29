@@ -44,6 +44,8 @@ export const DEFAULTS = {
     freeRedraws: 3,
     redrawPriceRub: 99,
     photoTtlDays: 7,
+    /** Фото, загруженные в анкете, пока книга не создана (анонимный черновик): удаляются через N часов. */
+    photoTtlNoBookHours: 24,
     /** Сколько раз можно бесплатно сменить настроение превью до оплаты (перерисовка обложки и 2 разворотов). */
     moodChangesPreview: 2,
     /** Бесплатных сказок в сутки с одного IP (IPv4 — по подсети /24): защита от сброса cookie устройства. */
@@ -94,6 +96,38 @@ export const DEFAULTS = {
       { key: "jane", title: "Джейн — сказочный женский" },
     ],
   },
+  /** «Мультфильм по книге» (src/lib/gen/cartoon*.ts). Цену владелица ещё не назвала — 690 ₽ по умолчанию (ASSUMPTIONS). */
+  cartoon: {
+    enabled: true,
+    priceRub: 690,
+    /** «Своим голосом» — дополнение к мультфильму. */
+    ownVoiceRub: 400,
+    /** Длительность: цель и границы, секунды. */
+    targetSec: 120,
+    minSec: 90,
+    maxSec: 150,
+    /** Вертикальная версия 9:16 для телефона и историй. */
+    vertical: true,
+    /** Высота вертикальной версии: 1280 (720×1280, по умолчанию — дёшево) или 1920 (1080×1920, +~100 с CPU на рендер). */
+    verticalHeight: 1280,
+    /** Субтитры по умолчанию (покупатель может выключить и пересобрать). */
+    subtitles: true,
+    /** Голос диктора по аудитории книги (SpeechKit); список выбора — audio.voices. */
+    voiceByAudience: { CHILD: "alena", TEEN: "filipp", ADULT: "alena", PET: "jane" } as Record<string, string>,
+    /** Фоновая музыка: "synth" — синтез без чужих записей; иначе ключ файла в хранилище books (music/…) — только лицензированные треки. */
+    music: "synth",
+    musicVolume: 1,
+    /** Бесплатных пересборок после смены голоса, текста или субтитров. */
+    freeRerenders: 1,
+    /** Сколько раз можно собрать мультфильм своим голосом (перезаписали реплики — собрали снова). */
+    ownVoiceBuilds: 3,
+    /** Ссылка «Поделиться» действует, дней. */
+    shareDays: 30,
+    /** Записи голоса удаляются через N дней после выдачи мультфильма. */
+    voicePurgeDays: 30,
+    /** Оживление иллюстраций моделью image-to-video на своём GPU (задел, выключено): "off" | "wan". */
+    i2v: "off" as "off" | "wan",
+  },
   referral: { newbiePct: 10, bonusPct: 10, delayDays: 14 },
   /** holidayAuto: пока печать успевает к ближайшему празднику (раздел «Праздники»), полоса говорит о нём; выкл. — всегда текст ниже. */
   promoBar: { enabled: true, text: "Бесплатное превью книги за 5 минут — без регистрации", holidayAuto: true },
@@ -107,6 +141,19 @@ export const DEFAULTS = {
   /** Подписка на главной «−300 ₽ на первый заказ». Блок виден, только если указан активный промокод. */
   newsletter: { promoCode: "", discountText: "−300 ₽ на первый заказ" },
   flags: { printEnabled: true, photoUploadEnabled: false, demoMode: false },
+  /**
+   * «Книга для каждого в группе»: один заказ на N книг (src/lib/bulk.ts). Скидки по количеству не суммируются
+   * с промокодом и скидкой новичка; previewCopies — сколько копий рисуем до оплаты. Пороги ждут решения владельца.
+   */
+  bulk: {
+    enabled: true,
+    tiers: [
+      { min: 5, pct: 20 },
+      { min: 15, pct: 30 },
+      { min: 25, pct: 35 },
+    ] as { min: number; pct: number }[],
+    previewCopies: 3,
+  },
   /** Стили картинок. Пробные (status "trial" в ART_STYLE_IDS) на сайте скрыты, пока showTrialStyles = false; в демо видны всегда. */
   art: { showTrialStyles: false },
 };

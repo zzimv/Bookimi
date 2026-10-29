@@ -16,6 +16,7 @@ export async function POST(req: Request) {
   if (!b) return err("Проверьте данные заказа");
   const own = await ownBook(b.bookId);
   if (!own || own.book.userId !== user.id) return err("Не найдено", 404);
+  if (b.addonsOnly && (!own.book.paidFull || b.whoPrints !== "self")) return err("Докупить можно к уже оплаченной книге");
   if (b.whoPrints === "bookimi") {
     if (!b.shipping) return err("Выберите доставку");
     const addr = cleanAddress(b.shipping.method, b.shipping.address);

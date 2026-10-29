@@ -12,6 +12,18 @@ import { OrderTimeline } from "../OrderTimeline";
 import { ThanksPanel } from "../ThanksPanel";
 import { journeyOrder } from "../journey-data";
 
+const COPY_STATUS: Record<string, string> = {
+  DRAFT: "сочиним после оплаты",
+  TEXT_QUEUED: "сочиняем текст",
+  TEXT_READY: "текст готов",
+  TEXT_APPROVED: "текст готов",
+  PREVIEW_QUEUED: "рисуем превью",
+  PREVIEW_READY: "превью готово",
+  FULL_QUEUED: "рисуем книгу",
+  FULL_READY: "книга готова",
+  FAILED: "повторяем генерацию",
+};
+
 export const metadata: Metadata = { title: "Заказ", robots: { index: false } };
 export const dynamic = "force-dynamic";
 
@@ -34,6 +46,10 @@ export default async function Page({ params }: { params: Promise<{ id: string }>
   const print = order.whoPrints === "bookimi";
   // Благодарность — первые 3 дня после оплаты, пока заказ не уехал
   const fresh = order.paidAt && Date.now() - order.paidAt.getTime() < 3 * 86400_000 && ["PAID", "IN_PRINT"].includes(order.status);
+  // Заказ «для каждого в группе»: несколько книг — список со статусами
+  const bookIds = [...new Set(order.items.map((i) => i.bookId).filter(Boolean))] as string[];
+  const copies = bookIds.length > 1 ? await db.book.findMany({ where: { id: { in: bookIds } }, select: { id: true, status: true, params: true, text: true } }) : [];
+  const copyRows = bookIds.map((bid) => copies.find((c) => c.id === bid)).filter(Boolean).map((c) => ({ id: c!.id, status: c!.status, name: (c!.params as { hero?: { name?: string } }).hero?.name ?? "", title: (c!.text as { title?: string } | null)?.title }));
   const firstOrder = fresh ? (await db.order.count({ where: { userId: order.userId, paidAt: { not: null } } })) <= 1 : false;
 
   return (
@@ -50,7 +66,9 @@ export default async function Page({ params }: { params: Promise<{ id: string }>
       <div className="panel">
         <table className="tbl" style={{ border: 0 }}>
           <tbody>
-            {order.items.map((i) => (
+            {order.items.length > 3 && new Set(order.items.map((i) => `${i.refKey}|${i.priceRub}`)).size === 1 ? (
+              <tr><td>{order.items.length} книг — «для каждого в группе»</td><td style={{ textAlign: "right" }}>{(order.items.length * order.items[0].priceRub).toLocaleString("ru-RU")} ₽</td></tr>
+            ) : order.items.map((i) => (
               <tr key={i.id}><td>{i.title.replace(/^Изготовление (персонализированной книги )?/, "").replace(/^на заказ: /, "")}</td><td style={{ textAlign: "right" }}>{i.priceRub.toLocaleString("ru-RU")} ₽</td></tr>
             ))}
             {order.pdfCreditRub > 0 && <tr><td>Зачёт PDF</td><td style={{ textAlign: "right" }}>−{order.pdfCreditRub} ₽</td></tr>}
@@ -60,6 +78,23 @@ export default async function Page({ params }: { params: Promise<{ id: string }>
           </tbody>
         </table>
       </div>
+
+      {copyRows.length > 1 && (
+        <div className="panel" style={{ marginTop: 16 }} data-order-copies>
+          <details open={copyRows.length <= 6}>
+          <summary><b>Книги заказа — {copyRows.length}</b> <span className="small muted">в каждой свой главный герой · статус каждой</span></summary>
+          <ol className="bulk-copies bulk-copies--list">
+            {copyRows.map((c) => (
+              <li key={c.id}>
+                <span className="bulk-copies__ph" aria-hidden="true">{c.name.slice(0, 1)}</span>
+                <span><b>{c.name}</b><small className="muted">{COPY_STATUS[c.status] ?? c.status}</small></span>
+                {c.status === "FULL_READY" && <Link className="link-btn small" href={`/kabinet/kniga/${c.id}`}>открыть</Link>}
+              </li>
+            ))}
+          </ol>
+          </details>
+        </div>
+      )}
 
       {pending && (
         <div style={{ marginTop: 16 }}>

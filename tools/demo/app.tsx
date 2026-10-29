@@ -83,7 +83,7 @@ function page(path: string, q: Record<string, string>) {
     case "sozdat":
       return <SozdatPage searchParams={sp} />;
     case "kniga":
-      return p[2] === "kupit" ? <KupitPage id={p[1]} who={q.who} pechat={q.pechat} /> : <KnigaPage id={p[1]} />;
+      return p[2] === "kupit" ? <KupitPage id={p[1]} who={q.who} pechat={q.pechat} bulk={q["dlya-vseh"]} /> : <KnigaPage id={p[1]} />;
     case "demo-pay":
       return <DemoPay id={p[1]} />;
     case "zakaz":

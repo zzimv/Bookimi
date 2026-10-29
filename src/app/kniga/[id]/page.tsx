@@ -7,6 +7,7 @@ import { AnswersV2, heroAge } from "@/lib/quiz";
 import { dedicationText } from "@/lib/gen/text";
 import { moodsFor } from "@/content/moods";
 import { moodSwatch } from "@/lib/mood-swatch";
+import { bulkAvailable } from "@/lib/bulk-server";
 
 export const metadata: Metadata = { title: "Ваша книга", robots: { index: false } };
 export const dynamic = "force-dynamic";
@@ -29,6 +30,7 @@ export default async function Page({ params }: { params: Promise<{ id: string }>
       moods={moods}
       moodChangesPreview={limits.moodChangesPreview}
       audience={a.success ? a.data.audience : "CHILD"}
+      bulkAvailable={a.success && !own.book.parentBookId && bulkAvailable(a.data) && (await cfg("bulk")).enabled}
     />
   );
 }

@@ -84,6 +84,7 @@ enum ConsentType {
   ANALYTICS_COOKIES
   CROSS_BORDER    // зарубежные ИИ-модели / WhatsApp
   VOICE           // запись своего голоса для мультфильма (удаляется через 30 дней после выдачи)
+  GROUP_PHOTO     // фото других детей группы — загрузивший подтверждает согласие их родителей
 }
 
 model Consent {
@@ -234,9 +235,11 @@ model Photo {
   id          String    @id @default(uuid()) @db.Uuid
   heroId      String    @db.Uuid
   hero        Hero      @relation(fields: [heroId], references: [id], onDelete: Cascade)
-  storageKey  String    // бакет photos, lifecycle 7 дней
+  storageKey  String    // бакет photos, lifecycle 7 дней; портрет «голова и плечи» после обработки
+  originalKey String?   // исходник (EXIF-поворот, без метаданных) — для выбора другого лица; удаляется вместе с фото
+  meta        Json?     // обработка: лица, выбранное лицо, подсказки, метрики (src/lib/photo-process.ts)
   moderation  String    @default("pending")
-  expiresAt   DateTime  // createdAt + 7 дней; фоновая задача удаляет
+  expiresAt   DateTime  // без книги — createdAt + 24 ч (limits.photoTtlNoBookHours), с книгой — + 7 дней; фоновая задача удаляет
   deletedAt   DateTime?
   createdAt   DateTime  @default(now())
 
@@ -274,6 +277,8 @@ model Book {
   userId      String?    @db.Uuid
   user        User?      @relation(fields: [userId], references: [id], onDelete: SetNull)
   draftId     String?    @db.Uuid
+  /// Копия заказа «для каждого в группе»: книга, от которой сделана (src/lib/bulk.ts)
+  parentBookId String?   @db.Uuid
   storyId     String     @db.Uuid
   story       Story      @relation(fields: [storyId], references: [id])
   styleKey    String     // стиль картинок (ART_STYLE_IDS)
@@ -303,6 +308,8 @@ model Book {
   orderItems  OrderItem[]
   costs       GenerationCost[]
   cartoon     Cartoon?
+
+  @@index([parentBookId])
 }
 
 model BookPage {
@@ -342,6 +349,7 @@ model Cartoon {
   subtitles       Boolean       @default(true)
   script          Json?         // { cues: [{ n, kind, page, text, targetSec }], words, source }
   textHash        String?       // текст книги, по которому собран сценарий
+  voiceCues       Json?         // записи своим голосом: { "<n>": { sec, peakDb, rmsDb, warnings, at } }
   renderedKey     String?       // что собрано: голос + субтитры + текст (для «ничего не изменилось»)
   rerendersLeft   Int           @default(1)   // бесплатная пересборка при смене голоса/текста
   ownBuildsLeft   Int           @default(3)   // сборок со своим голосом (перезаписали реплики — собрать снова)

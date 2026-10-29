@@ -33,7 +33,7 @@ services:
   worker:
     <<: *app
     command: ["node_modules/.bin/tsx", "src/worker/index.ts"]
-    mem_limit: 700m   # Chromium для PDF
+    mem_limit: 1g     # Chromium для PDF; мультфильм — ffmpeg по одной сцене (пик ~0,5–0,7 ГБ)
     shm_size: 256m
 
   db:

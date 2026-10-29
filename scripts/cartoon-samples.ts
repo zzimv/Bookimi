@@ -88,16 +88,17 @@ async function sample(key: "ny" | "cat" | "own", out: string) {
     dedication,
     cues: script.cues,
     voice,
-    scenes: demoScenes(a, { style: b.style, mood: b.mood }),
+    scenes: demoScenes(a, { style: b.style, mood: b.mood, scenes: [plotInfo(a).coverScene ?? "", ...text.spreads.map((s) => s.scene)] }),
     particles: particlesFor(theme, text.spreads.map((s) => s.text).join(" ")),
     subtitles: true,
     vertical: true,
+    verticalHeight: Number(process.env.CARTOON_VERTICAL_H ?? 1280),
     workDir: join(work, "render"),
     onProgress: () => {},
   });
   const name = { ny: "novyj-god-maša", cat: "kot-barsik", own: "novyj-god-svoim-golosom" }[key].replace("š", "sh");
   await copyFile(r.square, join(out, `${name}-1080.mp4`));
-  if (r.vertical) await copyFile(r.vertical, join(out, `${name}-1080x1920.mp4`));
+  if (r.vertical) await copyFile(r.vertical, join(out, `${name}-vertical.mp4`));
   await copyFile(r.poster, join(out, `${name}-poster.jpg`));
   await writeFile(join(out, `${name}-script.txt`), script.cues.map((c) => `${c.n}. [${c.targetSec} с] ${c.text}`).join("\n") + `\n\nслов: ${script.words}\n`);
   console.log(JSON.stringify({ key, words: script.words, duration: r.durationSec, renderSec: r.renderSec, totalSec: (Date.now() - t0) / 1000, loudness: r.loudness, voiceLoudness: prepared.loudness, ownLevels: lv, stretch: r.timeline.stretch }));

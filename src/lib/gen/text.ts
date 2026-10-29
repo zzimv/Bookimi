@@ -220,6 +220,11 @@ export class YandexGptProvider implements TextProvider {
     return { text: j.result.alternatives[0].message.text, costKopecks: Math.round((tokens / 1000) * this.rubPer1kTokens * 100) };
   }
 
+  /** Свободный запрос (сценарий мультфильма): текст уже обезличен — только метки {ГЕРОЙ.*}. */
+  async chat(system: string, user: string, temperature = 0.4) {
+    return this.complete(system, user, temperature);
+  }
+
   async write(a: QuizAnswers, plot: Plot | null, variant: number): Promise<TextResult> {
     const style = textStyleFor(a, plot);
     if (!style) throw new Error("нет голоса книги для этой анкеты");

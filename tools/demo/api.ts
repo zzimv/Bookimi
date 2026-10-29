@@ -20,6 +20,11 @@ import { cityLabel, findCity, normalizeCity, searchCities } from "../../src/lib/
 import { filterPvz, type Pvz } from "../../src/lib/pvz";
 import { tableQuote } from "../../src/lib/ship-zones";
 import { addToAddressBook, addressError, cleanAddress, pickPrefill, type DeliveryAddress, type SavedAddress } from "../../src/lib/delivery";
+import { detectFaces, judgePhoto, laplacianVariance, mainFaces, meanStd, portraitCrop, sniffImage, suggestFur, suggestHair, type Box, type Px } from "../../src/lib/photo-check";
+import { bulkCopyAnswers, bulkPct, bulkQuote, DEFAULT_BULK_DEDICATION, groupChildren } from "../../src/lib/bulk";
+import { crowdLooks } from "../../src/content/art/render";
+import { groupMembersMax, groupSpreadIndexes } from "../../src/content/registry";
+import { dedicationText, groupOf } from "../../src/lib/gen/text";
 
 // ───────── хранилище ─────────
 export interface DBook {
@@ -42,6 +47,9 @@ export interface DBook {
   textApprovedAt?: number;
   previewReadyAt?: number;
   fullReadyAt?: number;
+  /** Копия заказа «для каждого в группе»: id главной книги и номер ребёнка. */
+  parentId?: string;
+  bulkIndex?: number;
 }
 export interface DOrder {
   id: string;
@@ -49,6 +57,8 @@ export interface DOrder {
   createdAt: number;
   whoPrints: "self" | "bookimi";
   bookId: string;
+  /** «Для каждого в группе»: все книги заказа (главная — первой). */
+  bookIds?: string[];
   items: { kind: string; refKey: string; title: string; priceRub: number }[];
   subtotalRub: number;
   discountRub: number;
@@ -79,7 +89,7 @@ export interface DPromo {
 export interface Store {
   v: 3;
   user: { email: string; phone: string; name?: string; marketing: boolean } | null;
-  consent: { pd: boolean; photo: boolean; marketing: boolean };
+  consent: { pd: boolean; photo: boolean; marketing: boolean; group?: boolean };
   books: DBook[];
   orders: DOrder[];
   counters: Record<string, number>;
@@ -132,6 +142,7 @@ export function resetStore() {
   for (const t of jobs.values()) clearTimeout(t);
   jobs.clear();
   photos.clear();
+  drafts.clear();
   S = blank();
   applySettings();
 }
@@ -256,6 +267,10 @@ export function pageUrl(b: DBook, index: number, opts: { full?: boolean } = {}) 
     // Перерисовка в демо — другой ракурс того же разворота
     const idx = index === 0 ? 0 : ((index - 1 + v * 5) % 12) + 1;
     const extras: DemoExtra[] = a.extras.map((e) => ({ role: e.role === "custom" && e.what ? e.what : e.role, kind: extraDrawKind(e.role, kind), look: extraLook(e, a) }));
+    // Группа — как drawPages в pipeline.ts: толпа на разворотах {GROUP}, «общая фотография» там, где {ПЕРЕКЛИЧКА}
+    const plot = plotForAnswers(a);
+    const g = groupOf(a, plot);
+    const crowdOn = plot?.group && idx > 0 && g.members.length + g.adults.length > 0 && groupSpreadIndexes(plot).includes(idx);
     let svg = renderDemoSpread({
       plot: plotInfo(a),
       spreadIndex: idx,
@@ -266,6 +281,7 @@ export function pageUrl(b: DBook, index: number, opts: { full?: boolean } = {}) 
       extras,
       caption: "демо-иллюстрация · на сайте её рисует нейросеть",
       title: index === 0 ? b.text?.title : undefined,
+      ...(crowdOn ? { crowd: crowdLooks(g.members, g.adults, { kind: plot!.audience === "TEEN" ? "teen" : "child", age: heroAge(a) }), crowdLayout: plot!.spreads[idx - 1]?.text.includes("{ПЕРЕКЛИЧКА}") ? ("photo" as const) : ("around" as const) } : {}),
     });
     if (!full) svg = svg.replace(/<\/svg>\s*$/, `${watermark(index === 0 ? 1024 : 2048, 1024)}</svg>`);
     return svg;
@@ -309,10 +325,16 @@ function startJob(b: DBook, kind: JobKind) {
 
 async function finishJob(b: DBook, kind: JobKind) {
   const a = AnswersV2.parse(b.params);
-  if (kind === "text") {
+  if (kind === "text" || (kind === "full" && !b.text)) {
     const r = await new DemoTextProvider().write(a, plotForAnswers(a), Math.max(0, 2 - b.rewritesLeft));
     b.text = personalize(r.raw, a);
-    b.status = "TEXT_READY";
+    if (kind === "full") return finishJob(b, "full");
+    b.status = b.parentId ? "TEXT_APPROVED" : "TEXT_READY";
+    // Копия «для каждого»: главная книга уже с превью — рисуем превью и копии
+    if (b.parentId && bookById(b.parentId)?.previewReadyAt && (b.bulkIndex ?? 99) < DEFAULTS.bulk.previewCopies) {
+      b.status = "PREVIEW_QUEUED";
+      startJob(b, "preview");
+    }
     b.progress = 100;
     S.costs.push({ at: Date.now(), rub: COST.text });
     event("text_ready");
@@ -326,7 +348,13 @@ async function finishJob(b: DBook, kind: JobKind) {
     b.previewReadyAt = Date.now();
     S.costs.push({ at: Date.now(), rub: COST.image * b.pages.length });
     event("preview_ready");
+    if (b.parentId) return;
     log(`Превью готово: обложка и 2 разворота · уведомление покупателю «Превью готово» (${S.user?.email ?? "—"})`);
+    for (const c of copiesOf(b.id).slice(0, DEFAULTS.bulk.previewCopies - 1))
+      if (c.status === "TEXT_APPROVED") {
+        c.status = "PREVIEW_QUEUED";
+        startJob(c, "preview");
+      }
     return;
   }
   const had = b.pages.length;
@@ -351,32 +379,65 @@ export function resumeJobs() {
 const photos = new Map<string, { id: string; url: string; role: string }[]>();
 export const photosOf = (bookId: string) => photos.get(bookId) ?? [];
 
-async function readPhoto(file: File): Promise<{ url: string; w: number; h: number; bright: number }> {
-  const src = await new Promise<string>((res, rej) => {
-    const r = new FileReader();
-    r.onload = () => res(r.result as string);
-    r.onerror = rej;
-    r.readAsDataURL(file);
-  });
-  const img = new Image();
-  await new Promise((res, rej) => {
-    img.onload = res;
-    img.onerror = rej;
-    img.src = src;
-  });
-  const c = document.createElement("canvas");
-  c.width = c.height = 64;
-  const ctx = c.getContext("2d")!;
-  ctx.drawImage(img, 0, 0, 64, 64);
-  const d = ctx.getImageData(0, 0, 64, 64).data;
-  let sum = 0;
-  for (let i = 0; i < d.length; i += 4) sum += (d[i] + d[i + 1] + d[i + 2]) / 3;
-  const k = Math.min(1, 640 / Math.max(img.width, img.height));
-  const s = document.createElement("canvas");
-  s.width = Math.round(img.width * k);
-  s.height = Math.round(img.height * k);
-  s.getContext("2d")!.drawImage(img, 0, 0, s.width, s.height);
-  return { url: s.toDataURL("image/jpeg", 0.85), w: img.width, h: img.height, bright: sum / (d.length / 4) };
+// Фото анкеты — как /api/draft/photos и src/lib/photo-process.ts, но в браузере (canvas): тип по байтам, поворот по EXIF
+// (браузер применяет его сам), лица, резкость, свет, портрет «голова и плечи». Только в памяти вкладки.
+interface DraftPhoto { view: PhotoViewD; orig: HTMLCanvasElement; meta: { kind: "human" | "pet"; faces: Box[]; width: number; height: number } }
+type PhotoViewD = { id: string; slot: string; url: string; originalUrl: string | null; faces: Box[]; chosen: number; verdict: string; hints: string[]; codes: string[]; hair?: string; fur?: string };
+const drafts = new Map<string, DraftPhoto>();
+const canvas = (w: number, h: number) => Object.assign(document.createElement("canvas"), { width: w, height: h });
+function pxOf(c: HTMLCanvasElement, x = 0, y = 0, w = c.width, h = c.height, tw = w, th = h): Px {
+  const t = canvas(tw, th);
+  const ctx = t.getContext("2d")!;
+  ctx.drawImage(c, x, y, w, h, 0, 0, tw, th);
+  return { data: ctx.getImageData(0, 0, tw, th).data, width: tw, height: th, channels: 4 };
+}
+function photoMetrics(orig: HTMLCanvasElement, face: Box | null) {
+  const f = face ?? { x: 0.2, y: 0.15, w: 0.6, h: 0.6 };
+  const W = orig.width, H = orig.height;
+  const px = pxOf(orig, f.x * W, f.y * H, Math.max(8, f.w * W), Math.max(8, f.h * H), 256, 256);
+  const gray = new Float32Array(256 * 256);
+  for (let i = 0; i < gray.length; i++) gray[i] = 0.299 * px.data[i * 4] + 0.587 * px.data[i * 4 + 1] + 0.114 * px.data[i * 4 + 2];
+  const { mean, std } = meanStd(gray);
+  return { sharpness: Math.round(laplacianVariance(gray, 256, 256)), brightness: Math.round(mean), contrast: Math.round(std) };
+}
+function portraitUrl(orig: HTMLCanvasElement, face: Box | null, kind: "human" | "pet") {
+  const c = portraitCrop(face, orig.width, orig.height, kind);
+  const t = canvas(512, 512);
+  const ctx = t.getContext("2d")!;
+  ctx.filter = "contrast(1.05) saturate(1.04)";
+  ctx.drawImage(orig, c.left, c.top, c.side, c.side, 0, 0, 512, 512);
+  return t.toDataURL("image/jpeg", 0.88);
+}
+async function processDraftPhoto(file: File, slot: string, kind: "human" | "pet", adult: boolean): Promise<PhotoViewD> {
+  if (!sniffImage(new Uint8Array(await file.slice(0, 16).arrayBuffer()))) throw new Error("Подойдёт фото JPG, PNG, WebP или HEIC");
+  let bmp: ImageBitmap;
+  try {
+    bmp = await createImageBitmap(file);
+  } catch {
+    throw new Error("Не получилось открыть фото. Попробуйте другой файл.");
+  }
+  const k = Math.min(1, 2048 / Math.max(bmp.width, bmp.height));
+  const orig = canvas(Math.round(bmp.width * k), Math.round(bmp.height * k));
+  orig.getContext("2d")!.drawImage(bmp, 0, 0, orig.width, orig.height);
+  const sk = 160 / Math.max(orig.width, orig.height);
+  const small = pxOf(orig, 0, 0, orig.width, orig.height, Math.round(orig.width * sk), Math.round(orig.height * sk));
+  const { list, others } = kind === "human" ? mainFaces(detectFaces(small)) : { list: [], others: 0 };
+  const main = list[0] ?? null;
+  const facePx = main ? Math.round(Math.min(main.w * bmp.width, main.h * bmp.height)) : 0;
+  const m = photoMetrics(orig, main);
+  const v = judgePhoto({ kind, width: bmp.width, height: bmp.height, faces: list.length, otherFaces: others, facePx, ...m });
+  if (v.verdict === "reject") throw new Error(v.hints[0]);
+  const id = uuid();
+  const faces = list.map(({ x, y, w, h }) => ({ x, y, w, h }));
+  const view: PhotoViewD = {
+    id, slot, ...v, faces, chosen: 0,
+    url: portraitUrl(orig, main, kind),
+    originalUrl: faces.length > 1 ? orig.toDataURL("image/jpeg", 0.8) : null,
+    hair: main ? suggestHair(small, main, adult) : undefined,
+    fur: kind === "pet" ? suggestFur(small) : undefined,
+  };
+  drafts.set(id, { view, orig, meta: { kind, faces, width: bmp.width, height: bmp.height } });
+  return view;
 }
 
 // ───────── оформление (как priceCheckout / createOrder в src/lib/orders.ts) ─────────
@@ -483,6 +544,7 @@ interface CheckoutInput {
   promo?: string;
   contact: { name: string; phone?: string; email?: string };
   saveAddress?: boolean;
+  bulk?: boolean;
 }
 function priceCheckout(input: CheckoutInput) {
   const { formats, addons } = catalogForPricing();
@@ -523,8 +585,9 @@ export function markPaid(orderId: string, by?: string) {
   }
   event("pay");
   log(`${o.publicCode}: оплачено ${o.totalRub.toLocaleString("ru-RU")} ₽${by ? ` (перевод подтвердил ${by})` : " по QR"} · чек «Мой налог» (демо, не фискальный) · уведомление «Оплата получена»`);
-  const b = bookById(o.bookId);
-  if (b) {
+  for (const id of o.bookIds ?? [o.bookId]) {
+    const b = bookById(id);
+    if (!b) continue;
     b.paidFull = true;
     b.status = "FULL_QUEUED";
     b.progress = 0;
@@ -585,6 +648,47 @@ export function journeyOf(o: DOrder): JourneyOrder & { bookId: string; heroName?
   };
 }
 
+// ───────── «Книга для каждого в группе» (как src/lib/bulk-server.ts) ─────────
+export const copiesOf = (id: string) => S.books.filter((b) => b.parentId === id).sort((x, y) => (x.bulkIndex ?? 0) - (y.bulkIndex ?? 0));
+function makeCopies(parent: DBook, dedication = DEFAULT_BULK_DEDICATION) {
+  const a = AnswersV2.parse(parent.params);
+  (a.group?.members ?? []).forEach((_, j) => {
+    const i = j + 1;
+    const c: DBook = { ...parent, id: uuid(), createdAt: Date.now() + i, params: bulkCopyAnswers(a, i, dedication), parentId: parent.id, bulkIndex: i, status: "DRAFT", progress: 0, text: null, pages: [], variants: {}, withPhoto: false, paidFull: false, previewReadyAt: undefined, textApprovedAt: undefined };
+    S.books.push(c);
+    if (i < DEFAULTS.bulk.previewCopies) {
+      c.status = "TEXT_QUEUED";
+      startJob(c, "text");
+    }
+  });
+  log(`Заказ «для каждого»: ${1 + (a.group?.members.length ?? 0)} книг, тексты первых — сразу, остальные — после оплаты`);
+}
+const COPY_STATUS: Record<string, string> = { DRAFT: "сочиним после оплаты", TEXT_QUEUED: "сочиняем текст", TEXT_APPROVED: "текст готов", TEXT_READY: "текст готов", PREVIEW_QUEUED: "рисуем превью", PREVIEW_READY: "превью готово", FULL_QUEUED: "рисуем книгу", FULL_READY: "книга готова" };
+export function bulkState(parent: DBook) {
+  const a = AnswersV2.parse(parent.params);
+  const copies = copiesOf(parent.id);
+  return {
+    available: Boolean(plotForAnswers(a)?.group && a.group?.members.length),
+    created: copies.length > 0,
+    count: groupChildren(a).length,
+    dedication: copies[0]?.params.dedication ?? DEFAULT_BULK_DEDICATION,
+    tiers: DEFAULTS.bulk.tiers,
+    previewCopies: DEFAULTS.bulk.previewCopies,
+    copies: [parent, ...copies].map((b) => ({ id: b.id, name: b.params.hero.name, status: b.status, statusText: COPY_STATUS[b.status] ?? b.status, title: b.text?.title ?? null, dedication: b.parentId ? dedicationText(b.params) : null, cover: b.pages.includes(0) ? pageUrl(b, 0) : null })),
+  };
+}
+function priceBulk(input: CheckoutInput) {
+  const { formats } = catalogForPricing();
+  const parent = bookById(input.bookId)!;
+  const heroes = groupChildren(AnswersV2.parse(parent.params)).map((c) => c.name);
+  const ship = input.whoPrints === "bookimi" && input.shipping ? shipQuote(input.shipping.method, input.shipping.address) : null;
+  const promo = findPromo(input.promo);
+  const qq = bulkQuote({ whoPrints: input.whoPrints, formatKey: input.formatKey, heroes, shippingMethod: input.shipping?.method, shippingRub: ship?.priceRub ?? 0, discountPct: promo?.percentOff ?? 0, discountRub: promo?.amountOffRub ?? 0, freeShippingBooks: DEFAULTS.shipping.freeShippingBooks, tiers: DEFAULTS.bulk.tiers }, formats);
+  void bulkPct;
+  const eta = input.whoPrints === "bookimi" ? etaDate(new Date(), 5, ship?.daysMax ?? 0) : null;
+  return { quote: qq, promo: promo && !qq.bulkApplied ? { code: promo.code } : null, newbieApplied: false, ship, eta: eta ? { ready: eta.ready, eta: eta.eta, readyText: ruDate(eta.ready), etaText: ruDate(eta.eta) } : null };
+}
+
 // ───────── API ─────────
 async function handle(method: string, path: string, q: URLSearchParams, body: unknown): Promise<R> {
   const seg = path.split("/").filter(Boolean); // api, books, id, action
@@ -601,6 +705,50 @@ async function handle(method: string, path: string, q: URLSearchParams, body: un
     return ok({ ideas: await new DemoTextProvider().ideas(String(b0?.idea ?? ""), a.data) });
   }
 
+  if (path === "/api/draft/consent") {
+    if (method === "POST") {
+      if (b0?.photo && !b0?.pd && !S.consent.pd) return err("Отметьте согласие на обработку персональных данных");
+      if (b0?.pd && !S.consent.pd) log("Согласие на обработку персональных данных — дано (перед первым фото)");
+      if (b0?.photo && !S.consent.photo) log("Согласие на обработку фото — дано");
+      if (b0?.group && !S.consent.group) log("Подтверждено согласие родителей на фото детей группы");
+      S.consent = { ...S.consent, pd: S.consent.pd || Boolean(b0?.pd), photo: S.consent.photo || Boolean(b0?.photo), group: S.consent.group || Boolean(b0?.group) };
+      commit();
+    }
+    return ok({ pd: S.consent.pd, photo: S.consent.photo, group: Boolean(S.consent.group) });
+  }
+  if (path === "/api/draft/photos") {
+    if (method === "GET") return ok({ photos: (q.get("ids") ?? "").split(",").map((id) => drafts.get(id)?.view).filter(Boolean) });
+    if (method === "DELETE") {
+      drafts.delete(q.get("photo") ?? "");
+      return ok({ ok: true });
+    }
+    if (method === "PATCH") {
+      const d = drafts.get(String(b0?.id));
+      const face = d?.meta.faces[Number(b0?.face)];
+      if (!d || !face) return err("Фото не найдено", 404);
+      const m = photoMetrics(d.orig, face);
+      const v = judgePhoto({ kind: d.meta.kind, width: d.meta.width, height: d.meta.height, faces: 1, otherFaces: 0, facePx: Math.round(Math.min(face.w * d.meta.width, face.h * d.meta.height)), ...m });
+      d.view = { ...d.view, ...v, verdict: v.verdict === "reject" ? "warn" : v.verdict, chosen: Number(b0?.face), url: portraitUrl(d.orig, face, d.meta.kind) };
+      return ok(d.view);
+    }
+    if (!S.consent.photo || !S.consent.pd) return err("Сначала дайте согласие на обработку фото", 403);
+    const fd = body as FormData;
+    const file = fd?.get?.("file");
+    const slot = String(fd?.get?.("slot") ?? "main");
+    if (slot === "member" && !S.consent.group) return err("Подтвердите, что родители детей согласны на фото", 403);
+    if (!(file instanceof File)) return err("Выберите файл");
+    if (file.size > 15 * 1024 * 1024) return err("Файл больше 15 МБ");
+    try {
+      const v = await processDraftPhoto(file, slot, fd.get("kind") === "pet" ? "pet" : "human", fd.get("adult") === "1");
+      event("photo_upload");
+      log(`Фото обработано (${v.verdict}${v.codes.length ? `: ${v.codes.join(", ")}` : ""}) — в демо только в памяти вкладки; на сайте без книги удаляется через ${DEFAULTS.limits.photoTtlNoBookHours} ч, с книгой — через ${DEFAULTS.limits.photoTtlDays} дней`);
+      commit();
+      return ok(v);
+    } catch (e) {
+      return err((e as Error).message);
+    }
+  }
+
   if (path === "/api/books" && method === "POST") {
     const parsed = AnswersV2.safeParse(b0?.answers);
     if (!parsed.success) return err(parsed.error.issues[0]?.message ?? "Заполните обязательные шаги");
@@ -612,6 +760,8 @@ async function handle(method: string, path: string, q: URLSearchParams, body: un
     if (!ART_STYLE_IDS.some((x) => x.id === a.artStyle)) a.artStyle = plot?.artStyles[0] ?? "watercolor-air";
     if (a.mood && !moodsFor(a.audience, a.hero.age).some((m) => m.id === a.mood)) a.mood = "";
     if (!a.story.slug && !a.story.idea) return err("Выберите сюжет или опишите свою идею");
+    if (!plot?.group) a.group = undefined;
+    else if (a.group) a.group = { members: a.group.members.slice(0, groupMembersMax(plot)), adults: a.group.adults.slice(0, plot.group.includeAdults?.max ?? 0) };
     const limits = DEFAULTS.limits;
     if (!hit("device", "text", limits.textsPerDevice)) return err(`Сегодня можно сочинить не больше ${limits.textsPerDevice} сказок. Возвращайтесь завтра — черновик сохранится.`, 429);
     const book: DBook = {
@@ -627,12 +777,15 @@ async function handle(method: string, path: string, q: URLSearchParams, body: un
       mood: a.mood || "",
       moodChangesPreview: 0,
       moodChangesFull: 0,
-      withPhoto: false,
+      withPhoto: (a.hero.photoIds ?? []).some((id) => drafts.has(id)),
       paidFull: false,
       pages: [],
       variants: {},
     };
     S.books.push(book);
+    // Фото с шага «Герои» — к книге (в демо — в памяти вкладки)
+    photos.set(book.id, (a.hero.photoIds ?? []).map((id) => drafts.get(id)?.view).filter(Boolean).map((v) => ({ id: v!.id, url: v!.url, role: "main" })));
+    if (b0?.bulk && plot?.group && a.group?.members.length) makeCopies(book);
     event("quiz_step");
     log(`Анкета: ${a.hero.name} (${a.audience}), ${plot ? `«${plot.title.replace("[Имя]", a.hero.name)}»` : "своя история"}, повод — ${a.occasion.key}${appearanceLine(a) ? `, внешность: ${appearanceLine(a)}` : ""}`);
     startJob(book, "text");
@@ -658,7 +811,7 @@ async function handle(method: string, path: string, q: URLSearchParams, body: un
         withPhoto: book.withPhoto,
         paid: book.paidFull,
         loggedIn: Boolean(S.user),
-        consent: { pd: S.consent.pd, photo: S.consent.photo },
+        consent: { pd: S.consent.pd, photo: S.consent.photo, group: Boolean(S.consent.group) },
         pages: book.pages.map((i) => ({ index: i, text: i === 0 ? book.text?.title ?? "" : book.text?.spreads[i - 1]?.text ?? "", url: pageUrl(book, i, { full }) })),
         photos: photosOf(book.id).filter((p) => p.role === "main").map((p) => ({ id: p.id, url: p.url })),
       });
@@ -677,38 +830,22 @@ async function handle(method: string, path: string, q: URLSearchParams, body: un
       return ok({ ok: true });
     }
     if (seg[3] === "voice") return ok({ pages: [] });
+    if (seg[3] === "bulk") {
+      if (method === "POST") {
+        const ded = b0?.dedication !== undefined ? String(b0.dedication).slice(0, 300) : undefined;
+        if (!copiesOf(book.id).length) makeCopies(book, ded);
+        else if (ded !== undefined) for (const c of copiesOf(book.id)) c.params = { ...c.params, dedication: ded };
+        commit();
+      }
+      return ok(bulkState(book));
+    }
     if (seg[3] === "photos") {
       if (method === "DELETE") {
         photos.set(book.id, photosOf(book.id).filter((p) => p.id !== q.get("photo")));
         return ok({ ok: true });
       }
-      if (!DEFAULTS.flags.photoUploadEnabled) return err("Приём фото пока выключен — иллюстрации будут по описанию", 403);
-      if (!S.consent.photo) return err("Сначала дайте согласие на обработку фото", 403);
-      const fd = body as FormData;
-      const file = fd?.get?.("file");
-      const role = String(fd?.get?.("role") ?? "main");
-      if (!(file instanceof File)) return err("Выберите файл");
-      if (file.size > 15 * 1024 * 1024) return err("Файл больше 15 МБ");
-      if (!/^image\/(jpeg|png|webp|heic|heif)$/.test(file.type)) return err("Подойдёт JPG, PNG или WebP");
-      const list = photosOf(book.id);
-      if (list.filter((p) => p.role === role).length >= (role === "main" ? 3 : 1)) return err(role === "main" ? "Не больше 3 фото" : "Одно фото на героя");
-      let ph: Awaited<ReturnType<typeof readPhoto>>;
-      try {
-        ph = await readPhoto(file);
-      } catch {
-        return err("Не получилось открыть фото. Попробуйте другой файл.");
-      }
-      const minSide = Math.min(ph.w, ph.h);
-      const hints: string[] = [];
-      if (minSide < 500) return err("Фото слишком маленькое. Нужно хотя бы 500 пикселей по короткой стороне.");
-      if (minSide < 900) hints.push("Фото небольшое — лучше снять ближе.");
-      if (ph.bright < 60) hints.push("Темновато — встаньте лицом к окну.");
-      const id = uuid();
-      photos.set(book.id, [...list, { id, url: ph.url, role }]);
-      event("photo_upload");
-      log(`Фото героя загружено (в демо — только в памяти вкладки; на сайте удаляется через ${DEFAULTS.limits.photoTtlDays} дней)`);
-      commit();
-      return ok({ id, hints });
+      // Загрузка фото теперь — на шаге «Герои» анкеты (/api/draft/photos)
+      return err("Фото загружаются в анкете, на шаге «Герои»", 410);
     }
     if (seg[3] === "action" && method === "POST") return bookAction(book, b0 ?? {});
   }
@@ -760,7 +897,7 @@ async function handle(method: string, path: string, q: URLSearchParams, body: un
   if (path === "/api/checkout/quote" && method === "POST") {
     const input = b0 as unknown as CheckoutInput;
     if (!bookById(input.bookId)) return err("Не найдено", 404);
-    return ok(priceCheckout(input));
+    return ok(input.bulk ? priceBulk(input) : priceCheckout(input));
   }
   if (path === "/api/checkout" && method === "POST") {
     if (!S.user) return err("Войдите по коду", 401);
@@ -780,8 +917,10 @@ async function handle(method: string, path: string, q: URLSearchParams, body: un
         a.pvzAddress = point.address;
       }
     }
-    const priced = priceCheckout(input);
+    const priced = input.bulk ? priceBulk(input) : priceCheckout(input);
     if (priced.quote.errors.length) return err(priced.quote.errors.join("; "));
+    if (input.bulk && !copiesOf(book.id).length) makeCopies(book);
+    const bookIds = input.bulk ? [book.id, ...copiesOf(book.id).map((c) => c.id)] : undefined;
     const title = book.text?.title ?? "Персональная книга";
     const qq = priced.quote;
     const o: DOrder = {
@@ -790,6 +929,7 @@ async function handle(method: string, path: string, q: URLSearchParams, body: un
       createdAt: Date.now(),
       whoPrints: input.whoPrints,
       bookId: book.id,
+      bookIds,
       items: qq.lines.map((l) => ({ kind: l.kind, refKey: l.key, title: l.kind === "format" ? `Изготовление персонализированной книги «${title}» на заказ: ${l.title}` : `Изготовление на заказ: ${l.title}`, priceRub: l.priceRub })),
       subtotalRub: qq.subtotalRub,
       discountRub: qq.discountRub,

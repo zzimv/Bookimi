@@ -3,6 +3,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import { api, goal, rub } from "@/lib/client";
+import { toggleAddon } from "@/lib/pricing";
 import { addressError, cleanAddress, type Prefill } from "@/lib/delivery";
 import { CityInput } from "./CityInput";
 import { PvzPicker } from "./PvzPicker";
@@ -10,11 +11,20 @@ import { PvzPicker } from "./PvzPicker";
 export interface Fmt { key: string; kind: "PDF" | "PRINT"; title: string; priceRub: number; widthMm: number | null; heightMm: number | null; cover: string; pages: number }
 export interface Add { key: string; kind: string; title: string; description: string; priceRub: number | null; percentOff: number | null; requiresPrint: boolean }
 interface Quote {
-  quote: { lines: { key: string; title: string; priceRub: number; kind: string }[]; subtotalRub: number; pdfCreditRub: number; discountRub: number; shippingRub: number; totalRub: number; errors: string[] };
+  quote: { lines: { key: string; title: string; priceRub: number; kind: string }[]; subtotalRub: number; pdfCreditRub: number; discountRub: number; shippingRub: number; totalRub: number; errors: string[]; bulkApplied?: boolean; bulkPct?: number };
   newbieApplied: boolean;
   promo: { code: string } | null;
   ship: { priceRub: number; daysMin: number; daysMax: number; source: string } | null;
   eta: { readyText: string; etaText: string } | null;
+}
+/** «Книга для каждого в группе» (src/lib/bulk.ts): копии, скидки по количеству, общее посвящение. */
+export interface CheckoutBulk {
+  count: number;
+  initialOn: boolean;
+  dedication: string;
+  tiers: { min: number; pct: number }[];
+  previewCopies: number;
+  copies: { id: string; name: string; statusText: string; cover: string | null; dedication?: string | null }[];
 }
 
 const PDF_FILES = [
@@ -60,6 +70,7 @@ export function Checkout(props: {
   pdfPaid: number;
   /** Получатель и адрес «из прошлого раза» (src/lib/delivery.ts → pickPrefill). */
   prefill?: Prefill;
+  bulk?: CheckoutBulk | null;
 }) {
   const router = useRouter();
   const [who, setWho] = useState<"self" | "bookimi">(props.printEnabled ? props.initialWho : "self");
@@ -80,6 +91,10 @@ export function Checkout(props: {
   const [q, setQ] = useState<Quote | null>(null);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
+  const [bulkOn, setBulkOn] = useState(Boolean(props.bulk?.initialOn));
+  const [bulkInfo, setBulkInfo] = useState(props.bulk ?? null);
+  const [dedication, setDedication] = useState(props.bulk?.dedication ?? "");
+  const [dedSaved, setDedSaved] = useState(true);
 
   const formatKey = useMemo(() => {
     const prefer = `${size}-${cover}`;
@@ -96,14 +111,15 @@ export function Checkout(props: {
       bookId: props.bookId,
       whoPrints: who,
       formatKey: who === "bookimi" ? formatKey : undefined,
-      addons: addons.filter((k) => availableAddons.some((a) => a.key === k)),
+      addons: bulkOn ? [] : addons.filter((k) => availableAddons.some((a) => a.key === k)),
+      bulk: bulkOn || undefined,
       shipping: who === "bookimi" ? { method, address: cleanAddress(method, addr) } : undefined,
       saveAddress,
       promo: promo || undefined,
       contact,
       voice,
     }),
-    [props.bookId, who, formatKey, addons, method, addr, promo, contact, voice, availableAddons, saveAddress],
+    [props.bookId, who, formatKey, addons, method, addr, promo, contact, voice, availableAddons, saveAddress, bulkOn],
   );
 
   useEffect(() => {
@@ -128,6 +144,7 @@ export function Checkout(props: {
     }
     setBusy(true);
     try {
+      if (bulkOn && !dedSaved) await saveDedication();
       const r = await api<{ orderId: string }>("/api/checkout", payload);
       goal("choose_print", { who });
       router.push(`/zakaz/${r.orderId}`);
@@ -137,11 +154,70 @@ export function Checkout(props: {
     }
   }
 
+  async function saveDedication() {
+    const r = await api<CheckoutBulk>(`/api/books/${props.bookId}/bulk`, { dedication });
+    setBulkInfo((b) => (b ? { ...b, copies: r.copies } : b));
+    setDedSaved(true);
+  }
+  async function toggleBulk(on: boolean) {
+    setBulkOn(on);
+    if (on && props.bulk && props.bulk.copies.length <= 1) {
+      try {
+        const r = await api<CheckoutBulk>(`/api/books/${props.bookId}/bulk`, {});
+        setBulkInfo((b) => (b ? { ...b, copies: r.copies } : b));
+      } catch (e) {
+        setError((e as Error).message);
+      }
+    }
+  }
+  const tierNow = bulkInfo ? [...bulkInfo.tiers].sort((x, y) => x.min - y.min).reduce((p, t) => (bulkInfo.count >= t.min ? t.pct : p), 0) : 0;
+
   const sizeFmt = (id: string) => props.formats.find((f) => f.key.startsWith(id + "-"));
 
   return (
     <div className="buy">
       <div>
+        {bulkInfo && (
+          <section className={`panel bulk-cta ${bulkOn ? "bulk-cta--on" : ""}`} data-bulk-checkout style={{ marginBottom: 20 }}>
+            <b>Книга для каждого ребёнка группы</b>
+            <p className="small" style={{ margin: "4px 0 10px" }}>
+              {bulkInfo.count} книг одним заказом: в каждой главный герой — свой ребёнок, остальные рядом.
+              {tierNow > 0 ? <> Скидка за количество — <b>−{tierNow}%</b>.</> : null}{who === "bookimi" ? " Одна доставка на всех — в сад, школу или одному из родителей; до пункта СДЭК бесплатно." : ""}
+            </p>
+            <div className="chips">
+              <button type="button" className="chip" aria-pressed={!bulkOn} onClick={() => toggleBulk(false)}>Одна книга</button>
+              <button type="button" className="chip" aria-pressed={bulkOn} data-bulk-on onClick={() => toggleBulk(true)}>Для каждого — {bulkInfo.count}</button>
+            </div>
+            {bulkOn && (
+              <>
+                <ol className="bulk-copies">
+                  {bulkInfo.copies.slice(0, bulkInfo.previewCopies).map((c, i) => (
+                    <li key={c.id} data-copy={i}>
+                      {c.cover ? (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img src={c.cover} alt={`Обложка: ${c.name}`} width={56} height={56} />
+                      ) : (
+                        <span className="bulk-copies__ph" aria-hidden="true">{c.name.slice(0, 1)}</span>
+                      )}
+                      <span><b>{c.name}</b><small className="muted">{c.statusText}</small></span>
+                    </li>
+                  ))}
+                </ol>
+                {bulkInfo.count > bulkInfo.previewCopies && (
+                  <p className="small muted">И ещё {bulkInfo.count - bulkInfo.previewCopies}: {bulkInfo.copies.slice(bulkInfo.previewCopies, bulkInfo.previewCopies + 6).map((c) => c.name).join(", ")}{bulkInfo.count > bulkInfo.previewCopies + 6 ? "…" : ""} — нарисуем после оплаты.</p>
+                )}
+                <label className="field">
+                  <span>Посвящение — одно на все книги</span>
+                  <textarea className="textarea" name="bulk-dedication" maxLength={300} value={dedication} onChange={(e) => { setDedication(e.target.value); setDedSaved(false); }} />
+                  <small>{"{ГЕРОЙ.дат}"} — имя ребёнка этой книги («Ане»), {"{Р:Дорогому|Дорогой}"} — по полу. {!dedSaved && <button type="button" className="link-btn" onClick={() => saveDedication().catch((e) => setError((e as Error).message))}>Сохранить</button>}</small>
+                </label>
+                {dedSaved && bulkInfo.copies[1]?.dedication && (
+                  <p className="small dedication-sample">Так будет в книге, где герой — {bulkInfo.copies[1].name}: «{bulkInfo.copies[1].dedication}»</p>
+                )}
+              </>
+            )}
+          </section>
+        )}
         <h1 style={{ fontSize: "var(--fs-xl)" }}>Кто печатает книгу?</h1>
         <div className="choice-cards" style={{ marginBottom: 24 }}>
           <button className="big-choice" aria-pressed={who === "self"} onClick={() => setWho("self")}>
@@ -198,12 +274,12 @@ export function Checkout(props: {
           </>
         )}
 
-        {availableAddons.length > 0 && (
+        {availableAddons.length > 0 && !bulkOn && (
           <>
             <h2 style={{ fontSize: "var(--fs-lg)", marginTop: 24 }}>Добавить к книге</h2>
             <div className="choice-cards">
               {shownAddons.map((a) => (
-                <button key={a.key} className="choice" aria-pressed={addons.includes(a.key)} onClick={() => setAddons(addons.includes(a.key) ? addons.filter((x) => x !== a.key) : [...addons, a.key])}>
+                <button key={a.key} className="choice" aria-pressed={addons.includes(a.key)} onClick={() => setAddons(toggleAddon(addons, a.key))}>
                   <div>
                     <strong>{a.title}</strong>
                     <span>{a.percentOff ? `−${a.percentOff}% от цены книги` : a.priceRub ? `+${rub(a.priceRub)}` : ""}</span>
@@ -271,7 +347,7 @@ export function Checkout(props: {
                     <label className="field"><span>Комментарий курьеру</span><input className="input ym-disable-keys" placeholder="Подъезд, этаж, домофон, когда удобно" maxLength={200} value={addr.comment} onChange={(e) => setAddr({ ...addr, comment: e.target.value })} /></label>
                   </>
                 )}
-                {q?.ship && addr.city && (
+                {q?.ship && addr.city && (addr.region || addr.cityCode) && (
                   <p className="small ship-line" aria-live="polite">
                     {METHOD_LABEL[method] ?? "Доставка"} · {addr.city}: <b>{q.ship.priceRub ? rub(q.ship.priceRub) : "бесплатно"}</b>
                     {q.ship.daysMax > 0 && <>, {q.ship.daysMin === q.ship.daysMax ? q.ship.daysMax : `${q.ship.daysMin}–${q.ship.daysMax}`} дн. в пути</>}
@@ -298,11 +374,15 @@ export function Checkout(props: {
         {q ? (
           <table>
             <tbody>
-              {q.quote.lines.map((l) => (
-                <tr key={l.key}><td>{l.title}</td><td>{rub(l.priceRub)}</td></tr>
-              ))}
+              {bulkOn && q.quote.lines.length > 1 ? (
+                <tr><td>{q.quote.lines.length} книг × {rub(q.quote.lines[0].priceRub)}</td><td>{rub(q.quote.subtotalRub)}</td></tr>
+              ) : (
+                q.quote.lines.map((l, i) => (
+                  <tr key={`${l.key}-${i}`}><td>{l.title}</td><td>{rub(l.priceRub)}</td></tr>
+                ))
+              )}
               {q.quote.pdfCreditRub > 0 && <tr><td>Зачёт оплаченного PDF</td><td>−{rub(q.quote.pdfCreditRub)}</td></tr>}
-              {q.quote.discountRub > 0 && <tr><td>Скидка{q.newbieApplied ? " по приглашению друга" : q.promo ? ` (${q.promo.code})` : ""}</td><td>−{rub(q.quote.discountRub)}</td></tr>}
+              {q.quote.discountRub > 0 && <tr><td>Скидка{q.quote.bulkApplied ? ` за количество (−${q.quote.bulkPct}%)` : q.newbieApplied ? " по приглашению друга" : q.promo ? ` (${q.promo.code})` : ""}</td><td>−{rub(q.quote.discountRub)}</td></tr>}
               {who === "bookimi" && <tr><td>Доставка{q.ship?.source === "table" && method !== "pickup" ? " (ориентир)" : ""}</td><td>{q.quote.shippingRub ? rub(q.quote.shippingRub) : "0 ₽"}</td></tr>}
               <tr className="total"><td>Итого</td><td>{rub(q.quote.totalRub)}</td></tr>
             </tbody>

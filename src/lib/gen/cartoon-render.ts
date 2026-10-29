@@ -9,6 +9,7 @@
 import { spawn } from "node:child_process";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
+import { cpus } from "node:os";
 import sharp from "sharp";
 import { ambientBed, AUDIO_RATE, fromS16, placeClips, sfxTrack, wav } from "./cartoon-audio";
 import { CARTOON_TIMING, cartoonTimeline, subtitleChunks, type CartoonTiming, type Cue, type CueKind, type Particles, type Timeline } from "./cartoon-script";
@@ -43,6 +44,8 @@ export interface RenderInput {
   particles: Particles;
   subtitles: boolean;
   vertical: boolean;
+  /** Высота вертикальной версии (1920 — 1080×1920, 1280 — 720×1280, дешевле). */
+  verticalHeight?: number;
   /** Лицензированный трек владельца (иначе синтез). */
   music?: Buffer | null;
   /** Громкость музыки относительно синтеза (1 — по умолчанию). */
@@ -222,28 +225,59 @@ export interface CameraPlan {
   breathe: boolean;
 }
 
-/** План камеры по композиции: где герой и какой это кадр (заставка, разворот, финал). */
-export function planCamera(kind: CueKind, i: number, w: number, h: number, focus: { x: number; y: number }, layered: boolean): CameraPlan {
-  const clampX = (cx: number, z: number) => Math.max(h / z / 2, Math.min(w - h / z / 2, cx));
-  const clampY = (cy: number, z: number) => Math.max(h / z / 2, Math.min(h - h / z / 2, cy));
-  const mk = (z0: number, z1: number, cx0: number, cx1: number, cy0: number, cy1: number, hero: CameraPlan["hero"]): CameraPlan => ({
-    z0, z1, cx0: clampX(cx0, z0), cx1: clampX(cx1, z1), cy0: clampY(cy0, z0), cy1: clampY(cy1, z1), hero, breathe: !layered,
-  });
-  if (kind === "title") return mk(1.0, 1.1, w / 2, focus.x, h / 2, h * 0.52, "breathe");
+/**
+ * План камеры по композиции: где герои (рамка слоя или точка «внимания») и какой это кадр.
+ * Любое движение держит рамку героев целиком в кадре (с полем), иначе панорама «режет» героя у края.
+ */
+export function planCamera(
+  kind: CueKind,
+  i: number,
+  w: number,
+  h: number,
+  focus: { x: number; y: number },
+  layered: boolean,
+  box?: { x0: number; x1: number; y0: number; y1: number },
+): CameraPlan {
+  const b = box ?? { x0: focus.x - h * 0.2, x1: focus.x + h * 0.2, y0: focus.y - h * 0.25, y1: focus.y + h * 0.3 };
+  const margin = 36;
+  const fitX = (cx: number, z: number) => {
+    const hw = h / z / 2;
+    let lo = Math.max(hw, b.x1 - hw + margin);
+    let hi = Math.min(w - hw, b.x0 + hw - margin);
+    if (lo > hi) lo = hi = Math.max(hw, Math.min(w - hw, (b.x0 + b.x1) / 2)); // герои шире окна — по центру группы
+    return Math.max(lo, Math.min(hi, cx));
+  };
+  const fitY = (cy: number, z: number) => {
+    const hh = h / z / 2;
+    let lo = Math.max(hh, b.y1 - hh + margin * 0.5);
+    let hi = Math.min(h - hh, b.y0 + hh - margin * 0.5);
+    if (lo > hi) lo = hi = Math.max(hh, Math.min(h - hh, (b.y0 + b.y1) / 2));
+    // По возможности ноги героев — выше полосы субтитров (нижние 16% кадра)
+    const subLo = b.y1 - 0.68 * hh;
+    if (subLo > lo && subLo <= Math.min(hi, h - hh)) lo = subLo;
+    return Math.max(lo, Math.min(hi, cy));
+  };
+  const mk = (z0: number, z1: number, cx0: number, cx1: number, cy0: number, cy1: number, hero: CameraPlan["hero"]): CameraPlan => {
+    // Наезд не крупнее, чем помещается группа героев
+    const maxZ = Math.max(1, Math.min(1.18, h / Math.max(1, b.y1 - b.y0 + margin * 1.5), w / Math.max(1, b.x1 - b.x0 + margin * 2)));
+    const za = Math.min(z0, maxZ);
+    const zb = Math.min(z1, maxZ);
+    return { z0: za, z1: zb, cx0: fitX(cx0, za), cx1: fitX(cx1, zb), cy0: fitY(cy0, za), cy1: fitY(cy1, zb), hero, breathe: !layered };
+  };
+  const cx = (b.x0 + b.x1) / 2;
+  if (kind === "title") return mk(1.0, 1.08, w / 2, cx, h / 2, h * 0.52, "breathe");
   if (kind === "end") return mk(1.12, 1.0, w / 2, w / 2, h / 2, h / 2, "breathe");
-  const heroRight = focus.x > w / 2;
+  const heroRight = cx > w / 2;
   switch (i % 3) {
-    case 1: {
-      // Панорама: от пейзажа к герою, слегка приближаясь — герой «идёт»
-      const from = heroRight ? h * 0.55 : w - h * 0.55;
-      return mk(1.04, 1.1, from, focus.x, h / 2, focus.y, "walk");
-    }
+    case 1:
+      // Панорама со стороны пейзажа к героям, слегка приближаясь; герои «идут» навстречу
+      return mk(1.04, 1.1, heroRight ? 0 : w, cx, h / 2, focus.y, "walk");
     case 2:
-      // Наезд на героя
-      return mk(1.0, 1.17, (w / 2 + focus.x) / 2, focus.x, h / 2, focus.y, "sway");
+      // Наезд на героев
+      return mk(1.0, 1.15, (w / 2 + cx) / 2, cx, h / 2, focus.y, "sway");
     default:
-      // Отъезд от героя с лёгким дрейфом к центру
-      return mk(1.16, 1.03, focus.x, (focus.x * 2 + w / 2) / 3, focus.y, h / 2, "breathe");
+      // Отъезд от героев с лёгким дрейфом к пейзажу
+      return mk(1.14, 1.02, cx, heroRight ? 0 : w, focus.y, h / 2, "breathe");
   }
 }
 
@@ -252,48 +286,55 @@ const n3 = (x: number) => (Math.round(x * 1000) / 1000).toString();
 /** Плавность: смесь линейной и smoothstep — без рывков в начале и без полной остановки на переходе. */
 const ease = (D: number) => `(0.35*clip(t/${n3(D)},0,1)+0.65*(pow(clip(t/${n3(D)},0,1),2)*(3-2*clip(t/${n3(D)},0,1))))`;
 
-function sceneFilter(idx: number, inV: string, inSprite: string | null, p: Prepared, plan: CameraPlan, dur: number, out: string): string {
+/**
+ * Граф одной сцены: картинка (кэш одного кадра) → обрезка по ходу камеры → герой-слой с движением →
+ * масштаб/кадр камеры (эвал на каждый кадр, субпиксельный масштаб, сдвиг — по пикселю выхода) → частицы.
+ */
+export function sceneFilter(p: Prepared, plan: CameraPlan, dur: number, inputs: { v: string; sprite: string | null; particles: string | null }): string {
   const frames = Math.round(dur * FPS);
   const e = ease(dur);
   const lerp = (a: number, b: number) => `(${n3(a)}+(${n3(b - a)})*${e})`;
   const breathe = plan.breathe ? `*(1+0.006*sin(2*PI*t/5.5))` : "";
   const z = `(${lerp(plan.z0, plan.z1)}${breathe})`;
-  // Статическая обрезка по ходу камеры — масштабировать каждый кадр меньше пикселей
+  // Статическая обрезка по ходу камеры — меньше пикселей на кадр для наложения и масштаба
   const half0 = p.h / Math.min(plan.z0, plan.z1) / 2;
   const rx0 = Math.max(0, Math.floor(Math.min(plan.cx0, plan.cx1) - half0 - 8));
   const rx1 = Math.min(p.w, Math.ceil(Math.max(plan.cx0, plan.cx1) + half0 + 8));
   const rw = rx1 - rx0;
   const S = `(${SIZE}*${z}/${p.h})`;
   const chain: string[] = [];
-  const loop = (label: string, o: string) => `[${label}]loop=loop=${frames - 1}:size=1:start=0,setpts=N/${FPS}/TB[${o}]`;
-  let base = `b${idx}`;
-  chain.push(loop(inV, base));
-  if (inSprite && p.sprite) {
+  const loop = (label: string) => `[${label}]loop=loop=${frames - 1}:size=1:start=0,setpts=N/${FPS}/TB`;
+  chain.push(`${loop(inputs.v)},crop=${rw}:${p.h}:${rx0}:0[base]`);
+  let base = "base";
+  if (inputs.sprite && p.sprite) {
     const s = p.sprite;
-    chain.push(loop(inSprite, `sl${idx}`));
-    let spr = `sl${idx}`;
-    let x = `${s.x}`;
+    let spr = "spr";
+    chain.push(`${loop(inputs.sprite)}[spr]`);
+    let x = `${s.x - rx0}`;
     let y = `${s.y}`;
     if (plan.hero === "breathe") y = `${s.y}-7*(0.5-0.5*cos(2*PI*t/2.8))`;
     if (plan.hero === "walk") {
       const dir = plan.cx1 >= plan.cx0 ? 1 : -1;
-      x = `${s.x}+${dir * 46}*${e}`;
+      x = `${s.x - rx0}+${dir * 46}*${e}`;
       y = `${s.y}-6*abs(sin(PI*t/0.95))`;
     }
     if (plan.hero === "sway") {
-      chain.push(`[${spr}]format=rgba,rotate=a='0.022*sin(2*PI*t/3.4)':c=none:ow=iw:oh=ih[sr${idx}]`);
-      spr = `sr${idx}`;
+      chain.push(`[spr]format=rgba,rotate=a='0.022*sin(2*PI*t/3.4)':c=none:ow=iw:oh=ih[sprr]`);
+      spr = "sprr";
       y = `${s.y}-4*(0.5-0.5*cos(2*PI*t/3.4))`;
     }
-    chain.push(`[${base}][${spr}]overlay=x='${x}':y='${y}':eval=frame:format=rgb[o${idx}]`);
-    base = `o${idx}`;
+    chain.push(`[base][${spr}]overlay=x='${x}':y='${y}':eval=frame:format=rgb[ov]`);
+    base = "ov";
   }
   chain.push(
-    `[${base}]crop=${rw}:${p.h}:${rx0}:0,` +
-      `scale=w='trunc(${rw}*${S})':h='trunc(${p.h}*${S})':eval=frame:flags=bicubic,` +
+    `[${base}]scale=w='trunc(${rw}*${S})':h='trunc(${p.h}*${S})':eval=frame:flags=bilinear,` +
       `crop=${SIZE}:${SIZE}:x='clip((${lerp(plan.cx0, plan.cx1)}-${rx0})*in_w/${rw}-${SIZE / 2},0,in_w-${SIZE})':y='clip(${lerp(plan.cy0, plan.cy1)}*in_h/${p.h}-${SIZE / 2},0,in_h-${SIZE})',` +
-      `setsar=1,format=yuv420p[${out}]`,
+      `setsar=1,format=yuv420p[cam]`,
   );
+  if (inputs.particles) {
+    chain.push(`[${inputs.particles}]scale=${SIZE}:${SIZE}:flags=bilinear,format=rgba[pt]`);
+    chain.push(`[cam][pt]overlay=0:0:shortest=1:format=yuv420,format=yuv420p[out]`);
+  } else chain.push(`[cam]null[out]`);
   return chain.join(";");
 }
 
@@ -412,7 +453,7 @@ export function buildAss(o: { title: string; dedication: string; cues: Cue[]; tl
   const tl = wrapLines(o.title, 22).slice(0, 3);
   const tEnd = s0.start + s0.dur - o.xfade * 0.6;
   const bandH = 70 + tl.length * 96;
-  add(0.2, tEnd, "Band", `{\\fad(500,500)\\an7\\pos(0,${150 - bandH / 2 + 30})\\blur26\\p1}m 60 0 l 1020 0 1020 ${bandH} 60 ${bandH}{\\p0}`);
+  add(0.2, tEnd, "Band", `{\\fad(500,500)\\an7\\pos(0,${150 - bandH / 2 + 30})\\blur34\\p1}m 60 0 l 1020 0 1020 ${bandH} 60 ${bandH}{\\p0}`);
   add(0.45, tEnd, "Title", `{\\fad(700,500)\\move(540,196,540,180,0,1400)}${assText(tl.join("\n"))}`);
   // Субтитры разворотов
   if (o.subtitles) {
@@ -451,7 +492,7 @@ ScaledBorderAndShadow: yes
 Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
 Style: Sub,Nunito,50,&H00FFFFFF,&H00FFFFFF,&H00301E14,&H96000000,-1,0,0,0,100,100,0,0,1,3.4,1.6,2,96,96,74,204
 Style: Title,Nunito ExtraBold,82,&H00FFFFFF,&H00FFFFFF,&H00303B1E,&H78000000,0,0,0,0,100,100,0.5,0,1,5,2,8,60,60,0,204
-Style: Band,Nunito,20,&H5A1E2A14,&H00FFFFFF,&HFF000000,&HFF000000,0,0,0,0,100,100,0,0,1,0,0,7,0,0,0,204
+Style: Band,Nunito,20,&H8C1E2A14,&H00FFFFFF,&HFF000000,&HFF000000,0,0,0,0,100,100,0,0,1,0,0,7,0,0,0,204
 Style: End,Nunito ExtraBold,128,&H00F4FBFF,&H00FFFFFF,&H00303B1E,&H78000000,0,0,0,0,100,100,1,0,1,5,2,5,60,60,0,204
 Style: Ded,Nunito,50,&H00FFFFFF,&H00FFFFFF,&H00301E14,&H96000000,-1,0,0,0,100,100,0,0,1,3,1.5,5,90,90,0,204
 Style: Small,Nunito,30,&H30FFFFFF,&H00FFFFFF,&H00301E14,&HB4000000,-1,0,0,0,100,100,0.5,0,1,2,0,2,60,60,56,204
@@ -469,7 +510,9 @@ async function buildAudio(dir: string, voiceFiles: string[], tl: Timeline, inp: 
   const clips = await Promise.all(voiceFiles.map(async (f, i) => ({ at: tl.scenes[i].voiceAt, pcm: await decodeMono(f) })));
   await writeFile(join(dir, "narration.wav"), wav(placeClips(total, clips), AUDIO_RATE, 1));
   // Шелест — у каждого перехода (сцена i начинается переходом)
-  await writeFile(join(dir, "sfx.wav"), wav(sfxTrack(total, tl.scenes.slice(1).map((s) => s.start - 0.12)), AUDIO_RATE, 2));
+  // Музыка и шелест — 24 кГц (мягкий синтез выше 12 кГц не звучит), вдвое меньше памяти; ffmpeg пересчитает в 48 кГц
+  const SYN = 24000;
+  await writeFile(join(dir, "sfx.wav"), wav(sfxTrack(total, tl.scenes.slice(1).map((s) => s.start - 0.12), SYN), SYN, 2));
   const musicIn = join(dir, "music-in");
   const vol = inp.musicVolume ?? 1;
   let musicArgs: string[];
@@ -478,7 +521,7 @@ async function buildAudio(dir: string, voiceFiles: string[], tl: Timeline, inp: 
     // Трек владельца: по кругу на всю длину, громкость ~ как у синтеза, затухание в конце
     musicArgs = ["-stream_loop", "-1", "-i", musicIn];
   } else {
-    await writeFile(join(dir, "music.wav"), wav(ambientBed(total, inp.particles === "none" ? "dust" : inp.particles), AUDIO_RATE, 2));
+    await writeFile(join(dir, "music.wav"), wav(ambientBed(total, inp.particles === "none" ? "dust" : inp.particles, SYN), SYN, 2));
     musicArgs = ["-i", join(dir, "music.wav")];
   }
   const musicPre = inp.music?.length ? `volume=${n3(0.12 * vol)},afade=t=out:st=${n3(Math.max(0, total - 3))}:d=3,` : `volume=${n3(vol)},`;
@@ -504,6 +547,9 @@ const TRANSITION: Record<string, string> = { first: "fadewhite", last: "fadewhit
 
 export async function renderCartoon(inp: RenderInput): Promise<RenderOutput> {
   const t0 = Date.now();
+  // Память воркера ограничена: без кэша sharp и по одному потоку libvips
+  sharp.cache(false);
+  sharp.concurrency(1);
   const timing = inp.timing ?? CARTOON_TIMING;
   const dir = inp.workDir;
   await mkdir(dir, { recursive: true });
@@ -525,68 +571,83 @@ export async function renderCartoon(inp: RenderInput): Promise<RenderOutput> {
   const tl = cartoonTimeline(durations, inp.cues.map((c) => c.kind), timing);
   inp.onProgress?.(6);
 
-  const [audio, prepared, particles] = await Promise.all([
-    buildAudio(dir, voiceFiles, tl, inp),
-    Promise.all(inp.scenes.map((s, i) => prepareScene(s, i, dir))),
-    inp.particles === "none" ? Promise.resolve(null) : particleFrames(inp.particles, pdir),
-  ]);
+  // По очереди, а не разом: 14 растров 2560×1280 одновременно — это сотни мегабайт в памяти воркера
+  const audio = await buildAudio(dir, voiceFiles, tl, inp);
+  const prepared: Prepared[] = [];
+  for (let i = 0; i < inp.scenes.length; i++) {
+    prepared.push(await prepareScene(inp.scenes[i], i, dir));
+    inp.scenes[i] = { ...inp.scenes[i], image: { data: Buffer.alloc(0), contentType: inp.scenes[i].image.contentType }, layers: undefined, clip: undefined };
+  }
+  const particles = inp.particles === "none" ? null : await particleFrames(inp.particles, pdir);
   const ass = join(dir, "subs.ass");
   await writeFile(ass, buildAss({ title: inp.title, dedication: inp.dedication, cues: inp.cues, tl, subtitles: inp.subtitles, brand: inp.brand ?? "Сделано с любовью в БУКИМИ", xfade: timing.xfade }));
   inp.onProgress?.(14);
 
-  // Граф: сцены → переходы → частицы → титры → (вертикаль)
-  const args: string[] = ["-hide_banner", "-v", "error", "-nostats", "-progress", "pipe:1"];
-  const parts: string[] = [];
-  let input = 0;
-  const sceneOut: string[] = [];
-  prepared.forEach((p, i) => {
+  // Этап 1: сцены — отдельными короткими роликами, по ядру на сцену (память на процесс ограничена одной сценой)
+  const sceneFiles: string[] = prepared.map((_, i) => join(dir, `scene-${String(i).padStart(2, "0")}.mp4`));
+  let done = 0;
+  const jobs = prepared.map((p, i) => async () => {
     const sc = tl.scenes[i];
+    const frames = Math.round(sc.dur * FPS);
+    const args = ["-hide_banner", "-v", "error", "-nostats", "-filter_threads", "1"];
+    let graph: string;
     if (p.clip) {
       args.push("-stream_loop", "-1", "-t", n3(sc.dur), "-i", p.clip);
-      parts.push(`[${input}:v]fps=${FPS},scale=${SIZE}:${SIZE}:force_original_aspect_ratio=increase,crop=${SIZE}:${SIZE},trim=duration=${n3(sc.dur)},setpts=PTS-STARTPTS,setsar=1,format=yuv420p[s${i}]`);
-      input++;
+      graph = `[0:v]fps=${FPS},scale=${SIZE}:${SIZE}:force_original_aspect_ratio=increase,crop=${SIZE}:${SIZE},setsar=1,format=yuv420p[out]`;
     } else {
       args.push("-i", p.file);
-      const v = `${input}:v`;
-      input++;
-      let spr: string | null = null;
+      let k = 1;
+      let sprite: string | null = null;
       if (p.sprite) {
         args.push("-i", p.sprite.file);
-        spr = `${input}:v`;
-        input++;
+        sprite = `${k++}:v`;
       }
-      const plan = planCamera(inp.cues[i].kind, inp.cues[i].page, p.w, p.h, p.focus, Boolean(p.sprite));
-      parts.push(sceneFilter(i, v, spr, p, plan, sc.dur, `s${i}`));
+      let pt: string | null = null;
+      if (particles) {
+        // Частицы непрерывны через переходы: кадр петли = общее время сцены
+        const off = (sc.start % LOOP_SEC).toFixed(2);
+        args.push("-framerate", String(FPS), "-stream_loop", "-1", "-ss", off, "-i", particles);
+        pt = `${k++}:v`;
+      }
+      const box = p.sprite ? { x0: p.sprite.x, x1: p.sprite.x + p.sprite.w, y0: p.sprite.y + 20, y1: p.sprite.y + p.sprite.h - 20 } : undefined;
+      const plan = planCamera(inp.cues[i].kind, inp.cues[i].page, p.w, p.h, p.focus, Boolean(p.sprite), box);
+      graph = sceneFilter(p, plan, sc.dur, { v: "0:v", sprite, particles: pt });
     }
-    sceneOut.push(`s${i}`);
+    args.push("-filter_complex", graph, "-map", "[out]", "-frames:v", String(frames), "-r", String(FPS), "-c:v", "libx264", "-preset", "ultrafast", "-crf", "12", "-threads", "1", "-pix_fmt", "yuv420p", "-y", sceneFiles[i]);
+    await ff(args);
+    done++;
+    inp.onProgress?.(14 + Math.round((done / prepared.length) * 36));
   });
-  let cur = sceneOut[0];
-  const n = sceneOut.length;
+  await pool(jobs, Math.max(1, Number(process.env.CARTOON_JOBS ?? Math.min(2, cpus().length))));
+
+  // Этап 2: переходы (наплыв, через белое) → титры → кодирование; вертикаль — тот же кадр на размытом фоне
+  const args: string[] = ["-hide_banner", "-v", "error", "-nostats", "-progress", "pipe:1"];
+  const parts: string[] = [];
+  sceneFiles.forEach((f) => args.push("-threads", "1", "-i", f));
+  let cur = "0:v";
+  const n = sceneFiles.length;
   for (let i = 1; i < n; i++) {
     const kind = i === 1 ? "first" : i === n - 1 ? "last" : i === Math.ceil(n / 2) ? "middle" : "default";
     const o = `x${i}`;
-    parts.push(`[${cur}][${sceneOut[i]}]xfade=transition=${TRANSITION[kind]}:duration=${timing.xfade}:offset=${n3(tl.scenes[i].start)}[${o}]`);
+    parts.push(`[${cur}][${i}:v]xfade=transition=${TRANSITION[kind]}:duration=${timing.xfade}:offset=${n3(tl.scenes[i].start)}[${o}]`);
     cur = o;
-  }
-  if (particles) {
-    args.push("-framerate", String(FPS), "-stream_loop", "-1", "-i", particles);
-    parts.push(`[${input}:v]scale=${SIZE}:${SIZE}:flags=bicubic,format=rgba[pt]`);
-    parts.push(`[${cur}][pt]overlay=0:0:shortest=1:format=yuv420[pv]`);
-    cur = "pv";
-    input++;
   }
   const fontsDir = FONTS_DIR().replace(/([:\\'])/g, "\\$1");
   parts.push(`[${cur}]ass=filename='${ass.replace(/([:\\'])/g, "\\$1")}':fontsdir='${fontsDir}',format=yuv420p,trim=duration=${n3(tl.total)}[vq]`);
   args.push("-i", audio.file);
-  const aIn = `${input}:a`;
+  const aIn = `${n}:a`;
   const square = join(dir, "cartoon-1080.mp4");
-  const vertical = inp.vertical ? join(dir, "cartoon-1080x1920.mp4") : null;
-  const enc = ["-c:v", "libx264", "-preset", "veryfast", "-crf", "20", "-pix_fmt", "yuv420p", "-profile:v", "high", "-g", String(FPS * 2), "-r", String(FPS), "-c:a", "aac", "-b:a", "160k", "-ar", String(AUDIO_RATE), "-movflags", "+faststart"];
+  const vH = inp.verticalHeight ?? 1920;
+  const vW = Math.round((vH * 9) / 16 / 2) * 2;
+  const vertical = inp.vertical ? join(dir, `cartoon-${vW}x${vH}.mp4`) : null;
+  const enc = ["-c:v", "libx264", "-preset", "veryfast", "-tune", "animation", "-crf", "23", "-pix_fmt", "yuv420p", "-profile:v", "high", "-g", String(FPS * 2), "-r", String(FPS), "-c:a", "aac", "-b:a", "160k", "-ar", String(AUDIO_RATE), "-movflags", "+faststart"];
   if (vertical) {
     parts.push(`[vq]split=3[vsq][va][vb]`);
     // 9:16: квадрат по центру, сверху и снизу — тот же кадр, размытый (размываем в малом размере — дёшево)
-    parts.push(`[va]crop=608:1080:236:0,scale=152:270,boxblur=6:2,scale=1080:1920:flags=bicubic,eq=brightness=-0.07:saturation=0.9[vbg]`);
-    parts.push(`[vbg][vb]overlay=0:420,format=yuv420p[vv]`);
+    const sq = vW;
+    parts.push(`[va]crop=608:1080:236:0,scale=152:270,boxblur=6:2,scale=${vW}:${vH}:flags=bilinear,eq=brightness=-0.07:saturation=0.9[vbg]`);
+    parts.push(`[vb]scale=${sq}:${sq}:flags=bicubic[vsm]`);
+    parts.push(`[vbg][vsm]overlay=0:${Math.round((vH - sq) / 2)},format=yuv420p[vv]`);
   }
   args.push("-filter_complex", parts.join(";"));
   args.push("-map", vertical ? "[vsq]" : "[vq]", "-map", aIn, ...enc, "-t", n3(tl.total), "-metadata", `title=${inp.title}`, "-metadata", "comment=bookimi.ru", "-y", square);
@@ -596,13 +657,22 @@ export async function renderCartoon(inp: RenderInput): Promise<RenderOutput> {
   await ff(args, {
     onLine: (l) => {
       const m = l.match(/^out_time_us=(\d+)/);
-      if (m) inp.onProgress?.(Math.min(97, 14 + Math.round((Number(m[1]) / 1e6 / tl.total) * 83)));
+      if (m) inp.onProgress?.(Math.min(97, 50 + Math.round((Number(m[1]) / 1e6 / tl.total) * 47)));
     },
   });
   const poster = join(dir, "poster.jpg");
   await ff(["-v", "error", "-ss", n3(Math.min(2.6, tl.scenes[0].dur - 1)), "-i", square, "-frames:v", "1", "-q:v", "3", "-y", poster]);
   inp.onProgress?.(100);
   return { square, vertical, poster, durationSec: (await probe(square)).duration, renderSec: (Date.now() - t0) / 1000, timeline: tl, loudness: audio.loud };
+}
+
+/** Параллельно не больше limit задач. */
+async function pool(jobs: (() => Promise<void>)[], limit: number) {
+  let next = 0;
+  const run = async () => {
+    while (next < jobs.length) await jobs[next++]();
+  };
+  await Promise.all(Array.from({ length: Math.min(limit, jobs.length) }, run));
 }
 
 /** Файл → Buffer (для сохранения в хранилище). */

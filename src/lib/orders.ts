@@ -13,18 +13,21 @@ import { hmac } from "./crypto";
 import { addToAddressBook, cleanAddress, parseAddressBook } from "./delivery";
 
 export async function catalogForPricing(): Promise<{ formats: CatalogFormat[]; addons: CatalogAddon[] }> {
-  const [formats, addons, audio, flags] = await Promise.all([
+  const [formats, addons, audio, flags, cartoon] = await Promise.all([
     db.productFormat.findMany({ where: { isActive: true }, orderBy: { sortOrder: "asc" } }),
     db.addon.findMany({ where: { isActive: true }, orderBy: { sortOrder: "asc" } }),
     cfg("audio"),
     cfg("flags"),
+    cfg("cartoon"),
   ]);
   return {
     formats: formats.filter((f) => f.kind === "PDF" || flags.printEnabled) as CatalogFormat[],
     addons: (addons as CatalogAddon[])
       .filter((a) => flags.printEnabled || !a.requiresPrint)
       .filter((a) => a.key !== "audio-self" || audio.selfReadEnabled)
-      .map((a) => (a.key === "audiobook" ? { ...a, priceRub: audio.ttsPriceRub } : a.key === "audio-self" ? { ...a, priceRub: audio.selfReadPriceRub } : a)),
+      .filter((a) => !a.key.startsWith("cartoon") || cartoon.enabled)
+      .map((a) => (a.key === "audiobook" ? { ...a, priceRub: audio.ttsPriceRub } : a.key === "audio-self" ? { ...a, priceRub: audio.selfReadPriceRub } : a))
+      .map((a) => (a.key === "cartoon" ? { ...a, priceRub: cartoon.priceRub } : a.key === "cartoon-own-voice" ? { ...a, priceRub: cartoon.ownVoiceRub } : a)),
   };
 }
 
@@ -51,6 +54,12 @@ export async function usePromo(promoId: string, client: Pick<PrismaClient, "prom
   return r.count > 0;
 }
 
+/** Мультфильм этой книги уже оплачен (любым заказом, не возвращён). */
+export async function cartoonPaidFor(bookId: string) {
+  const n = await db.orderItem.count({ where: { bookId, refKey: "cartoon", order: { paidAt: { not: null }, status: { notIn: ["REFUNDED", "CANCELLED"] } } } });
+  return n > 0;
+}
+
 /** Сколько уже заплачено за PDF этой книги (для зачёта при заказе печати). */
 export async function pdfPaidFor(bookId: string, userId: string) {
   const items = await db.orderItem.findMany({
@@ -70,9 +79,54 @@ export interface CheckoutInput {
   utm?: Record<string, string>;
   /** Сохранить адрес и получателя в адресной книге профиля (по умолчанию — да). */
   saveAddress?: boolean;
+  /** Докупка цифровых допов к оплаченной книге из кабинета (мультфильм, «своим голосом»). */
+  addonsOnly?: boolean;
+  /** «Книга для каждого в группе»: N книг одним заказом (src/lib/bulk.ts), строка на каждую книгу. */
+  bulk?: boolean;
+}
+
+/** Сумма заказа «для каждого»: скидка за количество (bulk.tiers) не суммируется с промокодом и скидкой новичка. */
+async function priceBulk(userId: string, input: CheckoutInput) {
+  const { formats } = await catalogForPricing();
+  const [ship, bulkCfg] = await Promise.all([cfg("shipping"), cfg("bulk")]);
+  const book = await db.book.findUnique({ where: { id: input.bookId } });
+  const { AnswersV2 } = await import("./quiz");
+  const { bulkQuote, groupChildren } = await import("./bulk");
+  const a = book ? AnswersV2.safeParse(book.params) : null;
+  const heroes = a?.success ? groupChildren(a.data).map((c) => c.name) : [];
+  let shipInfo: Awaited<ReturnType<typeof shipQuote>> | null = null;
+  if (input.whoPrints === "bookimi" && input.shipping) shipInfo = await shipQuote(input.shipping.method, cleanAddress(input.shipping.method, input.shipping.address), heroes.length);
+  const promo = input.promo ? await findPromo(input.promo, userId) : null;
+  const newbie = await newbieDiscountPct(userId);
+  const promoPct = promo?.percentOff ?? 0;
+  const q = bulkQuote(
+    {
+      whoPrints: input.whoPrints,
+      formatKey: input.formatKey,
+      heroes: bulkCfg.enabled && !book?.parentBookId ? heroes : [],
+      shippingMethod: input.shipping?.method,
+      shippingRub: shipInfo?.priceRub ?? 0,
+      discountPct: Math.max(promoPct, newbie),
+      discountRub: promo?.amountOffRub ?? 0,
+      freeShippingBooks: ship.freeShippingBooks,
+      tiers: bulkCfg.tiers,
+    },
+    formats,
+  );
+  const promoWins = !q.bulkApplied && !!promo && (promoPct >= newbie || (promo.amountOffRub ?? 0) > 0);
+  const printHouse = await db.printHouse.findFirst({ where: { isActive: true } });
+  const eta = input.whoPrints === "bookimi" ? etaDate(new Date(), printHouse?.leadDaysMax ?? 5, shipInfo?.daysMax ?? 0) : null;
+  return {
+    quote: q,
+    promo: promoWins ? promo : null,
+    newbieApplied: !q.bulkApplied && !promoWins && newbie > 0 && q.discountRub > 0,
+    ship: shipInfo,
+    eta: eta ? { ready: eta.ready, eta: eta.eta, readyText: ruDate(eta.ready), etaText: ruDate(eta.eta) } : null,
+  };
 }
 
 export async function priceCheckout(userId: string, input: CheckoutInput) {
+  if (input.bulk) return priceBulk(userId, input);
   const { formats, addons } = await catalogForPricing();
   const ship = await cfg("shipping");
   let shippingRub = 0;
@@ -94,6 +148,8 @@ export async function priceCheckout(userId: string, input: CheckoutInput) {
       shippingRub,
       pdfPaidRub: input.whoPrints === "bookimi" ? await pdfPaidFor(input.bookId, userId) : 0,
       freeShippingBooks: ship.freeShippingBooks,
+      addonsOnly: input.addonsOnly,
+      cartoonPaid: await cartoonPaidFor(input.bookId),
     },
     promo,
     newbie,
@@ -123,6 +179,8 @@ export async function createOrder(userId: string, input: CheckoutInput) {
   if (!book) throw new Error("Книга не найдена");
   const q = priced.quote;
   const title = (book.text as { title?: string } | null)?.title ?? "Персональная книга";
+  // «Для каждого»: строка i — книга i (главная, затем копии по порядку списка группы)
+  const bulkIds = input.bulk ? [book.id, ...(await (await import("./bulk-server")).ensureBulkCopies(book)).map((b) => b.id)] : null;
   const ship = input.shipping ? { method: input.shipping.method, address: cleanAddress(input.shipping.method, input.shipping.address) } : null;
   const order = await db.order.create({
     data: {
@@ -141,8 +199,8 @@ export async function createOrder(userId: string, input: CheckoutInput) {
       contactEmail: input.contact.email,
       readyDate: priced.eta?.ready,
       items: {
-        create: q.lines.map((l) => ({
-          bookId: book.id,
+        create: q.lines.map((l, i) => ({
+          bookId: bulkIds?.[i] ?? book.id,
           kind: l.kind,
           refKey: l.key,
           // Для чека: услуга изготовления на заказ, а не перепродажа товара
@@ -259,7 +317,13 @@ export async function markPaid(paymentId: string, opts: { receiptUrl?: string; c
   const bookIds = [...new Set(items.map((i) => i.bookId).filter(Boolean))] as string[];
   const { getBoss, QUEUES } = await import("./queue");
   const boss = await getBoss();
+  const hasFormat = items.some((i) => i.kind === "format");
   for (const id of bookIds) {
+    // Докупка из кабинета (без формата): книга уже готова — собираем только купленное (мультфильм)
+    if (!hasFormat) {
+      const { onCartoonPaid } = await import("./cartoon");
+      if (await onCartoonPaid(id, items)) continue;
+    }
     await db.book.update({ where: { id }, data: { paidFull: true } });
     await boss.send(QUEUES.generateFull, { bookId: id, orderId: order.id }, { retryLimit: 3, retryDelay: 120, singletonKey: `full-${id}` });
   }

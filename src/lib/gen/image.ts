@@ -4,7 +4,7 @@
 //  kandinsky — Kandinsky 5.0 I2I Lite на том же сервере (запасной)
 // Промпт = стиль картинок (art/*.ts) + сцена + герой по виду (ребёнок/подросток/взрослый/питомец) + настроение.
 import { artStyle } from "../../content/art/index";
-import { renderDemoSpread } from "../../content/art/render";
+import { renderDemoSpread, type DemoCrowdMember } from "../../content/art/render";
 import { moodPrompt } from "../../content/art/mood";
 import { HUMAN_FACE_GUARD } from "../../content/art/trial";
 import { ART_STYLE_OWNERS, type ArtStyle, type DemoExtra, type DemoLook, type HeroKind, type Mood } from "../../content/types";
@@ -35,6 +35,10 @@ export interface SceneJob {
   preview: boolean;
   /** Заголовок обложки (демо). */
   title?: string;
+  /** Группа на развороте (сцены с {GROUP}): демо рисует фигуры рядами; GPU получает группу словами в сцене. */
+  crowd?: DemoCrowdMember[];
+  /** photo — «общая фотография» (разворот с {ПЕРЕКЛИЧКА}): герой в центре первого ряда. */
+  crowdLayout?: "around" | "photo";
 }
 
 export interface ImageResult {
@@ -66,7 +70,10 @@ export class DemoImageProvider implements ImageProvider {
       hero: { ...(main?.look ?? {}), kind: job.plot.heroKind },
       extras: rest.map((h) => ({ role: h.role, kind: h.drawKind, look: h.look ?? {} })),
       caption: "демо-иллюстрация · подключите GPU в админке",
+      crowd: job.crowd,
+      crowdLayout: job.crowdLayout,
       title: job.index === 0 ? job.title : undefined,
+      scene: job.scene,
     });
     return { data: Buffer.from(svg), contentType: "image/svg+xml", ext: "svg", gpuSeconds: 0, costKopecks: 0 };
   }

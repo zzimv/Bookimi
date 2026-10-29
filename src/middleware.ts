@@ -29,6 +29,8 @@ export function middleware(req: NextRequest) {
   }
 
   const res = NextResponse.next();
+  // Ссылка «Поделиться мультфильмом» — личная: не индексировать
+  if (url.pathname.startsWith("/mult/")) res.headers.set("X-Robots-Tag", "noindex, nofollow, noarchive");
   const secure = process.env.NODE_ENV === "production";
   if (!req.cookies.get("bk_anon")) {
     res.cookies.set("bk_anon", crypto.randomUUID(), { httpOnly: true, sameSite: "lax", secure, path: "/", maxAge: 60 * 60 * 24 * 365 });

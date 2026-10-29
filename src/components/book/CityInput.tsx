@@ -36,7 +36,7 @@ export function CityInput({ value, onChange, required, label = "Город" }: {
 
   useEffect(() => {
     const q = text.trim();
-    if (q.length < 2 || !open) {
+    if (q.length < 1 || !open) {
       setItems([]);
       setLoading(false);
       return;
@@ -87,7 +87,7 @@ export function CityInput({ value, onChange, required, label = "Город" }: {
     }
   }
 
-  const showList = open && text.trim().length >= 2;
+  const showList = open && text.trim().length >= 1;
   return (
     <div className="field combo">
       <label htmlFor={id} className="label">
@@ -117,7 +117,7 @@ export function CityInput({ value, onChange, required, label = "Город" }: {
         }}
         onFocus={() => {
           if (blurTimer.current) clearTimeout(blurTimer.current);
-          if (!picked && text.trim().length >= 2) setOpen(true);
+          if (!picked && text.trim().length >= 1) setOpen(true);
         }}
         onBlur={() => {
           // Задержка: клик по подсказке успевает сработать
@@ -145,7 +145,7 @@ export function CityInput({ value, onChange, required, label = "Город" }: {
       )}
       </div>
       <small id={`${id}-hint`} aria-live="polite">
-        {picked && !open ? value.region || "Город выбран" : showList && loading ? "Ищем…" : showList ? (items.length ? `Подсказок: ${items.length}. Стрелки — выбрать, Enter — подтвердить` : "") : "Две-три первые буквы — и выберите из списка"}
+        {picked && !open ? value.region || "Город выбран" : showList && loading ? "Ищем…" : showList ? (items.length ? `Подсказок: ${items.length}. Стрелки — выбрать, Enter — подтвердить` : "") : text.trim() && !picked ? "Выберите город из списка — так мы найдём пункты выдачи и точную цену" : "Начните вводить — и выберите город из списка"}
       </small>
     </div>
   );

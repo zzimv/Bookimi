@@ -71,6 +71,9 @@ class Str extends Schema {
   email(m?: string) {
     return this.with((s, p) => (/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(s) ? s : fail(m ?? "Некорректный email", p)));
   }
+  uuid(m?: string) {
+    return this.with((s, p) => (/^[0-9a-f-]{36}$/i.test(s) ? s : fail(m ?? "Некорректный id", p)));
+  }
 }
 class Num extends Schema {
   constructor(private ops: ((v: number, p: (string | number)[]) => number)[] = []) {

@@ -13,7 +13,7 @@ import { personalize, plotForAnswers, textProvider, dedicationText, type StoryTe
 import { imageProvider, type HeroRef, type ImageResult, type SceneJob } from "./image";
 import { watermark } from "../../content/art/render";
 import { mood as moodById } from "../../content/registry";
-import { extraDrawKind } from "../../content/art/index";
+import { artStyle, extraDrawKind } from "../../content/art/index";
 import { HERO_KIND_BY_AUDIENCE, type DemoLook, type HeroKind } from "../../content/types";
 import type { ExtraV2T } from "../../content/answers";
 import { guessGender } from "../declension";
@@ -25,6 +25,9 @@ import { alertOwner, notifyUser } from "../notify";
 import { track } from "../events";
 import { checkText } from "../moderation";
 import { personsOf, redactForImage } from "./redact";
+import { crowdLooks } from "../../content/art/render";
+import { groupSpreadIndexes } from "../../content/registry";
+import { groupOf } from "./text";
 
 export class LimitReached extends Error {}
 
@@ -55,8 +58,13 @@ export async function runText(bookId: string) {
   const bad = checkText([text.title, ...text.spreads.map((s) => s.text)].join("\n"));
   if (bad) throw new Error(`модерация текста: ${bad}`);
   await cost(bookId, r.provider, "text", r);
-  await db.book.update({ where: { id: bookId }, data: { status: "TEXT_READY", textRaw: r.raw as object, text: text as object, progress: 100 } });
+  // Копия заказа «для каждого в группе» — текст не подтверждают по одному: сразу «подтверждён»
+  await db.book.update({ where: { id: bookId }, data: { status: book.parentBookId ? "TEXT_APPROVED" : "TEXT_READY", textRaw: r.raw as object, text: text as object, progress: 100, ...(book.parentBookId ? { textApprovedAt: new Date() } : {}) } });
   await track("text_ready", { anonId: book.anonId ?? undefined, userId: book.userId, props: { bookId } });
+  if (book.parentBookId && !book.paidFull) {
+    const parent = await db.book.findUnique({ where: { id: book.parentBookId }, select: { id: true, previewReadyAt: true } });
+    if (parent?.previewReadyAt) await (await import("../bulk-server")).previewBulkCopies(parent.id);
+  }
 }
 
 // ── Герои и фото ──
@@ -66,9 +74,22 @@ async function preparePhoto(key: string) {
 }
 
 /** Внешность главного героя для демо-рисовальщика. */
-export function heroLook(a: QuizAnswers): DemoLook {
+/**
+ * Цвет одежды — один на всю книгу (и мультфильм): из палитры стиля по имени героя, детерминированно.
+ * Раньше рисовальщик брал цвет по номеру разворота, и одежда менялась от страницы к странице.
+ */
+export function outfitFor(seed: string, style?: string, shift = 0): string {
+  const acc = (style ? artStyle(style)?.demo.palette.accents : undefined)?.filter((c) => /^#[0-9a-f]{6}$/i.test(c));
+  const list = acc?.length ? acc : ["#d9534f", "#3e8ed0", "#f0ad4e", "#5cb85c"];
+  let h = 7;
+  for (const ch of seed) h = (h * 31 + ch.charCodeAt(0)) >>> 0;
+  return list[(h + shift) % list.length];
+}
+
+export function heroLook(a: QuizAnswers, style?: string): DemoLook {
   const p = a.appearance;
   return {
+    outfit: outfitFor(`${a.hero.name}|${a.audience}`, style),
     gender: a.hero.gender,
     age: heroAge(a),
     hair: p.hair,
@@ -87,10 +108,12 @@ export function heroLook(a: QuizAnswers): DemoLook {
 const EXTRA_AGE: Record<string, number> = { mom: 35, dad: 37, grandma: 68, grandpa: 70, owner: 34, colleague: 38 };
 
 /** Внешность доп. героя для демо: род, возраст по роли, питомец, «свой вариант». */
-export function extraLook(e: ExtraV2T, a: QuizAnswers): DemoLook {
+export function extraLook(e: ExtraV2T, a: QuizAnswers, style?: string, i = 0): DemoLook {
   const g = extraGender(e, guessGender);
   const age = e.role === "partner" ? heroAge(a) : e.role === "child" || e.role === "grandchild" ? 7 : EXTRA_AGE[e.role];
-  return { gender: g === "n" ? undefined : g, age, species: e.species, thing: e.what || (e.role === "toy" ? e.name : undefined), furColor: e.role === "pet" ? e.description : undefined };
+  // Свой цвет одежды у каждого доп. героя (сдвиг по палитре — не как у главного), тоже на всю книгу
+  const outfit = outfitFor(`${a.hero.name}|${a.audience}`, style, i + 1);
+  return { gender: g === "n" ? undefined : g, age, outfit, species: e.species, thing: e.what || (e.role === "toy" ? e.name : undefined), furColor: e.role === "pet" ? e.description : undefined };
 }
 
 async function heroesFor(book: Book, a: QuizAnswers): Promise<HeroRef[]> {
@@ -107,7 +130,7 @@ async function heroesFor(book: Book, a: QuizAnswers): Promise<HeroRef[]> {
     description: clean(appearanceLine(a)),
     photos: mainPhotos.filter(Boolean) as Buffer[],
     sheet: sheetKey ? await getFile("books", sheetKey).catch(() => null) : null,
-    look: heroLook(a),
+    look: heroLook(a, book.styleKey),
   });
   const kind = HERO_KIND_BY_AUDIENCE[a.audience];
   for (const e of a.extras) {
@@ -117,7 +140,7 @@ async function heroesFor(book: Book, a: QuizAnswers): Promise<HeroRef[]> {
       role: e.role === "custom" && e.what ? clean(e.what) || e.role : e.role,
       description: clean([e.what, e.description].filter(Boolean).join(", ")),
       photos: photos.filter(Boolean) as Buffer[],
-      look: extraLook(e, a),
+      look: extraLook(e, a, book.styleKey, a.extras.indexOf(e)),
       drawKind: extraDrawKind(e.role, kind),
     });
   }
@@ -175,6 +198,11 @@ async function drawPages(book: Book, indices: number[], opts: { preview: boolean
   const heroes = await heroesFor(book, a);
   const age = heroAge(a);
   const mood = book.mood ? moodById(book.mood) : null;
+  // Группа (детсад, класс): толпа на разворотах со сценой {GROUP}, «общая фотография» — там, где {ПЕРЕКЛИЧКА}
+  const full = plotForAnswers(a);
+  const grp = groupOf(a, full);
+  const crowdIdx = new Set(full?.group ? groupSpreadIndexes(full) : []);
+  const crowd = full?.group && grp.members.length + grp.adults.length > 0 ? crowdLooks(grp.members, grp.adults, { kind: full.audience === "TEEN" ? "teen" : "child", age }) : undefined;
 
   // Лист персонажа — один раз на книгу (только если есть фото и настоящий провайдер)
   if (heroes[0].photos.length && !heroes[0].sheet) {
@@ -202,6 +230,7 @@ async function drawPages(book: Book, indices: number[], opts: { preview: boolean
       gender: a.hero.gender,
       preview: opts.preview,
       title: text.title,
+      ...(crowd && crowdIdx.has(index) ? { crowd, crowdLayout: full!.spreads[index - 1]?.text.includes("{ПЕРЕКЛИЧКА}") ? ("photo" as const) : ("around" as const) } : {}),
     });
     await cost(book.id, provider.name, index === 0 ? "cover" : "scene", img);
     await savePage(book, index, img, index === 0 ? text.title : text.spreads[index - 1]?.text ?? null);
@@ -229,7 +258,10 @@ export async function runPreview(bookId: string) {
   await drawPages(book, [0, 1, 2], { preview: true });
   await db.book.update({ where: { id: bookId }, data: { status: "PREVIEW_READY", previewReadyAt: new Date(), progress: 100 } });
   await track("preview_ready", { anonId: book.anonId ?? undefined, userId: book.userId, props: { bookId } });
+  if (book.parentBookId) return; // копия «для каждого»: письмо — одно, о главной книге
   if (book.userId) await notifyUser(book.userId, "preview_ready", { title: (book.text as unknown as StoryText).title, bookId });
+  // Превью первых копий «для каждого в группе» — вслед за главной книгой
+  if (await db.book.count({ where: { parentBookId: bookId } })) await (await import("../bulk-server")).previewBulkCopies(bookId);
   await spendAlerts();
 }
 
@@ -305,6 +337,8 @@ export async function renderBookFiles(bookId: string, orderId?: string) {
 }
 
 export async function runFull(bookId: string, orderId?: string) {
+  // Копии «для каждого» после оплаты: текста ещё нет — сначала сочиняем
+  if (!(await db.book.findUniqueOrThrow({ where: { id: bookId }, select: { text: true } })).text) await runText(bookId);
   const book = await db.book.findUniqueOrThrow({ where: { id: bookId }, include: { pages: true } });
   await db.book.update({ where: { id: bookId }, data: { status: "FULL_QUEUED", progress: 5, error: null } });
   const have = new Set(book.pages.filter((p) => p.imageKey).map((p) => p.index));
@@ -319,6 +353,11 @@ export async function runFull(bookId: string, orderId?: string) {
   await db.book.update({ where: { id: bookId }, data: { status: "FULL_READY", fullReadyAt: new Date(), progress: 100 } });
   if (book.userId) {
     await notifyUser(book.userId, "book_ready", { title: (book.text as unknown as StoryText).title, audio: order?.items.some((i) => i.refKey === "audiobook") ? 1 : undefined });
+  }
+  // Мультфильм — отдельной задачей (минута-две CPU), когда книга готова
+  if (order?.items.some((i) => i.refKey === "cartoon" || i.refKey === "cartoon-own-voice")) {
+    const { onCartoonPaid } = await import("../cartoon");
+    await onCartoonPaid(bookId, order.items, { fromFull: true }).catch((e) => alertOwner("Мультфильм не поставлен в очередь", `${bookId}: ${(e as Error).message}`));
   }
   if (order?.whoPrints === "bookimi") {
     const { sendToPrint } = await import("../print");

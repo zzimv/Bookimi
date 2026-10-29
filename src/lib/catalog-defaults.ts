@@ -204,6 +204,9 @@ export const ADDONS = [
   { key: "coloring", kind: "DIGITAL", title: "Раскраска PDF по иллюстрациям книги", price: 290, pct: null, print: false },
   { key: "second-copy", kind: "MODIFIER", title: "Второй экземпляр книги", price: null, pct: 30, print: true },
   { key: "urgent", kind: "MODIFIER", title: "Срочное изготовление", price: 500, pct: null, print: true },
+  // Цены мультфильма — из настроек cartoon.priceRub / cartoon.ownVoiceRub (здесь — значения по умолчанию)
+  { key: "cartoon", kind: "DIGITAL", title: "Мультфильм по книге: 2 минуты с вашими героями и озвучкой", price: 690, pct: null, print: false },
+  { key: "cartoon-own-voice", kind: "MODIFIER", title: "Мультфильм своим голосом: озвучите сами по готовому сценарию", price: 400, pct: null, print: false },
 ] as const;
 
 export const PDF_PRICE = 990;

@@ -4,6 +4,7 @@ import { AUDIENCE_PAGES } from "@/lib/storefront";
 import { getNearestHoliday } from "@/lib/holidays";
 import { daysLeftText, fmtDay } from "@/lib/holidays-core";
 import { ThemeToggle } from "./ThemeToggle";
+import { BurgerCloser } from "./BurgerCloser";
 
 export async function PromoBar() {
   const p = await getPromoBar();
@@ -64,6 +65,7 @@ export async function Header() {
               <Link href="/sozdat" className="btn btn--primary btn--block">Создать книгу</Link>
             </nav>
           </details>
+          <BurgerCloser />
         </div>
       </div>
     </header>

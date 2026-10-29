@@ -21,7 +21,7 @@ import { METHOD_TITLES } from "../../src/lib/shipping";
 import { declineName } from "../../src/lib/declension";
 import { canAcceptPayments, DEFAULTS } from "../../src/lib/settings";
 import { FORMATS } from "../../src/lib/catalog-defaults";
-import { bookById, catalogForPricing, demoPrefill, heroAccOf, journeyOf, markPaid, orderById, pageUrl, pdfPaidFor, S, SHIP_METHODS } from "./api";
+import { bookById, bulkState, catalogForPricing, demoPrefill, heroAccOf, journeyOf, markPaid, orderById, pageUrl, pdfPaidFor, S, SHIP_METHODS } from "./api";
 import { NotFoundError, RedirectError } from "./router";
 import { HeroBirthdays } from "../../src/app/kabinet/Birthdays";
 import { demoBirthdays } from "./holidays";
@@ -47,12 +47,13 @@ export async function KnigaPage({ id }: { id: string }) {
       moods={moods}
       moodChangesPreview={DEFAULTS.limits.moodChangesPreview}
       audience={a.success ? a.data.audience : "CHILD"}
+      bulkAvailable={!b.parentId && bulkState(b).available}
     />
   );
 }
 
 // ───────── /kniga/[id]/kupit ─────────
-export async function KupitPage({ id, who, pechat }: { id: string; who?: string; pechat?: string }) {
+export async function KupitPage({ id, who, pechat, bulk }: { id: string; who?: string; pechat?: string; bulk?: string }) {
   const b = bookById(id);
   if (!b) throw new NotFoundError();
   const user = needUser(`/kniga/${id}/kupit${who ? `?who=${who}` : pechat ? "?pechat=1" : ""}`);
@@ -60,6 +61,7 @@ export async function KupitPage({ id, who, pechat }: { id: string; who?: string;
   const { formats, addons } = catalogForPricing();
   const full = FORMATS.filter((f) => formats.some((x) => x.key === f.key));
   const addonInfo: Record<string, string> = {};
+  const bs = b.parentId ? null : bulkState(b);
   return (
     <div className="wrap" style={{ padding: "24px var(--gutter) 80px" }}>
       <Checkout
@@ -76,6 +78,7 @@ export async function KupitPage({ id, who, pechat }: { id: string; who?: string;
         contact={{ name: user.name ?? "", phone: user.phone ?? "", email: user.email ?? "" }}
         pdfPaid={pdfPaidFor(id)}
         prefill={demoPrefill([...SHIP_METHODS])}
+        bulk={bs?.available ? { ...bs, initialOn: bulk === "1" } : null}
       />
     </div>
   );
@@ -120,7 +123,9 @@ export async function ZakazPage({ id }: { id: string }) {
       <div className="panel">
         <table className="tbl" style={{ border: 0 }}>
           <tbody>
-            {order.items.map((i, k) => (
+            {order.items.length > 3 && new Set(order.items.map((i) => `${i.refKey}|${i.priceRub}`)).size === 1 ? (
+              <tr><td>{order.items.length} книг — «для каждого в группе»</td><td style={{ textAlign: "right" }}>{(order.items.length * order.items[0].priceRub).toLocaleString("ru-RU")} ₽</td></tr>
+            ) : order.items.map((i, k) => (
               <tr key={k}><td>{i.title.replace(/^Изготовление (персонализированной книги )?/, "").replace(/^на заказ: /, "")}</td><td style={{ textAlign: "right" }}>{i.priceRub.toLocaleString("ru-RU")} ₽</td></tr>
             ))}
             {order.pdfCreditRub > 0 && <tr><td>Зачёт PDF</td><td style={{ textAlign: "right" }}>−{order.pdfCreditRub} ₽</td></tr>}
@@ -130,6 +135,22 @@ export async function ZakazPage({ id }: { id: string }) {
           </tbody>
         </table>
       </div>
+
+      {(order.bookIds?.length ?? 0) > 1 && (
+        <div className="panel" style={{ marginTop: 16 }} data-order-copies>
+          <details open={order.bookIds!.length <= 6}>
+          <summary><b>Книги заказа — {order.bookIds!.length}</b> <span className="small muted">в каждой свой главный герой · статус каждой</span></summary>
+          <ol className="bulk-copies bulk-copies--list">
+            {bulkState(bookById(order.bookId)!).copies.map((c) => (
+              <li key={c.id}>
+                <span className="bulk-copies__ph" aria-hidden="true">{c.name.slice(0, 1)}</span>
+                <span><b>{c.name}</b><small className="muted">{c.statusText}</small></span>
+              </li>
+            ))}
+          </ol>
+          </details>
+        </div>
+      )}
 
       {pending && (
         <div style={{ marginTop: 16 }}>

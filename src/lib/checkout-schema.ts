@@ -16,5 +16,9 @@ export const Checkout = z.object({
   saveAddress: z.boolean().default(true),
   promo: z.string().trim().max(30).optional(),
   voice: z.string().max(40).optional(),
+  /** Докупка цифровых допов к оплаченной книге (кабинет → «Добавить мультфильм»). */
+  addonsOnly: z.boolean().optional(),
+  /** «Книга для каждого в группе» — одна книга на каждого ребёнка (src/lib/bulk.ts). */
+  bulk: z.boolean().optional(),
   contact: z.object({ name: z.string().trim().max(80).default(""), phone: z.string().trim().max(20).optional(), email: z.string().trim().max(120).optional() }).default({ name: "" }),
 });

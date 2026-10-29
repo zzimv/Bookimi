@@ -15,6 +15,8 @@ export const QUEUES = {
   referralBonuses: "referral-bonuses",
   npdLimitCheck: "npd-limit-check",
   gpuTick: "gpu-tick",
+  generateCartoon: "generate-cartoon",
+  purgeCartoonVoices: "purge-cartoon-voices",
 } as const;
 
 const g = globalThis as unknown as { boss?: Promise<PgBoss> };

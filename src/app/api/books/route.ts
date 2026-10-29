@@ -11,8 +11,16 @@ import { cfg } from "@/lib/settings";
 import { checkInputs } from "@/lib/moderation";
 import { enqueue, QUEUES } from "@/lib/queue";
 import { track } from "@/lib/events";
+import { attachPhotosToBook } from "@/lib/draft";
+import { ensureBulkCopies } from "@/lib/bulk-server";
+import { groupMembersMax } from "@/content/registry";
 
-const Input = z.object({ answers: z.unknown(), captcha: z.string().optional() });
+const Input = z.object({
+  answers: z.unknown(),
+  captcha: z.string().optional(),
+  /** «Сделать книгу для каждого ребёнка группы» — копии создаются сразу, тексты первых — в очереди. */
+  bulk: z.object({ dedication: z.string().trim().max(300).optional() }).optional(),
+});
 
 // Создать книгу из анкеты и поставить в очередь сочинение сказки (без фото).
 export async function POST(req: Request) {
@@ -28,6 +36,9 @@ export async function POST(req: Request) {
   if (plot && plot.audience !== a.audience) return err("Этот сюжет для другой аудитории — выберите сюжет из списка");
   if (plot && a.extras.length < plot.extras.min) return err(plot.extras.note ?? `Для этого сюжета нужно добавить героев: не меньше ${plot.extras.min}`);
   if (plot && a.extras.length > plot.extras.max) a.extras = a.extras.slice(0, plot.extras.max);
+  // Группа — только для сюжетов с группой и не больше, чем помещается в книгу
+  if (!plot?.group) a.group = undefined;
+  else if (a.group) a.group = { members: a.group.members.slice(0, groupMembersMax(plot)), adults: a.group.adults.slice(0, plot.group.includeAdults?.max ?? 0) };
   // Стиль картинок и настроение — только из каталога; иначе — по сюжету / без настроения
   // Пробные стили (status "trial") — только если владелец включил art.showTrialStyles
   const styles = visibleArtStyleIds((await cfg("art")).showTrialStyles);
@@ -47,6 +58,8 @@ export async function POST(req: Request) {
     a.pet.traits,
     a.occasion.custom,
     ...a.extras.map((e) => `${e.name} ${e.description} ${e.what}`),
+    ...(a.group?.members ?? []).map((m) => `${m.name} ${m.description}`),
+    ...(a.group?.adults ?? []).map((m) => m.name),
   ]);
   if (bad) return err("Пожалуйста, уберите из анкеты недопустимые слова или ссылки");
   if (!a.story.slug && !a.story.idea) return err("Выберите сюжет или опишите свою идею");
@@ -75,7 +88,7 @@ export async function POST(req: Request) {
       status: "TEXT_QUEUED",
     },
   });
-  await db.hero.create({
+  const main = await db.hero.create({
     data: {
       bookId: book.id,
       userId: user?.id,
@@ -89,13 +102,28 @@ export async function POST(req: Request) {
       interests: a.interests,
     },
   });
+  // Фото, загруженные на шаге «Герои», переезжают к героям книги (срок — 7 дней от загрузки вместо 24 часов)
+  const photoHero = new Map<string, string>();
+  for (const id of a.hero.photoIds ?? []) photoHero.set(id, main.id);
   for (const e of a.extras) {
-    await db.hero.create({
+    const h = await db.hero.create({
       data: { bookId: book.id, userId: user?.id, role: e.role, name: e.name, gender: e.gender, appearance: { custom: e.description, what: e.what, species: e.species }, interests: [] },
     });
+    if (e.photoId) photoHero.set(e.photoId, h.id);
+  }
+  for (const m of a.group?.members ?? []) {
+    if (!m.photoId) continue;
+    const h = await db.hero.create({ data: { bookId: book.id, userId: user?.id, role: "member", name: m.name, gender: m.gender, appearance: { custom: m.description }, interests: [] } });
+    photoHero.set(m.photoId, h.id);
+  }
+  if (photoHero.size) {
+    await attachPhotosToBook({ anonId: anon, userId: user?.id }, (id) => photoHero.get(id), [...photoHero.keys()], limits.photoTtlDays);
+    const mainPhotos = await db.photo.count({ where: { heroId: main.id, deletedAt: null } });
+    if (mainPhotos) await db.book.update({ where: { id: book.id }, data: { withPhoto: true } });
   }
   await db.quizDraft.updateMany({ where: { anonId: anon, bookId: null }, data: { bookId: book.id } });
   await enqueue(QUEUES.generateText, { bookId: book.id });
+  if (b.bulk && plot?.group && a.group?.members.length) await ensureBulkCopies(book, { dedication: b.bulk.dedication || undefined });
   const utm = await utmCookie();
   await track("quiz_step", { anonId: anon, userId: user?.id, props: { step: "submit", bookId: book.id }, source: utm?.utm_source });
   return json({ bookId: book.id });

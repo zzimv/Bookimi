@@ -8,7 +8,7 @@ export async function GET(req: Request) {
   const t = await throttle("geo", 120, 60_000);
   if (t) return t;
   const q = (new URL(req.url).searchParams.get("q") ?? "").slice(0, 60);
-  if (q.trim().length < 2) return NextResponse.json({ cities: [], source: "offline" });
+  if (q.trim().length < 1) return NextResponse.json({ cities: [], source: "offline" });
   try {
     const r = await suggestCities(q, 10);
     return NextResponse.json(

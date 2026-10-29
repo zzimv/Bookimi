@@ -19,6 +19,7 @@ import { TRIAL_ART_STYLES } from "./art/trial";
 import { ART_STYLES, artStyle, heroDrawer, themeFor, themesByKey } from "./art/index";
 import { GENERIC_HOOKS, occasionText } from "./occasions";
 import { titleTemplate } from "./title";
+import { relevanceOf, sectionsOf, type Relevance, type SectionPlot, type Sections } from "./sections";
 import {
   ADULT_TAG_RE,
   blocksOf,
@@ -79,93 +80,36 @@ export const segmentsFor = (audience: AudienceKey) => SEGMENTS.filter((s) => s.a
 // Повод → какие книги показывать (модель релевантности)
 // ---------------------------------------------------------------------------
 
-/** core — сюжет написан для этого повода; fits — повод вплетается естественно (крючок, occasions); generic — общий крючок. */
-export type Relevance = "core" | "fits" | "generic";
-
-/**
- * Поводы с сильной темой: в каталоге — только core, «Своя история» и fits («Тоже подойдут»);
- * чужие сюжеты скрыты (никакой подводной лодки на выпускной в детском саду).
- */
-export const STRONG_OCCASIONS = [
-  "vypusknoj-v-sadu",
-  "pervyj-klass",
-  "vypusknoj-v-shkole",
-  "rozhdenie-brata-ili-sestry",
-  "svadba",
-  "godovshchina",
-  "pensiya",
-  "poyavlenie-pitomca",
-  "novyj-god",
-  "den-rozhdeniya",
-] as const;
-
-/** Без повода и свой повод: «Своя история» первой, затем все сюжеты. */
-export const OPEN_OCCASIONS = ["bez", "svoj", ""] as const;
+export type { Relevance } from "./sections";
+export { STRONG_OCCASIONS, OPEN_OCCASIONS, RELATED_OCCASIONS, FITS_TITLE } from "./sections";
 
 const isEmptyHook = (h?: OccasionHook) => !!h && !h.opening && !h.closing;
 
-/** Родственные поводы: книги про Новый год «тоже подходят» к Рождеству и Старому Новому году. */
-export const RELATED_OCCASIONS: Record<string, string> = { rozhdestvo: "novyj-god", "staryj-novyj-god": "novyj-god" };
+/** Проекция сюжета для разделов повода (src/content/sections.ts) — безопасна для клиента. */
+export function sectionPlot(plot: Plot): SectionPlot {
+  const hooks = plot.occasionHooks ?? {};
+  const empty = Object.entries(hooks).filter(([, h]) => isEmptyHook(h)).map(([k]) => k);
+  return { slug: plot.slug, occasions: plot.occasions, core: [...new Set([...(plot.coreOccasions ?? []), ...empty])], hooks: Object.keys(hooks) };
+}
 
+/** core — сюжет написан для этого повода; fits — повод вплетается естественно (крючок, occasions); generic — общий крючок. */
 export function relevance(plot: Plot, occasionKey: string): Relevance {
-  const hook = plot.occasionHooks?.[occasionKey];
-  if (plot.coreOccasions?.includes(occasionKey) || isEmptyHook(hook)) return "core";
-  if (plot.occasions.includes(occasionKey) || hook) return "fits";
-  const rel = RELATED_OCCASIONS[occasionKey];
-  if (rel && relevance(plot, rel) !== "generic") return "fits";
-  return "generic";
+  return relevanceOf(sectionPlot(plot), occasionKey);
 }
 
-export interface OccasionSections {
-  occasion: string;
-  /** Сильная тема: generic-сюжеты скрыты (если для повода нет ни core, ни fits — не скрываем, strong = false). */
-  strong: boolean;
-  /** Показывать «Своя история» до core (без повода, свой повод, нет core-сюжетов). */
-  customFirst: boolean;
-  /** Написаны для повода (лучшие — первыми). */
-  core: Plot[];
-  /** Карточка «Своя история» показывается всегда. */
-  custom: true;
-  /** «Тоже подойдут — впишем ваш повод». */
-  fits: Plot[];
-  fitsTitle: string;
-  /** Остальные (показываются для поводов без сильной темы и для «без повода»/«своего»). */
-  others: Plot[];
-  /** Сколько сюжетов скрыто (сильная тема). */
-  hiddenCount: number;
-}
-
-export const FITS_TITLE = "Тоже подойдут — впишем ваш повод";
+export type OccasionSections = Omit<Sections<Plot>, "hidden">;
 
 /**
- * Каталог повода по разделам. Порядок показа: customFirst ? [custom, core, fits, others] : [core, custom, fits, others].
- * opts.segment / opts.age сужают выбор (сегмент — p.segments, возраст — ageMin..ageMax).
+ * Каталог повода по разделам. Порядок показа: customFirst ? [custom, core, fits, others] : [core, custom, fits, others]
+ * (sectionOrder). opts.segment / opts.age сужают выбор (сегмент — p.segments, возраст — ageMin..ageMax).
+ * Логика — sectionsOf (sections.ts): ею же пользуются анкета в браузере и демо-стенд.
  */
 export function plotSections(occasionKey: string, audience?: AudienceKey, opts: { segment?: string; age?: number } = {}): OccasionSections {
   const pool = getPlots({ audience, segment: opts.segment, age: opts.age });
-  const key = occasionKey ?? "";
-  const base = { occasion: key, custom: true as const, fitsTitle: FITS_TITLE };
-  if ((OPEN_OCCASIONS as readonly string[]).includes(key)) {
-    // «Без повода»: сюжеты с bez в occasions — первыми
-    const others = key === "bez" ? [...pool.filter((p) => p.occasions.includes("bez")), ...pool.filter((p) => !p.occasions.includes("bez"))] : pool;
-    return { ...base, strong: false, customFirst: true, core: [], fits: [], others, hiddenCount: 0 };
-  }
-  const rank = (p: Plot) => {
-    const i = p.occasions.indexOf(key);
-    return i < 0 ? 100 : i;
-  };
-  const by = (r: Relevance) =>
-    pool
-      .map((p, i) => ({ p, i }))
-      .filter((x) => relevance(x.p, key) === r)
-      .sort((a, b) => rank(a.p) - rank(b.p) || a.i - b.i)
-      .map((x) => x.p);
-  const core = by("core");
-  const fits = by("fits");
-  const generic = by("generic");
-  // Сильная тема прячет чужие сюжеты — но не оставляет пустой каталог (тогда это пробел контента, см. OCCASIONS-MATRIX.md)
-  const strong = (STRONG_OCCASIONS as readonly string[]).includes(key) && core.length + fits.length > 0;
-  return { ...base, strong, customFirst: core.length === 0, core, fits, others: strong ? [] : generic, hiddenCount: strong ? generic.length : 0 };
+  const byslug = new Map(pool.map((p) => [p.slug, p]));
+  const s = sectionsOf(pool.map(sectionPlot), occasionKey ?? "");
+  const back = (xs: SectionPlot[]) => xs.map((x) => byslug.get(x.slug)!);
+  return { occasion: s.occasion, strong: s.strong, customFirst: s.customFirst, custom: true, fitsTitle: s.fitsTitle, core: back(s.core), fits: back(s.fits), others: back(s.others), hiddenCount: s.hiddenCount };
 }
 
 /**

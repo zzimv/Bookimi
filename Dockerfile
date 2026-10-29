@@ -13,8 +13,9 @@ RUN npm run build && npm run check:bundle-secrets
 
 FROM node:22-bookworm-slim AS runtime
 WORKDIR /app
-# chromium — рендер PDF; шрифты встраиваются из @fontsource, системные нужны только для запасных символов
-RUN apt-get update && apt-get install -y --no-install-recommends openssl ca-certificates curl chromium fonts-dejavu-core \
+# chromium — рендер PDF; ffmpeg — «Мультфильм по книге» (libx264, libass, loudnorm); шрифты встраиваются из @fontsource
+# и src/lib/gen/fonts (Nunito для субтитров), системные нужны только для запасных символов
+RUN apt-get update && apt-get install -y --no-install-recommends openssl ca-certificates curl chromium ffmpeg fonts-dejavu-core \
   && rm -rf /var/lib/apt/lists/*
 ENV NODE_ENV=production NEXT_TELEMETRY_DISABLED=1 PORT=3000 HOSTNAME=0.0.0.0 CHROMIUM_PATH=/usr/bin/chromium
 RUN useradd -r -u 1001 app

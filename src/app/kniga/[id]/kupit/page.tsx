@@ -8,11 +8,12 @@ import { catalogForPricing, pdfPaidFor } from "@/lib/orders";
 import { availableMethods, METHOD_TITLES } from "@/lib/shipping";
 import { signedUrl } from "@/lib/storage";
 import { parseAddressBook, pickPrefill } from "@/lib/delivery";
+import { bulkState } from "@/lib/bulk-server";
 
 export const metadata: Metadata = { title: "Оформление", robots: { index: false } };
 export const dynamic = "force-dynamic";
 
-export default async function Page({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ who?: string; pechat?: string }> }) {
+export default async function Page({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ who?: string; pechat?: string; "dlya-vseh"?: string }> }) {
   const { id } = await params;
   const sp = await searchParams;
   const own = await ownBook(id);
@@ -48,6 +49,11 @@ export default async function Page({ params, searchParams }: { params: Promise<{
     methods,
   });
 
+  // «Книга для каждого в группе»: копии и скидки (книга о группе, не копия, функция включена)
+  const bulkCfg = await cfg("bulk");
+  const bs = bulkCfg.enabled && !own.book.parentBookId ? await bulkState(own.book).catch(() => null) : null;
+  const bulk = bs?.available ? { count: bs.count, initialOn: sp["dlya-vseh"] === "1", dedication: bs.dedication, tiers: bs.tiers, previewCopies: bs.previewCopies, copies: bs.copies } : null;
+
   return (
     <div className="wrap" style={{ padding: "24px var(--gutter) 80px" }}>
       <Checkout
@@ -72,6 +78,7 @@ export default async function Page({ params, searchParams }: { params: Promise<{
         contact={{ name: user.name ?? "", phone: user.phone ?? "", email: user.email ?? "" }}
         pdfPaid={await pdfPaidFor(id, user.id)}
         prefill={prefill}
+        bulk={bulk}
       />
     </div>
   );

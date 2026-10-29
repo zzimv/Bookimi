@@ -3,6 +3,7 @@ import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { api } from "@/lib/client";
+import { CartoonPanel } from "./CartoonPanel";
 
 const FILE_TITLES: Record<string, string> = {
   "pdf-screen": "PDF для экрана",
@@ -87,6 +88,8 @@ export function BookCabinet(p: {
           <Link className="btn btn--ghost btn--sm" href={`/kniga/${p.id}/kupit?pechat=1`}>Второй экземпляр −30%</Link>
         </div>
       </div>
+
+      {p.status === "FULL_READY" && <CartoonPanel bookId={p.id} />}
 
       {p.selfRead && <VoiceRecorder bookId={p.id} pages={p.pages} />}
 

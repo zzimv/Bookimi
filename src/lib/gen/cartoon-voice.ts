@@ -30,7 +30,7 @@ export async function levels(file: string): Promise<Levels> {
 /** Проверить загруженный файл: сигнатура, размер, частота, каналы, длительность. */
 export async function validateVoiceFile(buf: Buffer, dir: string, name: string) {
   const s = sniffAudio(buf);
-  if (!s.ok) return { ok: false as const, error: s.error };
+  if (!s.ok) return { ok: false as const, error: s.error ?? "Неподдерживаемый формат" };
   await mkdir(dir, { recursive: true });
   const file = join(dir, `${name}.${s.ext}`);
   await writeFile(file, buf);

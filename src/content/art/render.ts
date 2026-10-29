@@ -9,6 +9,7 @@ import { applyMood } from "./mood";
 import { MOODS } from "../moods";
 import { drawDeco, escapeXml, HAIR_COLORS, rnd } from "./shared";
 import { FIGURE_FILTERS, fxBackdrop, fxDefs, fxLayers } from "./fx";
+import { sceneProps } from "./props";
 
 const DEFAULT_STYLE: ArtStyle["demo"] = { palette: { paper: "#fbf8f1", ink: "#3a3a44", accents: ["#d9534f", "#3e8ed0", "#f0ad4e", "#5cb85c"] }, line: "none", texture: "none" };
 
@@ -33,6 +34,8 @@ export interface DemoRenderOpts {
    * (альфа для вырезания героев из полной картинки). По умолчанию — вся иллюстрация.
    */
   layer?: "background" | "mask";
+  /** Описание сцены разворота (англ.): по нему — реквизит (река, окно, сани, подарки…) и тон неба (art/props.ts). */
+  scene?: string;
   /**
    * Группа на заднем плане (дети группы/класса и взрослые, до 40): маленькие фигуры рядами, как на общей
    * фотографии, никогда не заходят на героя и доп. героев. Внешность — crowdLooks(...). Рисуется, если передана.
@@ -296,6 +299,8 @@ export function renderDemoSpread(o: DemoRenderOpts): string {
     return heroDrawer(k)({ kind: k, look: crowdList[c.i].look, x: c.x, y: c.feet - 190 * c.scale, scale: c.scale, style, index: idx + c.i + 3, flip: c.x > heroX });
   });
   const hero = heroDrawer(heroKind)({ kind: heroKind, look: o.hero, x: heroX, y: H * 0.6, scale: heroScale, style, index: idx, flip: left && heroKind === "pet" });
+  // Реквизит сцены — на свободной от героев стороне, за героями (у каждого разворота свой кадр)
+  const props = sceneProps(o.scene, { W, H, zoneLo, zoneHi, feet: heroFeet, theme, ink: style.palette.ink, seed: idx });
 
   // Фильтр стиля — только на фигуры: на фоне он рвёт края кадра
   const fx = style.filter && ["wobble", "posterize", "soft", ...FIGURE_FILTERS].includes(style.filter) ? ` filter="url(#${style.filter})"` : "";
@@ -306,7 +311,7 @@ export function renderDemoSpread(o: DemoRenderOpts): string {
     return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${H}" width="${W}" height="${H}"><defs>${white}${textureDefs(style)}${extraFx ? fxDefs(style, W, H) : ""}</defs><rect width="${W}" height="${H}" fill="#000"/><g filter="url(#mask-white)"><g${fx}>${crowd.join("")}${extras.join("")}${hero}</g></g></svg>`;
   }
   const figures = o.layer === "background" ? "" : `<g${fx}>${crowd.join("")}${extras.join("")}${hero}</g>`;
-  const art = `${bg}${layers.behind}${figures}${layers.above}${textureOverlay(style, W, H)}`;
+  const art = `${bg}${props.sky}${props.behind}${layers.behind}${figures}${layers.above}${textureOverlay(style, W, H)}`;
   let svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${H}" width="${W}" height="${H}">
   <defs><linearGradient id="sky" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="${theme.sky[0]}"/><stop offset="1" stop-color="${theme.sky[1]}"/></linearGradient>${textureDefs(style)}${extraFx ? fxDefs(style, W, H) : ""}</defs>
   ${art}
