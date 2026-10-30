@@ -4,6 +4,8 @@
 // (без гидратации карточек). Пять старых тем нарисованы вручную; остальные темы контент-движка —
 // простая заглушка в цветах темы (colors из каталога).
 
+import { normalizeName } from "@/lib/declension";
+
 export type CoverColors = { sky: [string, string]; ground: string; accent: string };
 
 function Generic({ c }: { c: CoverColors }) {
@@ -143,7 +145,7 @@ export function Cover({
         <Art theme={theme} colors={colors} />
       )}
       {name !== undefined ? (
-        <div className="cover__name cover__name--own" aria-hidden="true">{name}</div>
+        <div className="cover__name cover__name--own" aria-hidden="true">{normalizeName(name)}</div>
       ) : slot ? null : (
         <div className="cover__name" aria-hidden="true" />
       )}

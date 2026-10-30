@@ -4,10 +4,14 @@
 // Модуль безопасен для клиента (только zod).
 
 import { z } from "zod";
+import { normalizeName } from "../lib/declension";
 import { EXTRA_ROLES, GROUP_ADULT_ROLES, GROUP_MAX_LIMIT, HERO_KIND_BY_AUDIENCE, type HeroKind } from "./types";
 import type { AudienceKey } from "./profiles";
 
 const str = (max: number) => z.string().trim().max(max);
+/** Имя: всегда с заглавной буквы («маша» → «Маша»), склоняется отдельно в declension.ts. */
+const nameStr = (max: number, msg = "Укажите имя") => z.string().trim().max(max).min(1, msg).transform(normalizeName);
+const nameOpt = (max: number) => z.string().trim().max(max).optional().default("").transform(normalizeName);
 
 /** Российский мобильный → +7XXXXXXXXXX. Принимает «8 (912) 345-67-89», «+7 912 3456789», «9123456789». */
 export function normalizePhone(raw: string): string | null {
@@ -43,7 +47,7 @@ const Gender = z.preprocess(
 
 export const ExtraV2 = z.object({
   role: z.enum(EXTRA_ROLES),
-  name: str(40).min(1, "Укажите имя"),
+  name: nameStr(40),
   /** Грамматический род для {Рn:…}; если пусто — по роли или по имени (guessGender). n — средний (облако, солнце). */
   gender: z.enum(["boy", "girl", "n"]).optional(),
   description: str(200).optional().default(""),
@@ -58,7 +62,7 @@ export type ExtraV2T = z.infer<typeof ExtraV2>;
 
 /** Ребёнок группы (детсад, класс) — без героя. Пол — для {РДn:…}; пусто — по имени (guessGender). */
 export const GroupMemberV2 = z.object({
-  name: str(30).min(1, "Укажите имя"),
+  name: nameStr(30),
   gender: Gender.optional(),
   /** Есть ли фото (сами фото — отдельной загрузкой, как у доп. героев). */
   photo: z.boolean().optional().default(false),
@@ -71,7 +75,7 @@ export type GroupMemberV2T = z.infer<typeof GroupMemberV2>;
 
 /** Взрослый группы: имя-отчество можно («Мария Ивановна»), роль, пол (пусто — по отчеству/имени). */
 export const GroupAdultV2 = z.object({
-  name: str(60).min(1, "Укажите имя"),
+  name: nameStr(60),
   role: z.enum(GROUP_ADULT_ROLES),
   gender: Gender.optional(),
 });
@@ -97,8 +101,8 @@ export const AnswersV2 = z.preprocess(
     /** id сегмента из SEGMENTS; пусто — определить по возрасту/виду. */
     segment: str(40).default(""),
     hero: z.object({
-      name: str(30).min(1, "Укажите имя"),
-      nickname: str(30).optional().default(""),
+      name: nameStr(30),
+      nickname: nameOpt(30),
       gender: Gender,
       ageGroup: z.enum(["2-3", "4-5", "6-7", "8-9"]).optional(),
       birthDate: str(10).optional().default(""),

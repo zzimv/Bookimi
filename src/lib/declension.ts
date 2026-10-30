@@ -31,6 +31,8 @@ const FEM_PATRONYMIC = /(овна|евна|ична|инична)$/i;
 const MASC_PATRONYMIC = /(ович|евич|ич)$/i;
 export const isPatronymic = (w: string) => FEM_PATRONYMIC.test(w) || MASC_PATRONYMIC.test(w);
 
+// Имена на -ья с ударным окончанием: творительный «-ёй» (Ильёй); остальные — «-ей» (Натальей, Дарьей, Софьей)
+const STRESSED_YA = new Set(["илья"]);
 const INDECLINABLE = /(о|е|э|и|у|ю|ы)$/i; // Саша → но «Саша» на «а»; Лео, Ники, Рене — не склоняются
 const HUSHING = /[жшчщц]$/i;
 const SOFT_STEM = /[кгхжшчщ]$/i;
@@ -39,8 +41,25 @@ function cap(src: string, out: string) {
   return src[0] === src[0].toUpperCase() ? out[0].toUpperCase() + out.slice(1) : out;
 }
 
+/** Имя с заглавной буквы в каждой части: «маша» → «Маша», «ЕВА» → «Ева», «анна-мария» → «Анна-Мария»,
+ *  «мария ивановна» → «Мария Ивановна». Внутренние заглавные у смешанного регистра сохраняем («МакСим» — как ввели). */
+export function normalizeName(name: string): string {
+  const n = (name ?? "").replace(/\s+/g, " ").trim();
+  if (!n) return n;
+  return n
+    .split(/([ -])/)
+    .map((part) => {
+      if (part === " " || part === "-" || !part) return part;
+      const lower = part.toLowerCase();
+      const allSame = part === lower || part === part.toUpperCase();
+      const body = allSame ? lower : part;
+      return body[0].toUpperCase() + body.slice(1);
+    })
+    .join("");
+}
+
 export function declineName(name: string, c: Case, gender: Gender): string {
-  const n = name.trim();
+  const n = normalizeName(name);
   if (!n || c === "им") return n;
   // Двойные имена: «Анна-Мария»
   if (n.includes("-")) return n.split("-").map((p) => declineName(p, c, gender)).join("-");
@@ -64,7 +83,7 @@ export function declineName(name: string, c: Case, gender: Gender): string {
     const genA = SOFT_STEM.test(s) || soft ? "и" : "ы";
     const tvA = soft ? "ей" : HUSHING.test(s) ? "ей" : "ой";
     const datA = soft && low.endsWith("ья") ? "е" : "е";
-    return { род: s + genA, дат: s + datA, вин: s + (soft ? "ю" : "у"), тв: s + (soft && low.endsWith("ья") ? "ёй" : tvA), пр: s + "е" }[c];
+    return { род: s + genA, дат: s + datA, вин: s + (soft ? "ю" : "у"), тв: s + (soft && STRESSED_YA.has(low) ? "ёй" : tvA), пр: s + "е" }[c];
   }
   // Женские имена на согласную не склоняются (Ассоль), кроме «-ь» (Любовь — особый случай)
   if (isFeminine(gender)) {
@@ -80,6 +99,7 @@ export function declineName(name: string, c: Case, gender: Gender): string {
   if (low.endsWith("ь")) return { род: stem + "я", дат: stem + "ю", вин: stem + "я", тв: stem + "ем", пр: stem + "е" }[c];
   // Беглое «е»: Лев → Льва, Павел → Павла (только частые случаи)
   if (low === "лев") return cap(n, { род: "льва", дат: "льву", вин: "льва", тв: "львом", пр: "льве" }[c]);
+  if (low === "павел") return cap(n, { род: "павла", дат: "павлу", вин: "павла", тв: "павлом", пр: "павле" }[c]);
   if (low === "пётр" || low === "петр") return cap(n, { род: "петра", дат: "петру", вин: "петра", тв: "петром", пр: "петре" }[c]);
   // Беглое «о/ё» в кличках: Пушок → Пушка, Дружок → Дружка, Уголёк → Уголька
   if (low.length >= 5 && /[бвгджзклмнпрстфхцчшщ]ок$/.test(low)) {

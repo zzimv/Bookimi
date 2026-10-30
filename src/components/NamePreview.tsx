@@ -1,5 +1,6 @@
 "use client";
 import { useEffect, useState } from "react";
+import { normalizeName } from "@/lib/declension";
 
 const KEY = "bookimi.heroName";
 
@@ -7,7 +8,8 @@ function clean(v: string) {
   return v.replace(/[^A-Za-zА-Яа-яЁё\- ]/g, "").slice(0, 20);
 }
 
-function apply(name: string) {
+function apply(raw: string) {
+  const name = normalizeName(raw);
   document.documentElement.style.setProperty("--hero-name", name ? `"${name}"` : '""');
   document.documentElement.classList.toggle("has-name", Boolean(name));
 }
