@@ -343,7 +343,29 @@ export async function renderPrintFiles(bookId: string, order: { publicCode: stri
   const d = data ?? (await bookPdfData(bookId, order.publicCode));
   await saveFile(bookId, "print-block", await renderPdf(d, { kind: "print", wMm: f.widthMm, hMm: f.heightMm }), "pdf", "application/pdf");
   await saveFile(bookId, "print-cover", await renderPdf(d, { kind: "cover", wMm: f.widthMm, hMm: f.heightMm, hard: f.cover === "HARD", pages: 26 }), "pdf", "application/pdf");
+  const { printAddonKeys } = await import("../print");
+  await renderAddonFiles(bookId, await printAddonKeys(order.items), order.publicCode, d);
   return true;
+}
+
+/** Цифровые допы заказа с файлами (обои) — в кабинет покупателю. */
+async function digitalAddonKeys(items: { kind: string; refKey: string }[]) {
+  const { addonFileSpecs } = await import("../addon-files");
+  return [...new Set(items.filter((i) => i.kind === "addon" && addonFileSpecs(i.refKey).some((f) => f.type === "png")).map((i) => i.refKey))];
+}
+
+/** Файлы допов (src/lib/addon-files.ts) по иллюстрациям книги: PDF типографии и PNG покупателю. */
+export async function renderAddonFiles(bookId: string, keys: string[], orderCode?: string, data?: BookPageData) {
+  if (!keys.length) return;
+  const { renderAddon } = await import("../addon-files");
+  const book = await db.book.findUniqueOrThrow({ where: { id: bookId } });
+  const a = answersOf(book);
+  const art = { ...(data ?? (await bookPdfData(bookId, orderCode))), pet: a.audience === "PET" ? { species: a.pet.species, breed: a.pet.breed, furColor: a.pet.furColor } : undefined };
+  for (const key of keys) {
+    for (const f of await renderAddon(key, art)) {
+      await saveFile(bookId, f.spec.kind, f.data, f.spec.type, f.spec.type === "png" ? "image/png" : "application/pdf");
+    }
+  }
 }
 
 /**
@@ -358,6 +380,7 @@ async function runExtras(bookId: string, orderId: string) {
   if (order.whoPrints === "bookimi") await renderPrintFiles(bookId, { publicCode: order.publicCode, items: mine });
   if (mine.some((i) => i.refKey === "audiobook") && !files.has("audio")) await runAudio(bookId);
   if (mine.some((i) => i.refKey === "coloring") && !files.has("coloring")) await renderColoring(bookId);
+  await renderAddonFiles(bookId, await digitalAddonKeys(mine), order.publicCode);
   if (mine.some((i) => i.refKey === "cartoon" || i.refKey === "cartoon-own-voice")) {
     const { onCartoonPaid } = await import("../cartoon");
     await onCartoonPaid(bookId, mine, { fromFull: true }).catch((e) => alertOwner("Мультфильм не поставлен в очередь", `${bookId}: ${(e as Error).message}`));
@@ -384,6 +407,7 @@ export async function runFull(bookId: string, orderId?: string) {
   const order = orderId ? await db.order.findUnique({ where: { id: orderId }, include: { items: true } }) : null;
   if (order?.items.some((i) => i.refKey === "audiobook")) await runAudio(bookId);
   if (order?.items.some((i) => i.refKey === "coloring")) await renderColoring(bookId);
+  if (order) await renderAddonFiles(bookId, await digitalAddonKeys(order.items.filter((i) => !i.bookId || i.bookId === bookId)), order.publicCode);
   await db.book.update({ where: { id: bookId }, data: { status: "FULL_READY", fullReadyAt: new Date(), progress: 100 } });
   if (book.userId) {
     await notifySafe(book.userId, "book_ready", { title: (book.text as unknown as StoryText).title, audio: order?.items.some((i) => i.refKey === "audiobook") ? 1 : undefined });

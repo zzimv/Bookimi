@@ -5,7 +5,7 @@ import { Cover } from "@/components/Cover";
 import { Breadcrumbs, JsonLd, StickyCta } from "@/components/Layout";
 import { NamePreview } from "@/components/NamePreview";
 import { Faq } from "@/components/Sections";
-import { ageLabel, displayTitle, getPriceTable, getStories, getStory, HERO_WORD, rub } from "@/lib/catalog";
+import { ageLabel, displayTitle, getAddonsFor, getPriceTable, getStories, getStory, HERO_WORD, rub } from "@/lib/catalog";
 import { FAQ } from "@/lib/catalog-defaults";
 import { sampleUrl } from "@/lib/obrazec";
 import { og } from "@/lib/og";
@@ -32,6 +32,11 @@ const NAME_LABEL = { CHILD: "Как зовут ребёнка?", TEEN: "Как �
 const NAME_PH = { CHILD: "Например, Варя", TEEN: "Например, Миша", ADULT: "Например, Анна", PET: "Например, Пушок" } as const;
 /** Развороты-примеры: начало, середина, финал. */
 const SAMPLE_SPREADS = [1, 6, 12];
+/** «Постер А3 в стиле книги» → «постер А3 в стиле книги»; «Мультфильм по книге: 2 минуты…» → «мультфильм по книге». */
+const shortAddon = (t: string) => {
+  const s = t.split(":")[0].replace(/\s*\(.*\)$/, "");
+  return /^[А-ЯЁ][а-яё]/.test(s) ? s[0].toLowerCase() + s.slice(1) : s;
+};
 
 // Страница книги как у Wonderbly: живая обложка (имя появляется, пока вы печатаете), 3 разворота-примера,
 // голос и стили, для кого, цены из каталога, сроки печати к сезону, «Создать» → анкета с выбранной книгой.
@@ -39,6 +44,8 @@ export default async function Page({ params }: { params: Promise<{ slug: string 
   const { slug } = await params;
   const [story, prices, season] = await Promise.all([getStory(slug), getPriceTable(), getSeason()]);
   if (!story || story.slug === SVOYA_IDEYA) notFound();
+  // Допы — свои для аудитории книги; в блоке цены — четыре первых (без «второго экземпляра» и срочности)
+  const extras = (await getAddonsFor(story.audience)).filter((a) => a.kind !== "MODIFIER" && a.priceRub).slice(0, 4);
   const title = displayTitle(story.title, story.audience);
   const pdf = prices.find((r) => r.kind === "PDF");
   const print = prices.filter((r) => r.kind === "PRINT").sort((a, b) => a.priceRub - b.priceRub);
@@ -100,6 +107,11 @@ export default async function Page({ params }: { params: Promise<{ slug: string 
               </div>
             )}
           </div>
+          {extras.length > 0 && (
+            <p className="small product__addons" data-addons={story.audience}>
+              К книге можно добавить: {extras.map((a, i) => <span key={a.key}>{i > 0 && ", "}{shortAddon(a.title)} — {rub(a.priceRub!)}</span>)}.
+            </p>
+          )}
           {season?.printLine && seasonFits && <p className="deadline">{season.printLine}</p>}
           <Link href={create} className="btn btn--primary btn--lg btn--block product__cta">
             Создать книгу

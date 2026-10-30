@@ -23,7 +23,7 @@ import { METHOD_TITLES } from "../../src/lib/shipping";
 import { declineName } from "../../src/lib/declension";
 import { canAcceptPayments, DEFAULTS } from "../../src/lib/settings";
 import { FORMATS } from "../../src/lib/catalog-defaults";
-import { bookById, bulkState, cartoonOf, catalogForPricing, demoPrefill, heroAccOf, journeyOf, markPaid, orderById, pageUrl, pdfPaidFor, S, SHIP_METHODS } from "./api";
+import { bookAudience, bookById, bulkState, cartoonOf, catalogForPricing, demoPrefill, heroAccOf, journeyOf, markPaid, orderById, pageUrl, pdfPaidFor, S, SHIP_METHODS } from "./api";
 import { NotFoundError, RedirectError } from "./router";
 import { HeroBirthdays } from "../../src/app/kabinet/Birthdays";
 import { demoBirthdays } from "./holidays";
@@ -60,7 +60,7 @@ export async function KupitPage({ id, who, pechat, bulk }: { id: string; who?: s
   if (!b) throw new NotFoundError();
   const user = needUser(`/kniga/${id}/kupit${who ? `?who=${who}` : pechat ? "?pechat=1" : ""}`);
   if (!["PREVIEW_READY", "FULL_QUEUED", "FULL_READY"].includes(b.status)) throw new RedirectError(`/kniga/${id}`);
-  const { formats, addons } = catalogForPricing();
+  const { formats, addons } = catalogForPricing(bookAudience(b));
   const full = FORMATS.filter((f) => formats.some((x) => x.key === f.key));
   const addonInfo: Record<string, string> = {};
   const bs = b.parentId ? null : bulkState(b);
@@ -71,7 +71,7 @@ export async function KupitPage({ id, who, pechat, bulk }: { id: string; who?: s
         coverUrl={b.pages.includes(0) ? pageUrl(b, 0) : null}
         initialWho={who === "bookimi" || pechat ? "bookimi" : "self"}
         formats={full.map((f) => ({ key: f.key, kind: f.kind, title: f.title, priceRub: f.price, widthMm: f.w, heightMm: f.h, cover: f.cover, pages: 24 }))}
-        addons={addons.map((a) => ({ key: a.key, kind: a.kind, title: a.title, description: addonInfo[a.key] ?? a.title, priceRub: a.priceRub, percentOff: a.percentOff, requiresPrint: a.requiresPrint }))}
+        addons={addons.map((a) => ({ key: a.key, kind: a.kind, title: a.title, description: addonInfo[a.key] ?? a.description ?? "", priceRub: a.priceRub, percentOff: a.percentOff, requiresPrint: a.requiresPrint }))}
         methods={SHIP_METHODS.map((m) => ({ key: m, title: METHOD_TITLES[m] }))}
         pickupAddress={null}
         voices={DEFAULTS.audio.voices}
@@ -368,7 +368,11 @@ export async function KabinetBook({ id }: { id: string }) {
   const order = S.orders.find((o) => o.bookId === id && !["CANCELLED", "REFUNDED", "PENDING_PAYMENT"].includes(o.status));
   const jo = order ? journeyOf(order) : null;
   const bought = new Set(S.orders.filter((o) => o.bookId === id && o.paidAt).flatMap((o) => o.items.map((i) => i.refKey)));
-  const files = b.status === "FULL_READY" ? ["pdf-screen", "pdf-a4", "pdf-print-210", "pdf-print-150", ...(bought.has("coloring") ? ["coloring"] : [])] : [];
+  const files = b.status === "FULL_READY" ? ["pdf-screen", "pdf-a4", "pdf-print-210", "pdf-print-150", ...(bought.has("coloring") ? ["coloring"] : []), ...(bought.has("wallpapers") ? ["addon-wallpaper-phone", "addon-wallpaper-desktop"] : [])] : [];
+  // «Добавить к книге»: цифровые допы аудитории книги, ещё не купленные (как src/app/kabinet/kniga/[id]/page.tsx)
+  const later = catalogForPricing(bookAudience(b)).addons
+    .filter((a) => a.kind === "DIGITAL" && !a.requiresPrint && !a.key.startsWith("cartoon") && !bought.has(a.key))
+    .map((a) => ({ key: a.key, title: a.title, description: a.description ?? "", priceRub: a.priceRub ?? 0 }));
   const pages = b.pages.map((i) => ({ index: i, text: i === 0 ? "" : b.text?.spreads[i - 1]?.text ?? "", url: pageUrl(b, i) }));
   return (
     <>
@@ -381,7 +385,7 @@ export async function KabinetBook({ id }: { id: string }) {
       )}
       {b.status === "FULL_READY" && cartoonOf(b).bought && <CartoonPlayer book={b} />}
       {b.status !== "FULL_READY" && cartoonOf(b).bought && <p className="muted-panel small">Мультфильм соберётся, как только книга будет готова.</p>}
-      <BookCabinet id={id} title={b.text?.title ?? ""} status={b.status} progress={b.progress} redrawsLeft={b.redrawsLeft} pages={pages} files={files} audioUrl={null} selfRead={false} />
+      <BookCabinet id={id} title={b.text?.title ?? ""} status={b.status} progress={b.progress} redrawsLeft={b.redrawsLeft} pages={pages} files={files} audioUrl={null} selfRead={false} later={later} coverUrl={b.pages.includes(0) ? pageUrl(b, 0) : null} />
       <p className="small demo-note" style={{ marginTop: 16 }}>
         <Link href={`/kniga/${id}`}>Настроение иллюстраций — сменить для всей книги →</Link>
         {bought.has("audiobook") && <span className="muted"> · Аудиокнига на сайте — MP3 голосом диктора в плеере.</span>}

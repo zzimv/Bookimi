@@ -191,6 +191,27 @@ export async function getPriceTable() {
   return FORMATS.map((f) => ({ key: f.key, kind: f.kind, title: f.title, priceRub: f.price }));
 }
 
+/** Допы для книг аудитории (витрина: блок цены на странице книги). Без БД — значения по умолчанию. */
+export async function getAddonsFor(audience: AudienceKey): Promise<{ key: string; title: string; priceRub: number | null; kind: string; requiresPrint: boolean }[]> {
+  const { ADDONS } = await import("./catalog-defaults");
+  const { addonsForAudience } = await import("./addons-core");
+  const fallback = () => addonsForAudience(ADDONS.filter((a) => a.active).map((a) => ({ key: a.key as string, title: a.title as string, priceRub: a.price as number | null, kind: a.kind as string, requiresPrint: a.print as boolean, audiences: [...a.audiences] as string[] })), audience);
+  if (!hasDatabase) return fallback();
+  try {
+    const rows = await db.addon.findMany({ where: { isActive: true }, orderBy: { sortOrder: "asc" } });
+    if (!rows.length) return fallback();
+    const { cfg } = await import("./settings");
+    const [flags, cartoon, audio] = await Promise.all([cfg("flags"), cfg("cartoon"), cfg("audio")]);
+    return addonsForAudience(rows, audience)
+      .filter((a) => flags.printEnabled || !a.requiresPrint)
+      .filter((a) => cartoon.enabled || !a.key.startsWith("cartoon"))
+      .filter((a) => a.key !== "audio-self" || audio.selfReadEnabled)
+      .map((a) => ({ key: a.key, title: a.title, kind: a.kind, requiresPrint: a.requiresPrint, priceRub: a.key === "cartoon" ? cartoon.priceRub : a.key === "audiobook" ? audio.ttsPriceRub : a.priceRub }));
+  } catch {
+    return fallback();
+  }
+}
+
 export async function getApprovedReviews() {
   if (!hasDatabase) return [];
   try {

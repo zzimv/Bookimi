@@ -204,21 +204,28 @@ export type DemoTexture = "paper" | "grain" | "halftone" | "none";
  *  wash — фон выбелен к бумаге (минимум фона, много белого); lines — фон превращён в контур тушью цвета ink
  *  на бумаге paper; offset — плоский цвет + контур со сдвигом (ксерокопия); glow — тёплое живописное сияние;
  *  dream — мягкий светлый акварельный фон в золотом свете.
+ *  Добавлены по референсам владельца (docs/content/STYLE-REFERENCES.md): pencil — бледные плоские пятна на кремовой
+ *  бумаге и двойной сдвинутый карандашный контур; golden — тёплая золотая акварельная заливка почти без деталей;
+ *  sparse — белая бумага и лишь лёгкий набросок фона тушью; backlight — тёмный тёплый лес в золотом контровом свете;
+ *  gouache — живописный приглушённый тёплый фон с мазками; mist — бледный размытый фон почти без деталей;
+ *  journal — фон контуром тушью на старой бумаге с лёгкой сепией. Эти фоны обрабатывают и реквизит сцены.
  */
-export type DemoBackdrop = "blur" | "wash" | "lines" | "offset" | "glow" | "dream";
+export type DemoBackdrop = "blur" | "wash" | "lines" | "offset" | "glow" | "dream" | "pencil" | "golden" | "sparse" | "backlight" | "gouache" | "mist" | "journal";
 
 /**
  * Доп. слои стиля (render.ts). За фигурами: town (панорама городка), cutaway (дом в разрезе с полками),
  * splash (акварельные пятна), floor (пара линий пола), crosses (пустыня: дюны и звёзды-крестики). Поверх: hatch (штриховка), aged (старая бумага, пятна,
  * скотч, пометки), panels (раскадровка), fog (туман и лучи), vignette (уход в бумагу), shade (тёмные тёплые края), rays (золотые лучи и искорки).
+ * Добавлены: halo (за фигурами: бледное сияние вокруг героя), motes (поверх: светящиеся пылинки в лучах),
+ * flicks (поверх: быстрые штрихи-«эмоции» тушью рядом с героем).
  */
-export type DemoOverlay = "town" | "cutaway" | "splash" | "floor" | "hatch" | "aged" | "panels" | "crosses" | "fog" | "vignette" | "shade" | "rays";
+export type DemoOverlay = "town" | "cutaway" | "splash" | "floor" | "hatch" | "aged" | "panels" | "crosses" | "fog" | "vignette" | "shade" | "rays" | "halo" | "motes" | "flicks";
 
 export interface ArtStyleDemo {
   palette: { paper: string; ink: string; accents: string[] };
   line: DemoLine;
   texture: DemoTexture;
-  /** id SVG-фильтра фигур из render.ts (wobble, posterize, soft, ink, sepia, cel, xerox) или подсказка. */
+  /** id SVG-фильтра фигур из render.ts (wobble, posterize, soft, ink, sepia, cel, xerox, pencil, bleed, palewash, twotone, warm) или подсказка. */
   filter?: string;
   /** Обработка фона (по умолчанию — фон темы как есть). */
   backdrop?: DemoBackdrop;

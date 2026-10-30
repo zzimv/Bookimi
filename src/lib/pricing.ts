@@ -1,7 +1,9 @@
 // Расчёт суммы заказа. Только на сервере: клиент присылает выбор, сумму считает этот модуль.
 // Правила: PDF входит в печатную книгу бесплатно; если PDF уже оплачен — печать со скидкой на его цену;
 // второй экземпляр −30% от цены формата; физические допы — только при печати; промокоды не суммируются
-// (берётся одна, самая выгодная скидка); бесплатная доставка СДЭК до ПВЗ от N книг.
+// (берётся одна, самая выгодная скидка); бесплатная доставка СДЭК до ПВЗ от N книг; допы — только для аудитории
+// книги (src/lib/addons-core.ts).
+import { addonFits } from "./addons-core";
 
 export interface CatalogFormat {
   key: string;
@@ -16,6 +18,11 @@ export interface CatalogAddon {
   priceRub: number | null;
   percentOff: number | null;
   requiresPrint: boolean;
+  /** Для каких книг (CHILD | TEEN | ADULT | PET); пусто или нет — для всех. */
+  audiences?: string[];
+  /** Физический доп: print — типография, other — другой подрядчик. */
+  supplier?: string;
+  description?: string;
 }
 
 export interface QuoteInput {
@@ -32,6 +39,10 @@ export interface QuoteInput {
   addonsOnly?: boolean;
   /** Мультфильм этой книги уже оплачен (тогда «Своим голосом» можно докупить отдельно). */
   cartoonPaid?: boolean;
+  /** Аудитория книги: допы другой аудитории не продаются (у подростка нет ростомера). */
+  audience?: string;
+  /** Цифровые допы этой книги, уже оплаченные раньше: второй раз не продаём (файл уже в кабинете). */
+  paidAddons?: string[];
 }
 
 export interface QuoteLine {
@@ -92,6 +103,10 @@ export function quote(input: QuoteInput, formats: CatalogFormat[], addons: Catal
       errors.push(`Доп «${key}» недоступен`);
       continue;
     }
+    if (!addonFits(a, input.audience)) {
+      errors.push(`«${a.title}» — не для этой книги`);
+      continue;
+    }
     if (a.requiresPrint && (input.whoPrints !== "bookimi" || input.addonsOnly)) {
       errors.push(`«${a.title}» — только для печатной книги`);
       continue;
@@ -103,6 +118,10 @@ export function quote(input: QuoteInput, formats: CatalogFormat[], addons: Catal
     }
     if (key === CARTOON_OWN_VOICE && !chosen.includes(CARTOON_ADDON) && !input.cartoonPaid) {
       errors.push("«Своим голосом» — дополнение к мультфильму: добавьте мультфильм");
+      continue;
+    }
+    if (a.kind === "DIGITAL" && key !== CARTOON_ADDON && input.paidAddons?.includes(key)) {
+      errors.push(`«${a.title}» к этой книге уже куплен — файл в кабинете`);
       continue;
     }
     if (key === "second-copy") {

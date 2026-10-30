@@ -30,7 +30,8 @@ const BLEED = 3;
 const SAFE = 5;
 
 let fontCss: string | null = null;
-function fonts() {
+/** Шрифты сайта (Nunito 800, Manrope 500) для PDF — встраиваются в HTML. */
+export function fonts() {
   if (fontCss) return fontCss;
   const f = (pkg: string, file: string) =>
     readFileSync(join(process.cwd(), "node_modules/@fontsource", pkg, "files", file)).toString("base64");
@@ -63,8 +64,8 @@ export function bookWording(b: Pick<BookPageData, "heroName" | "audience" | "her
   }
 }
 
-const uri = (img: { data: Buffer; contentType: string }) => `data:${img.contentType};base64,${img.data.toString("base64")}`;
-const esc = (s: string) => s.replace(/[<>&]/g, (c) => ({ "<": "&lt;", ">": "&gt;", "&": "&amp;" })[c]!);
+export const uri = (img: { data: Buffer; contentType: string }) => `data:${img.contentType};base64,${img.data.toString("base64")}`;
+export const esc = (s: string) => s.replace(/[<>&]/g, (c) => ({ "<": "&lt;", ">": "&gt;", "&": "&amp;" })[c]!);
 
 function baseCss(pageW: number, pageH: number) {
   return `${fonts()}
@@ -145,26 +146,31 @@ export function bookHtml(b: BookPageData, k: PdfKind): { html: string; wMm: numb
 }
 
 export async function renderPdf(b: BookPageData, k: PdfKind): Promise<Buffer> {
-  const { chromium } = await import("playwright-core");
   const { html, wMm, hMm } = bookHtml(b, k);
+  return renderHtmlPdf(html, wMm, hMm, b);
+}
+
+/** HTML → PDF страницами w×h мм (Chromium) и метаданные. Общий для книги и файлов допов (src/lib/addon-files.ts). */
+export async function renderHtmlPdf(html: string, wMm: number, hMm: number, meta: { title: string; orderCode?: string }): Promise<Buffer> {
+  const { chromium } = await import("playwright-core");
   const browser = await chromium.launch({
     executablePath: process.env.CHROMIUM_PATH || undefined,
     args: ["--no-sandbox", "--disable-dev-shm-usage", "--font-render-hinting=none"],
   });
   try {
     const page = await browser.newPage();
-    await page.setContent(`<!doctype html><html lang="ru"><head><meta charset="utf-8"><title>${esc(b.title)}</title></head><body>${html}</body></html>`, {
+    await page.setContent(`<!doctype html><html lang="ru"><head><meta charset="utf-8"><title>${esc(meta.title)}</title></head><body>${html}</body></html>`, {
       waitUntil: "load",
     });
     const pdf = await page.pdf({ width: `${wMm}mm`, height: `${hMm}mm`, printBackground: true, preferCSSPageSize: true });
-    return await stamp(Buffer.from(pdf), b);
+    return await stamp(Buffer.from(pdf), meta);
   } finally {
     await browser.close();
   }
 }
 
 /** Метаданные PDF: скрытый номер заказа (защита от копирования). */
-async function stamp(pdf: Buffer, b: BookPageData) {
+async function stamp(pdf: Buffer, b: { title: string; orderCode?: string }) {
   const { PDFDocument } = await import("pdf-lib");
   const doc = await PDFDocument.load(pdf);
   doc.setTitle(b.title);

@@ -6,6 +6,17 @@ import { db, hasDatabase } from "./db";
 import { getHolidayCards } from "./holidays";
 import { AUDIENCE_PAGES } from "./storefront";
 import { ADDONS } from "./catalog-defaults";
+import { addonsForAudience } from "./addons-core";
+
+const addonOut = (a: { key: string; title: string; description: string; priceRub: number | null; percentOff: number | null; kind: string; requiresPrint: boolean }) => ({
+  key: a.key,
+  title: a.title,
+  ...(a.description ? { description: a.description } : {}),
+  priceRub: a.priceRub,
+  percentOff: a.percentOff,
+  type: a.kind === "DIGITAL" ? "digital" : a.kind === "PHYSICAL" ? "printed" : "option",
+  withPrintOnly: a.requiresPrint,
+});
 import { PLOTS } from "../content/registry";
 
 /** Возрастная маркировка по аудитории (как на обложке PDF, src/lib/pdf.ts → bookWording; ASSUMPTIONS п. 41). */
@@ -13,7 +24,7 @@ export const AGE_RATING: Record<string, string> = { CHILD: "0+", TEEN: "6+", ADU
 const AUD_AGES: Record<string, string> = { CHILD: "2-10", TEEN: "11-17", ADULT: "18+", PET: "любой" };
 
 export async function catalogData() {
-  const [stories, occasions, prices, shipping, limits, holidays, cartoon, bulk] = await Promise.all([
+  const [stories, occasions, prices, shipping, limits, holidays, cartoon, bulk, flags] = await Promise.all([
     getStories(),
     getOccasions(),
     getPriceTable(),
@@ -22,11 +33,17 @@ export async function catalogData() {
     getHolidayCards().catch(() => []),
     cfg("cartoon"),
     cfg("bulk"),
+    cfg("flags"),
   ]);
   const dbAddons = hasDatabase ? await db.addon.findMany({ where: { isActive: true }, orderBy: { sortOrder: "asc" } }).catch(() => []) : [];
   // Без БД (или пустая таблица) — допы по умолчанию; цены мультфильма — всегда из настроек
-  const addons = (dbAddons.length ? dbAddons.map((a) => ({ key: a.key, title: a.title, priceRub: a.priceRub, percentOff: a.percentOff })) : ADDONS.map((a) => ({ key: a.key as string, title: a.title as string, priceRub: a.price as number | null, percentOff: a.pct as number | null })))
+  const addons = (
+    dbAddons.length
+      ? dbAddons.map((a) => ({ key: a.key, title: a.title, description: a.description === a.title ? "" : a.description, priceRub: a.priceRub, percentOff: a.percentOff, audiences: a.audiences, kind: a.kind, requiresPrint: a.requiresPrint }))
+      : ADDONS.filter((a) => a.active).map((a) => ({ key: a.key as string, title: a.title as string, description: a.description as string, priceRub: a.price as number | null, percentOff: a.pct as number | null, audiences: [...a.audiences] as string[], kind: a.kind as string, requiresPrint: a.print as boolean }))
+  )
     .filter((a) => cartoon.enabled || !a.key.startsWith("cartoon"))
+    .filter((a) => flags.printEnabled || !a.requiresPrint)
     .map((a) => (a.key === "cartoon" ? { ...a, priceRub: cartoon.priceRub } : a.key === "cartoon-own-voice" ? { ...a, priceRub: cartoon.ownVoiceRub } : a));
   const ph = hasDatabase ? await db.printHouse.findFirst({ where: { isActive: true } }).catch(() => null) : null;
   const base = `https://${process.env.DOMAIN ?? "bookimi.ru"}`;
@@ -41,7 +58,17 @@ export async function catalogData() {
     country: "RU",
     /** Маркировка по 436-ФЗ зависит от аудитории книги — см. audiences[].ageRating. */
     ageRating: AGE_RATING,
-    audiences: AUDIENCE_PAGES.map((a) => ({ key: a.key, title: a.nav, hero: a.hero, ages: AUD_AGES[a.key], ageRating: AGE_RATING[a.key], url: `${base}/dlya/${a.slug}`, books: stories.filter((s) => s.audience === a.key).length })),
+    audiences: AUDIENCE_PAGES.map((a) => ({
+      key: a.key,
+      title: a.nav,
+      hero: a.hero,
+      ages: AUD_AGES[a.key],
+      ageRating: AGE_RATING[a.key],
+      url: `${base}/dlya/${a.slug}`,
+      books: stories.filter((s) => s.audience === a.key).length,
+      /** Допы к книгам этой аудитории (у каждой аудитории свой набор). */
+      addons: addonsForAudience(addons, a.key).map(addonOut),
+    })),
     howItWorks: [
       "Герои: кто главный герой (ребёнок, подросток, взрослый, питомец), имя и фото — после отдельного согласия — или описание словами; можно добавить других героев",
       "Повод и сюжет: из каталога или «своя история» по вашей идее; для детского сада и класса — список группы",
@@ -72,7 +99,8 @@ export async function catalogData() {
     holidays: holidays.map((h) => ({ title: h.title, date: h.iso, daysLeft: h.daysLeft, printOrder: h.deadlineLine, url: `${base}${h.occasionHref ?? h.catalogHref}` })),
     prices: prices.map((p) => ({ product: p.title, priceRub: p.priceRub, type: p.kind === "PDF" ? "digital" : "printed", pages: 24 })),
     priceSummary: { pdfRub: pdf ?? null, printFromRub: Number.isFinite(printMin) ? printMin : null, preview: 0 },
-    addons: addons.map((a) => ({ title: a.title, priceRub: a.priceRub, percentOff: a.percentOff })),
+    /** Все допы; audiences — для каких книг (пусто — для всех). */
+    addons: addons.map((a) => ({ ...addonOut(a), audiences: a.audiences })),
     production: { printDays: `${ph?.leadDaysMin ?? 3}-${ph?.leadDaysMax ?? 5} рабочих дней`, pdf: "в течение часа после оплаты" },
     delivery: { services: ["СДЭК", "Почта России", "Яндекс Доставка"].filter((_, i) => [shipping.cdekPvz || shipping.cdekCourier, shipping.pochta, shipping.yandex][i]), freeFromBooks: shipping.freeShippingBooks, cdekDays: "2-7", pochtaDays: "7-14" },
     privacy: { photoStorage: "серверы в России", photoDeletedAfterDays: limits.photoTtlDays, photoUse: "только для иллюстраций, без идентификации личности" },

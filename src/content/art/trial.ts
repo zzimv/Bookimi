@@ -10,6 +10,9 @@
 //  • Общая фраза о сохранении личности добавляется ко ВСЕМ стилям при сборке промпта (src/lib/gen/image.ts,
 //    IDENTITY_CLAUSE). Здесь — только техника и, где техника склонна к карикатуре, анти-искажения в негативе.
 //  • demo — облик в SVG-рендере без GPU (art/render.ts: backdrop, overlays, фильтры фигур).
+//  • Восемь стилей сверены с пробными картинками владельца (docs/content/STYLE-REFERENCES.md): промпт закрепляет
+//    удачную технику, негатив — то, что генератор делал не так (костюм известного персонажа, злодей, выпученные
+//    глаза и огромный рот, знаки-эмблемы). Сами картинки в репозиторий не кладём — только словесное описание.
 //
 // requests: —
 
@@ -107,13 +110,13 @@ export const TRIAL_ART_STYLES: ArtStyle[] = [
   {
     ...meta("desert-stars"),
     prompt:
-      "Minimalist naive watercolor illustration. Loose wobbly pencil line and thin ink outline, transparent pale watercolor washes with uneven edges and bleeding, large areas of untouched white paper. A vast empty sand desert with soft low dunes under a wide night or dusk sky, a few scattered stars drawn as small crosses and dots, the hero small and alone in the big quiet space. Two-tone palette of warm pale sand and soft night blue with a touch of rose. Childlike simplicity, melancholic poetic mood, no heavy shading, no digital polish.",
-    negative: neg("saturated colors, thick outlines, busy background, city, forest, dramatic lighting, digital gradients, glossy finish, round tiny planet, roses on a planet"),
+      "Minimalist naive watercolor illustration. Loose wobbly thin pencil and gray ink line, transparent pale watercolor washes with uneven edges and bleeding, large areas of untouched white paper. A vast empty sand desert drawn as a few pale horizontal sand washes and a thin wobbly horizon under a wide pale night or dusk sky, small scattered stars drawn in ink as tiny crosses, dots and little outlined stars. The hero is small and alone in the big quiet space, in their own everyday clothing, with their own hair color and hairstyle from the reference. Pale palette of warm sand, soft gray blue and a touch of rose. Childlike simplicity, melancholic poetic mood, no heavy shading, no digital polish.",
+    negative: neg("green coat, long scarf, flowing scarf, golden spiky hair, costume of a known character, round tiny planet, roses on a planet, circle frame around the hero, saturated colors, thick outlines, busy background, city, forest, dramatic lighting, digital gradients, glossy finish"),
     demo: {
-      palette: { paper: "#fbf7ee", ink: "#7a7266", accents: ["#e6cc93", "#6f8fc4", "#e7b9b0", "#c9a877"] },
-      line: "sketch",
+      palette: { paper: "#fafaf5", ink: "#5c584e", accents: ["#efe2c2", "#d9e0ea", "#f1d9d0", "#e6d4a8"] },
+      line: "thin",
       texture: "paper",
-      filter: "soft",
+      filter: "palewash",
       backdrop: "wash",
       overlays: ["crosses"],
     },
@@ -121,96 +124,97 @@ export const TRIAL_ART_STYLES: ArtStyle[] = [
   {
     ...meta("cel-70s"),
     prompt:
-      "A lively 1970s hand-drawn cel animation frame. The figures have clean, smooth, closed black ink outlines with expressive but controlled linework and flat bright gouache fills without gradients or realistic shading, a hand-painted cel feel. The background is painted separately as a soft painterly gouache picture of a 1970s city park, courtyard or building site in warm, slightly muted colors, clearly contrasting with the more saturated figures. Dynamic diagonal composition, humorous energetic mood. The person stays a clearly human character with natural anatomy.",
-    negative: neg("3d, digital gloss, gradients on figures, realistic shading, text, modern smartphones, neon colors, chase of animals, wolf, hare"),
+      "A lively 1970s hand-drawn cel animation frame. The figures have clean, smooth, closed black ink outlines with expressive but controlled linework and flat bright gouache fills without gradients or realistic shading, a hand-painted cel feel. The face keeps the reference likeness with natural human eyes of natural size, small pupils and a natural, modestly open mouth; emotion is shown with the eyebrows and the pose, not by distorting the face. The background is painted separately as a soft painterly gouache picture of a 1970s city park, courtyard or building site with visible brush strokes in warm, slightly muted ochre, olive, sand and faded blue, clearly contrasting with the more saturated flat figures. Dynamic diagonal composition, humorous energetic mood. The person stays a clearly human character with natural anatomy.",
+    negative: neg("3d, digital gloss, gradients on figures, realistic shading, text, modern smartphones, neon colors, chase of animals, wolf, hare, huge eyeballs, wide gaping mouth, stretched jaw, flared trousers"),
     demo: {
-      palette: { paper: "#f4ead6", ink: "#141414", accents: ["#e2452f", "#2f7fd1", "#f2c12e", "#3aa655"] },
+      palette: { paper: "#efe0b8", ink: "#141210", accents: ["#e2452f", "#2f7fd1", "#f2c12e", "#3aa655"] },
       line: "bold",
       texture: "none",
       filter: "cel",
-      backdrop: "blur",
+      backdrop: "gouache",
     },
   },
   {
     ...meta("painterly-tale"),
     prompt:
-      "Painterly fairy tale book illustration in gouache and digital paint that imitates gouache. Rich warm saturated colors, soft volumetric lighting with a golden glow, outlines almost dissolved in the color, visible brush texture. Friendly forest animals as companions with realistic textured fur and feathers, only slightly expressive. Dynamic cinematic composition with diagonals and close-ups, a detailed atmospheric old forest background with mist and light shafts. Adventurous magical mood, children's book quality. The hero is painted with natural human proportions and a faithful likeness.",
-    negative: neg("flat vector colors, thick outlines, cel shading, washed-out pale colors, horror, menacing creatures, sharp teeth"),
+      "Painterly fairy tale book illustration in gouache and digital paint that imitates gouache. Rich warm saturated colors, strong warm golden backlight from deep in the forest with soft volumetric light shafts, glowing dust and fireflies, a golden rim light on the hair and shoulders, outlines fully dissolved in the color, visible brush texture. Old forest of birch and pine trunks with ferns, mushrooms, mist and deep warm shadows at the edges. Friendly forest animals as companions only when the scene asks, with realistic textured fur and feathers, only slightly expressive. Dynamic cinematic composition with diagonals and close-ups. Adventurous magical mood, children's book quality. The hero is painted with natural human proportions, natural eye size and a faithful likeness.",
+    negative: neg("flat vector colors, thick outlines, cel shading, washed-out pale colors, cold blue light, flat lighting, horror, menacing creatures, sharp teeth"),
     demo: {
-      palette: { paper: "#f3e3c3", ink: "#4a3020", accents: ["#c9622f", "#2f6b4f", "#e2a73a", "#7a3e6b"] },
+      palette: { paper: "#f3dca8", ink: "#3a2414", accents: ["#c9622f", "#5d6b2f", "#e8b04f", "#8a3e22"] },
       line: "none",
       texture: "grain",
-      filter: "soft",
-      backdrop: "glow",
-      overlays: ["shade"],
+      filter: "warm",
+      backdrop: "backlight",
+      overlays: ["rays", "motes", "shade"],
     },
   },
   {
     ...meta("fable-ink"),
     prompt:
-      "Satirical fable book illustration. Confident black ink outline with quick witty lines, transparent bright watercolor fills in clean red, yellow, green and blue, light sparse hatching. Expressive comic pose and gesture, lively emotion, while the face keeps natural human eyes and real facial features of the reference, not dot eyes and not a toy-like face. Minimal background with lots of white paper, a few loose watercolor splashes. Witty ironic humor.",
-    negative: neg("dense background, muted dull colors, heavy shading, gradients, digital painting, grotesque, mean caricature"),
+      "Satirical fable book illustration. Confident black ink outline with quick witty lines and light sparse hatching, transparent bright watercolor fills in clean red, yellow, green and blue that bleed slightly beyond the lines, rosy watercolor cheeks. Expressive comic pose and gesture, lively emotion, a few small ink flick marks around the head to show surprise, while the face keeps natural human eyes and real facial features of the reference with a natural mouth, not dot eyes and not a toy-like face. Clean white paper background with only a few loose watercolor splashes and quick ink sketch marks. The hero wears their own everyday clothing. Witty ironic humor.",
+    negative: neg("uniform, red neckerchief, school uniform, random flying objects, dense background, muted dull colors, heavy shading, gradients, digital painting, grotesque, mean caricature, wide gaping mouth"),
     demo: {
-      palette: { paper: "#ffffff", ink: "#161616", accents: ["#e03a3a", "#f5c518", "#3aa64a", "#2f6fd6"] },
+      palette: { paper: "#fbfaf4", ink: "#1a1612", accents: ["#ee4a3c", "#f6c42a", "#4fae46", "#3d7fe0"] },
       line: "bold",
       texture: "none",
-      filter: "wobble",
-      backdrop: "wash",
-      overlays: ["splash"],
+      filter: "bleed",
+      backdrop: "sparse",
+      overlays: ["splash", "flicks"],
     },
   },
   {
     ...meta("mystery-toon"),
     prompt:
-      "2010s TV animated mystery cartoon look. Clean closed dark outlines, flat bright colors with soft cel shading, simple geometric shape design and expressive faces that stay true to the reference: natural eye shape, only slightly stylized. Painterly misty pine forest background with fog and sunbeams, an old cabin or a trail sign in the distance. Mysterious cryptic atmosphere with a few invented glyphs carved on trees, nothing readable. Humor with a light spooky edge, safe for teens.",
-    negative: neg("gore, horror, scary monsters, blood, one-eyed triangle, pine tree cap, real cipher text, readable symbols, 3d"),
+      "2010s TV animated mystery cartoon look. Clean closed dark brown outlines of even weight, flat bright colors with simple soft two-tone cel shading, simple geometric shape design. The face stays true to the reference: natural eye shape and size with small pupils, a natural mouth, only slightly stylized. Very pale misty pine forest background with fog and soft sunbeams, light and desaturated, a soft pale glow behind the hero so the figure reads clearly; an old cabin or a trail sign far in the distance, nothing readable. The hero wears their own everyday clothing. Mysterious atmosphere, humor with a light spooky edge, safe for teens.",
+    negative: neg("gore, horror, scary monsters, blood, one-eyed triangle, top hat creature, pine tree cap, cap with an emblem, knitted sweater with a picture, shooting star sweater, real cipher text, readable symbols, carved glyphs, huge round eyes, pinpoint pupils in huge eyes, 3d"),
     demo: {
-      palette: { paper: "#e8efe9", ink: "#1f2430", accents: ["#e0603a", "#3aa6a0", "#f2c94c", "#7b5ea7"] },
+      palette: { paper: "#f2f7f2", ink: "#3a2420", accents: ["#e46a45", "#3fa7a0", "#f2c94c", "#7b62b0"] },
       line: "bold",
       texture: "none",
-      filter: "cel",
-      backdrop: "blur",
-      overlays: ["fog"],
+      filter: "twotone",
+      backdrop: "mist",
+      overlays: ["halo"],
     },
   },
   {
     ...meta("field-journal"),
     prompt:
-      "Illustrated page from an old explorer's field journal. Aged yellowed paper with coffee stains, creases and tape marks, fine ink pen sketches with cross-hatching, naturalist encyclopedia style studies of strange invented plants and creatures around the hero, illegible handwritten-looking scribbles in the margins, red and blue pencil arrows and circles, a glued snapshot frame and a small paper clipping. Sepia and ochre palette with small red and blue accents, a few invented cipher-like marks. Mysterious investigative mood, never scary.",
-    negative: neg("readable text, real words, six fingers, clean white paper, bright saturated colors, gore, horror, scary monsters"),
+      "Illustrated page from an old explorer's field journal. Aged yellowed paper with brown coffee rings, darkened edges, creases and translucent tape strips at the corners. The hero is drawn in fine graphite and sepia ink with delicate cross-hatching, keeping the likeness of the reference and natural eyes. Around the hero: naturalist study sketches of strange invented plants and small harmless creatures with hatching, a glued sepia snapshot of a landscape, illegible scribbled handwriting lines in the margins without any readable letters, a red underline and a blue pencil arrow. Sepia and ochre palette with small red and blue accents. Mysterious investigative mood, never scary.",
+    negative: neg("readable text, real words, letters, alphabet, cipher text, runes, symbols, insignia, emblems, hand symbol, symbol drawn on a palm, six fingers, eye in a triangle, newspaper headlines, newspaper clipping, portrait photos of other people, clean white paper, bright saturated colors, gore, horror, scary monsters"),
     demo: {
-      palette: { paper: "#eadbb5", ink: "#5a3f24", accents: ["#a8743c", "#c9a66b", "#8c6b4a", "#b5523a"] },
+      palette: { paper: "#ecd6a4", ink: "#4a3522", accents: ["#a8743c", "#c9a66b", "#8c6b4a", "#b5523a"] },
       line: "thin",
       texture: "paper",
       filter: "sepia",
-      backdrop: "lines",
+      backdrop: "journal",
       overlays: ["aged", "hatch"],
     },
   },
   {
     ...meta("golden-animation"),
     prompt:
-      "Classic hand-drawn feature animation look with a cel animation feel. Smooth flowing lines with varied thickness and colored self-toned outlines, soft rounded shapes, strong readable silhouette, flat rich colors with soft two-tone shading. Painterly watercolor background with warm golden light, graceful S-curve poses, a small cute generic animal companion such as a songbird or a field mouse. Charming fairytale mood. The hero keeps realistic proportions of the face and recognizable features, eyes only slightly enlarged.",
-    negative: neg("3d, CGI, harsh black outlines, gritty texture, villain, dark purple and green palette"),
+      "Classic hand-drawn feature animation look with a cel animation feel. Smooth flowing lines with varied thickness and colored self-toned outlines in warm brown and rust instead of black, soft rounded shapes, strong readable silhouette, flat rich colors with soft two-tone cel shading and a light rosy blush on the cheeks. The background is a soft painterly watercolor wash in warm golden cream and pale amber with loose color blooms and lots of light, almost no detail behind the hero. Graceful S-curve poses, charming fairytale mood. Only the characters the scene asks for; when the scene has an animal friend, it is one small cute generic animal such as a songbird or a field mouse. The hero keeps realistic proportions of the face and recognizable features, eyes only slightly enlarged.",
+    negative: neg("3d, CGI, harsh black outlines, gritty texture, villain, sinister grinning character, sorcerer, pointed elf ears, horns, dark purple and green costume, extra characters not in the scene, dark background"),
     demo: {
-      palette: { paper: "#fbf1dc", ink: "#6a3b2a", accents: ["#2e6bb8", "#d9483b", "#f0b43c", "#4f9a5c", "#9b5fb5"] },
+      palette: { paper: "#fbeec8", ink: "#8a4f35", accents: ["#d9603f", "#4f86c0", "#e9a93e", "#6a9f58", "#a0607a"] },
       line: "thin",
       texture: "none",
-      backdrop: "dream",
+      filter: "twotone",
+      backdrop: "golden",
       overlays: ["rays"],
     },
   },
   {
     ...meta("xerox-pencil"),
     prompt:
-      "1960s photocopied pencil animation look. Scratchy hand-drawn black pencil outline transferred as a photocopy, loose sketchy linework with visible construction lines, flat bright colors slightly offset from the lines, simplified graphic backgrounds made of blocky color shapes with loose line overlays, humorous expressive characters, mid-century storybook look. The face keeps the real likeness of the reference with natural human eyes.",
-    negative: neg("clean vector lines, gradients, 3d, glossy rendering, soft airbrush, realistic background"),
+      "1960s photocopied pencil animation look on warm cream paper. Dark scratchy graphite outline transferred as a photocopy: loose sketchy linework with doubled strokes, visible construction lines and uneven, slightly broken line weight. Flat soft colored-pencil fills in warm skin tones, muted blue, coral, ochre and grass green, slightly offset from the lines, no gradients. Very simple background: mostly plain cream paper with a few flat pale color shapes and loose line overlays. Humorous expressive characters, mid-century storybook look. The face keeps the real likeness of the reference with natural human eyes of natural size and a natural mouth.",
+    negative: neg("clean vector lines, gradients, 3d, glossy rendering, soft airbrush, realistic detailed background, dark background, heavy shadows, saturated neon colors"),
     demo: {
-      palette: { paper: "#f7f1e3", ink: "#191919", accents: ["#e65d3a", "#3a8fd1", "#f2c43a", "#4aa65a"] },
-      line: "sketch",
+      palette: { paper: "#f6f1e0", ink: "#2f2822", accents: ["#e2735a", "#4f93bf", "#e8bd4a", "#7fae5a"] },
+      line: "thin",
       texture: "grain",
-      filter: "xerox",
-      backdrop: "offset",
+      filter: "pencil",
+      backdrop: "pencil",
     },
   },
 ];

@@ -112,6 +112,7 @@ async function main() {
     });
   }
 
+  // Допы: новые создаются; цены, названия, аудитории и включение из админки не перезаписываются
   for (const [i, a] of ADDONS.entries()) {
     await db.addon.upsert({
       where: { key: a.key },
@@ -120,11 +121,14 @@ async function main() {
         key: a.key,
         kind: a.kind as AddonKind,
         title: a.title,
-        description: a.title,
+        description: a.description,
         priceRub: a.price ?? undefined,
         percentOff: a.pct ?? undefined,
         requiresPrint: a.print,
         sortOrder: i,
+        audiences: [...a.audiences],
+        supplier: a.supplier,
+        isActive: a.active,
       },
     });
   }

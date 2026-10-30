@@ -8,7 +8,7 @@ import { artStyle as artStyleById, extraDrawKind, heroDrawer, themeFor } from ".
 import { applyMood } from "./mood";
 import { MOODS } from "../moods";
 import { drawDeco, escapeXml, HAIR_COLORS, rnd } from "./shared";
-import { FIGURE_FILTERS, fxBackdrop, fxDefs, fxLayers } from "./fx";
+import { FIGURE_FILTERS, PROP_BACKDROPS, fxBackdrop, fxDefs, fxLayers } from "./fx";
 import { sceneProps } from "./props";
 
 const DEFAULT_STYLE: ArtStyle["demo"] = { palette: { paper: "#fbf8f1", ink: "#3a3a44", accents: ["#d9534f", "#3e8ed0", "#f0ad4e", "#5cb85c"] }, line: "none", texture: "none" };
@@ -258,7 +258,9 @@ export function renderDemoSpread(o: DemoRenderOpts): string {
   const ctx: DemoSceneCtx = { W, H, index: idx, theme, style, rnd: r };
   const bgTheme = theme.scene ? theme.scene(ctx) : standardBackground(ctx);
   // Обработка фона стилем (пробные стили: размытый живописный фон, контур тушью, выбеленный…) — art/fx.ts
-  const bg = style.backdrop ? fxBackdrop(style, bgTheme, W, H) : bgTheme;
+  // Новые фоны (PROP_BACKDROPS) обрабатывают фон вместе с реквизитом сцены — см. ниже; прочие — как раньше
+  const propsInBg = !!style.backdrop && PROP_BACKDROPS.includes(style.backdrop);
+  const bg = style.backdrop && !propsInBg ? fxBackdrop(style, bgTheme, W, H) : bgTheme;
 
   const heroKind = o.hero.kind ?? o.plot.heroKind;
   const left = idx % 2 === 1;
@@ -311,7 +313,8 @@ export function renderDemoSpread(o: DemoRenderOpts): string {
     return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${H}" width="${W}" height="${H}"><defs>${white}${textureDefs(style)}${extraFx ? fxDefs(style, W, H) : ""}</defs><rect width="${W}" height="${H}" fill="#000"/><g filter="url(#mask-white)"><g${fx}>${crowd.join("")}${extras.join("")}${hero}</g></g></svg>`;
   }
   const figures = o.layer === "background" ? "" : `<g${fx}>${crowd.join("")}${extras.join("")}${hero}</g>`;
-  const art = `${bg}${props.sky}${props.behind}${layers.behind}${figures}${layers.above}${textureOverlay(style, W, H)}`;
+  const scenery = propsInBg ? fxBackdrop(style, `${bg}${props.sky}${props.behind}`, W, H) : `${bg}${props.sky}${props.behind}`;
+  const art = `${scenery}${layers.behind}${figures}${layers.above}${textureOverlay(style, W, H)}`;
   let svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${H}" width="${W}" height="${H}">
   <defs><linearGradient id="sky" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="${theme.sky[0]}"/><stop offset="1" stop-color="${theme.sky[1]}"/></linearGradient>${textureDefs(style)}${extraFx ? fxDefs(style, W, H) : ""}</defs>
   ${art}

@@ -13,6 +13,7 @@ import { declineName, guessGender } from "../../src/lib/declension";
 import { normalizePhone } from "../../src/content/answers";
 import { etaDate, quote, ruDate, type CatalogAddon, type CatalogFormat } from "../../src/lib/pricing";
 import { ADDONS, FORMATS } from "../../src/lib/catalog-defaults";
+import { addonFits, audienceOfParams } from "../../src/lib/addons-core";
 import { canAcceptPayments, DEFAULTS } from "../../src/lib/settings";
 import type { ExtraV2T } from "../../src/content/answers";
 import type { JourneyOrder } from "../../src/app/zakaz/journey";
@@ -467,23 +468,30 @@ async function processDraftPhoto(file: File, slot: string, kind: "human" | "pet"
 }
 
 // ───────── оформление (как priceCheckout / createOrder в src/lib/orders.ts) ─────────
-export function catalogForPricing(): { formats: CatalogFormat[]; addons: CatalogAddon[] } {
+/** Как catalogForPricing в src/lib/orders.ts: с аудиторией книги — только её допы (src/lib/addons-core.ts). */
+export function catalogForPricing(audience?: string): { formats: CatalogFormat[]; addons: CatalogAddon[] } {
   const flags = DEFAULTS.flags;
   const audio = DEFAULTS.audio;
   return {
     formats: FORMATS.filter((f) => f.kind === "PDF" || flags.printEnabled).map((f) => ({ key: f.key, kind: f.kind, title: f.title, priceRub: f.price })),
-    addons: ADDONS.filter((a) => flags.printEnabled || !a.print)
+    addons: ADDONS.filter((a) => a.active && addonFits(a, audience))
+      .filter((a) => flags.printEnabled || !a.print)
       .filter((a) => a.key !== "audio-self" || audio.selfReadEnabled)
       .map((a) => ({
         key: a.key,
         kind: a.kind,
         title: a.title,
+        description: a.description,
         priceRub: a.key === "audiobook" ? audio.ttsPriceRub : a.key === "audio-self" ? audio.selfReadPriceRub : a.price,
         percentOff: a.pct,
         requiresPrint: a.print,
+        audiences: [...a.audiences],
+        supplier: a.supplier,
       })),
   };
 }
+/** Аудитория демо-книги (анкета). */
+export const bookAudience = (b: { params: unknown }) => audienceOfParams(b.params);
 export const SHIP_METHODS = (["cdek_pvz", "cdek_courier", "pochta", "yandex"] as const).filter((m) => ({ cdek_pvz: DEFAULTS.shipping.cdekPvz, cdek_courier: DEFAULTS.shipping.cdekCourier, pochta: DEFAULTS.shipping.pochta, yandex: DEFAULTS.shipping.yandex })[m]);
 function shipQuote(method: string, to: Partial<DeliveryAddress> = {}) {
   const s = DEFAULTS.shipping;
@@ -571,9 +579,16 @@ interface CheckoutInput {
   contact: { name: string; phone?: string; email?: string };
   saveAddress?: boolean;
   bulk?: boolean;
+  addonsOnly?: boolean;
+}
+/** Допы книги из оплаченных заказов (как paidAddonKeys в src/lib/orders.ts). */
+export function paidAddonKeys(bookId: string) {
+  return [...new Set(S.orders.filter((o) => o.bookId === bookId && o.paidAt && !["REFUNDED", "CANCELLED"].includes(o.status)).flatMap((o) => o.items).filter((i) => i.kind === "addon").map((i) => i.refKey))];
 }
 function priceCheckout(input: CheckoutInput) {
-  const { formats, addons } = catalogForPricing();
+  const book = bookById(input.bookId);
+  const audience = book ? bookAudience(book) : undefined;
+  const { formats, addons } = catalogForPricing(audience);
   const books = input.whoPrints === "bookimi" ? 1 + (input.addons.includes("second-copy") ? 1 : 0) : 0;
   const ship = input.whoPrints === "bookimi" && input.shipping ? shipQuote(input.shipping.method, input.shipping.address) : null;
   const promo = findPromo(input.promo);
@@ -588,6 +603,10 @@ function priceCheckout(input: CheckoutInput) {
       discountPct: promo?.percentOff ?? 0,
       discountRub: promo?.amountOffRub ?? 0,
       freeShippingBooks: DEFAULTS.shipping.freeShippingBooks,
+      audience,
+      addonsOnly: input.addonsOnly,
+      paidAddons: paidAddonKeys(input.bookId),
+      cartoonPaid: book ? cartoonOf(book).bought : false,
     },
     formats,
     addons,
@@ -1006,6 +1025,7 @@ async function handle(method: string, path: string, q: URLSearchParams, body: un
         a.pvzAddress = point.address;
       }
     }
+    if (input.addonsOnly && (!book.paidFull || input.whoPrints !== "self")) return err("Докупить можно к уже оплаченной книге");
     const priced = input.bulk ? priceBulk(input) : priceCheckout(input);
     if (priced.quote.errors.length) return err(priced.quote.errors.join("; "));
     if (input.bulk && !copiesOf(book.id).length) makeCopies(book);
@@ -1035,6 +1055,7 @@ async function handle(method: string, path: string, q: URLSearchParams, body: un
           ? { method: input.shipping.method, address: { ...input.shipping.address, ...(input.saveAddress === false ? { noPrefill: true } : {}) }, etaDate: priced.eta?.eta.getTime() }
           : undefined,
       status: "PENDING_PAYMENT",
+      addonsOnly: input.addonsOnly || undefined,
     };
     if (input.contact.name && S.user && !S.user.name) S.user.name = input.contact.name;
     if (input.whoPrints === "bookimi" && input.shipping && input.saveAddress !== false) {

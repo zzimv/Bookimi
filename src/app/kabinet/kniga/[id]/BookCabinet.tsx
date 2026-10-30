@@ -3,7 +3,8 @@ import Link from "next/link";
 import { SpreadText } from "@/components/SpreadText";
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { api } from "@/lib/client";
+import { api, rub } from "@/lib/client";
+import { AddonThumb } from "@/components/book/AddonThumb";
 import { CartoonPanel } from "./CartoonPanel";
 
 const FILE_TITLES: Record<string, string> = {
@@ -13,7 +14,16 @@ const FILE_TITLES: Record<string, string> = {
   "pdf-print-150": "PDF для копицентра 15×15",
   coloring: "Раскраска (PDF)",
   audio: "Аудиокнига",
+  "addon-wallpaper-phone": "Обои для телефона (PNG)",
+  "addon-wallpaper-desktop": "Обои для компьютера (PNG)",
 };
+
+export interface LaterAddon {
+  key: string;
+  title: string;
+  description: string;
+  priceRub: number;
+}
 
 export function BookCabinet(p: {
   id: string;
@@ -25,6 +35,9 @@ export function BookCabinet(p: {
   files: string[];
   audioUrl: string | null;
   selfRead: boolean;
+  /** Цифровые допы для аудитории книги, которые можно докупить сейчас (мультфильм — своя панель). */
+  later?: LaterAddon[];
+  coverUrl?: string | null;
 }) {
   const router = useRouter();
   const [msg, setMsg] = useState("");
@@ -92,6 +105,8 @@ export function BookCabinet(p: {
 
       {p.status === "FULL_READY" && <CartoonPanel bookId={p.id} />}
 
+      {p.status === "FULL_READY" && p.later && p.later.length > 0 && <LaterAddons bookId={p.id} items={p.later} coverUrl={p.coverUrl ?? null} />}
+
       {p.selfRead && <VoiceRecorder bookId={p.id} pages={p.pages} />}
 
       <h2 style={{ fontSize: "var(--fs-lg)", marginTop: 24 }}>Читалка</h2>
@@ -120,6 +135,42 @@ export function BookCabinet(p: {
         ))}
       </div>
     </>
+  );
+}
+
+/** «Добавить к книге»: докупка цифровых допов к оплаченной книге — отдельный заказ без печати (addonsOnly). */
+function LaterAddons({ bookId, items, coverUrl }: { bookId: string; items: LaterAddon[]; coverUrl: string | null }) {
+  const router = useRouter();
+  const [busy, setBusy] = useState("");
+  const [msg, setMsg] = useState("");
+  async function buy(key: string) {
+    setBusy(key);
+    setMsg("");
+    try {
+      const r = await api<{ orderId: string }>("/api/checkout", { bookId, whoPrints: "self", addons: [key], addonsOnly: true, contact: { name: "" } });
+      router.push(`/zakaz/${r.orderId}`);
+    } catch (e) {
+      setMsg((e as Error).message);
+      setBusy("");
+    }
+  }
+  return (
+    <div className="panel" style={{ marginTop: 16 }} data-later-addons>
+      <b>Добавить к книге</b>
+      <div className="later-addons">
+        {items.map((a) => (
+          <div key={a.key} className="choice addon-choice" data-addon={a.key}>
+            <AddonThumb addonKey={a.key} coverUrl={coverUrl} />
+            <div style={{ flex: 1 }}>
+              <strong>{a.title}</strong>
+              {a.description && <small className="addon-choice__desc">{a.description}</small>}
+              <button className="btn btn--ghost btn--sm" disabled={Boolean(busy)} onClick={() => buy(a.key)}>{busy === a.key ? "Оформляем…" : `Добавить — ${rub(a.priceRub)}`}</button>
+            </div>
+          </div>
+        ))}
+      </div>
+      {msg && <p className="error">{msg}</p>}
+    </div>
   );
 }
 

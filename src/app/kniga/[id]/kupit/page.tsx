@@ -9,7 +9,7 @@ import { availableMethods, METHOD_TITLES } from "@/lib/shipping";
 import { signedUrl } from "@/lib/storage";
 import { parseAddressBook, pickPrefill } from "@/lib/delivery";
 import { bulkState } from "@/lib/bulk-server";
-import { AnswersV2 } from "@/lib/quiz";
+import { audienceOfParams } from "@/lib/addons-core";
 
 export const metadata: Metadata = { title: "Оформление", robots: { index: false } };
 export const dynamic = "force-dynamic";
@@ -22,8 +22,10 @@ export default async function Page({ params, searchParams }: { params: Promise<{
   if (!own.user) redirect(`/vhod?next=/kniga/${id}/kupit`);
   if (!["PREVIEW_READY", "FULL_QUEUED", "FULL_READY"].includes(own.book.status)) redirect(`/kniga/${id}`);
 
+  // Допы — только для аудитории книги: у подростка, взрослого и питомца свои наборы (src/lib/addons-core.ts)
+  const audience = audienceOfParams(own.book.params);
   const [{ formats, addons }, flags, audio, ph, canPay] = await Promise.all([
-    catalogForPricing(),
+    catalogForPricing(audience),
     cfg("flags"),
     cfg("audio"),
     db.printHouse.findFirst({ where: { isActive: true } }),
@@ -80,7 +82,7 @@ export default async function Page({ params, searchParams }: { params: Promise<{
         pdfPaid={await pdfPaidFor(id, user.id)}
         prefill={prefill}
         bulk={bulk}
-        audience={AnswersV2.safeParse(own.book.params).data?.audience ?? "CHILD"}
+        audience={audience}
       />
     </div>
   );

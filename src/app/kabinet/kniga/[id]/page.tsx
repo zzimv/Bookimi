@@ -7,6 +7,7 @@ import { BookCabinet } from "./BookCabinet";
 import type { StoryText } from "@/lib/gen/text";
 import { OrderTimeline } from "@/app/zakaz/OrderTimeline";
 import { journeyOrder } from "@/app/zakaz/journey-data";
+import { laterAddonsFor } from "@/lib/orders";
 
 export default async function Page({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -33,6 +34,9 @@ export default async function Page({ params }: { params: Promise<{ id: string }>
     include: { shipment: true, items: { select: { bookId: true } } },
   });
   const jo = order ? await journeyOrder(order) : null;
+  // «Добавить к книге» позже: цифровые допы для аудитории этой книги, ещё не купленные (мультфильм — своя панель)
+  const later = await laterAddonsFor(id);
+  const cover = pages.find((p) => p.index === 0);
   return (
     <>
     {order && jo && (
@@ -52,6 +56,8 @@ export default async function Page({ params }: { params: Promise<{ id: string }>
       files={files.filter((f) => !f.kind.startsWith("voice-") && !f.kind.startsWith("print-")).map((f) => f.kind)}
       audioUrl={audio ? await signedUrl("books", audio.storageKey) : null}
       selfRead={Boolean(selfRead)}
+      later={later}
+      coverUrl={cover?.imageKey ? await signedUrl("books", cover.imageKey) : null}
     />
     </>
   );

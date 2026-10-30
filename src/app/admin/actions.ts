@@ -15,6 +15,7 @@ import { decrypt, encrypt, looksLikeRecovery, recoveryCodes, recoveryHash, totpS
 import { sendTestTrigger } from "@/lib/triggers";
 import { pingIndexNow } from "@/lib/indexnow";
 import { optNum, parseTiers, validatePromo, validateSettings } from "@/lib/settings-validate";
+import { validateAddonForm } from "@/lib/addons-core";
 
 const s = (f: FormData, k: string) => String(f.get(k) ?? "").trim();
 const n = (f: FormData, k: string) => Number(f.get(k) ?? 0);
@@ -144,15 +145,30 @@ export async function formatAction(f: FormData) {
 
 export async function addonAction(f: FormData) {
   const u = await requireAdmin("catalog", { fresh: true });
-  const price = optNum(f.get("priceRub"));
-  const pct = optNum(f.get("percentOff"));
-  if (price != null && (!Number.isInteger(price) || price < 0 || price > 1_000_000)) fail("/admin/katalog", "Цена допа: целое число рублей, не меньше 0");
-  if (pct != null && (!Number.isInteger(pct) || pct < 1 || pct > 90)) fail("/admin/katalog", "Скидка допа: от 1 до 90%");
+  const id = s(f, "id");
+  const row = await db.addon.findUnique({ where: { id } });
+  if (!row) fail("/admin/katalog", "Доп не найден");
+  const related = await db.addon.findMany({ where: { key: { in: ["cartoon", "cartoon-own-voice"] } }, select: { key: true, audiences: true } });
+  const v = validateAddonForm(
+    {
+      title: s(f, "title"),
+      description: s(f, "description"),
+      priceRub: optNum(f.get("priceRub")),
+      percentOff: optNum(f.get("percentOff")),
+      audiences: f.getAll("audiences").map(String),
+      supplier: s(f, "supplier") || row.supplier,
+      isActive: b(f, "isActive"),
+    },
+    row,
+    { cartoon: related.find((r) => r.key === "cartoon")?.audiences, ownVoice: related.find((r) => r.key === "cartoon-own-voice")?.audiences },
+  );
+  if (!v.ok) fail("/admin/katalog", `«${row.title}»: ${v.error}`, `addon-${row.key}`);
+  const d = v.value;
   await db.addon.update({
-    where: { id: s(f, "id") },
-    data: { priceRub: price, percentOff: pct, isActive: b(f, "isActive"), title: s(f, "title") },
+    where: { id },
+    data: { priceRub: d.priceRub, percentOff: d.percentOff, isActive: d.isActive, title: d.title, description: d.description, audiences: d.audiences, supplier: d.supplier },
   });
-  await audit(u.id, "catalog.addon", "addon", s(f, "id"));
+  await audit(u.id, "catalog.addon", "addon", id, { audiences: d.audiences, supplier: d.supplier });
   revalidatePath("/admin/katalog");
 }
 

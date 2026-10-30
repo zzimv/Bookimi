@@ -11,7 +11,7 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
   const u = await adminApi("books");
   if (!u || !/^[0-9a-f-]{36}$/.test(id)) return new NextResponse("Не найдено", { status: 404 });
   const kind = new URL(req.url).searchParams.get("kind") ?? "pdf-screen";
-  if (!KINDS.includes(kind)) return new NextResponse("Неизвестный формат", { status: 400 });
+  if (!KINDS.includes(kind) && !/^(print-)?addon-[a-z0-9-]{2,40}$/.test(kind)) return new NextResponse("Неизвестный формат", { status: 400 });
   const f = await db.bookFile.findFirst({ where: { bookId: id, kind }, orderBy: { createdAt: "desc" } });
   if (!f) return new NextResponse("Файл ещё готовится", { status: 404 });
   await db.auditLog.create({ data: { actorId: u.id, action: "admin.book.download", entity: "book", entityId: id, details: { kind } } });

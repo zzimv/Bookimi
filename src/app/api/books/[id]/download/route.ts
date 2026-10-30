@@ -13,6 +13,8 @@ const NAMES: Record<string, string> = {
   "voice-mix": "мой-голос",
   cartoon: "мультфильм.mp4",
   "cartoon-vertical": "мультфильм-для-телефона.mp4",
+  "addon-wallpaper-phone": "обои-для-телефона.png",
+  "addon-wallpaper-desktop": "обои-для-компьютера.png",
 };
 
 // Полные файлы — только после оплаты. До оплаты — 403 (проверено тестом).

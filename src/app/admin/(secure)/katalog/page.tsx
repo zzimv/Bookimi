@@ -1,6 +1,7 @@
 import { db } from "@/lib/db";
 import { requireAdmin } from "@/lib/admin";
 import { addonAction, formatAction, storyAction, styleAction } from "../../actions";
+import { ADDON_AUDIENCES, ADDON_AUDIENCE_LABEL } from "@/lib/addons-core";
 
 export default async function Page({ searchParams }: { searchParams: Promise<{ error?: string }> }) {
   await requireAdmin("catalog");
@@ -41,24 +42,44 @@ export default async function Page({ searchParams }: { searchParams: Promise<{ e
       </div>
 
       <h2 style={{ fontSize: "var(--fs-lg)", marginTop: 24 }}>Допы</h2>
-      <p className="small muted">Выключите доп, если типография его не делает. Цены аудио — в Настройках → Аудио.</p>
+      <p className="small muted">
+        Выключите доп, если типография его не делает. Цены аудио — в Настройках → Аудио, мультфильма — в Настройках → «Мультфильм по книге».
+        Галочки аудиторий — для каких книг доп показывается в оформлении, кабинете и catalog.json (все четыре — для всех книг).
+        «Другой подрядчик» — типографии не передаётся: оператор заказывает его вручную по письму-напоминанию.
+      </p>
       <div className="tbl-wrap">
         <table className="tbl">
           <tbody>
             {addons.map((a) => (
-              <tr key={a.id}>
+              <tr key={a.id} id={`addon-${a.key}`}>
                 <td>
-                  <form action={addonAction} className="row">
+                  <form action={addonAction} className="addon-form" data-addon={a.key}>
                     {hid(a.id)}
-                    <input className="input" name="title" defaultValue={a.title} style={{ flex: 1, minWidth: 220 }} />
-                    {a.percentOff != null ? (
-                      <label className="row small">−<input className="input" name="percentOff" type="number" defaultValue={a.percentOff} style={{ width: 80 }} />%</label>
-                    ) : (
-                      <label className="row small"><input className="input" name="priceRub" type="number" defaultValue={a.priceRub ?? 0} style={{ width: 100 }} />₽</label>
-                    )}
-                    <label className="check"><input type="checkbox" name="isActive" defaultChecked={a.isActive} /> вкл.</label>
-                    <span className="badge">{a.requiresPrint ? "с печатью" : "цифровой"}</span>
-                    <button className="btn btn--ghost btn--sm">Сохранить</button>
+                    <div className="row">
+                      <input className="input" name="title" aria-label="Название" defaultValue={a.title} maxLength={120} style={{ flex: 1, minWidth: 220 }} />
+                      {a.percentOff != null ? (
+                        <label className="row small">−<input className="input" name="percentOff" type="number" defaultValue={a.percentOff} style={{ width: 80 }} />%</label>
+                      ) : (
+                        <label className="row small"><input className="input" name="priceRub" type="number" defaultValue={a.priceRub ?? 0} style={{ width: 100 }} />₽</label>
+                      )}
+                      <label className="check"><input type="checkbox" name="isActive" defaultChecked={a.isActive} /> вкл.</label>
+                      <span className="badge">{a.kind === "PHYSICAL" ? "физический" : a.kind === "DIGITAL" ? "файл" : "к книге"}{a.requiresPrint ? " · с печатью" : ""}</span>
+                      {a.supplier === "other" && <span className="badge badge--gold">другой подрядчик</span>}
+                    </div>
+                    <input className="input" name="description" aria-label="Описание для покупателя" placeholder="Коротко для покупателя" defaultValue={a.description === a.title ? "" : a.description} maxLength={240} style={{ width: "100%", marginTop: 6 }} />
+                    <div className="row small" style={{ marginTop: 6 }}>
+                      <span className="muted">Для книг:</span>
+                      {ADDON_AUDIENCES.map((k) => (
+                        <label key={k} className="check"><input type="checkbox" name="audiences" value={k} defaultChecked={!a.audiences.length || a.audiences.includes(k)} /> {ADDON_AUDIENCE_LABEL[k]}</label>
+                      ))}
+                      {a.kind === "PHYSICAL" && (
+                        <select className="select" name="supplier" aria-label="Кто изготавливает" defaultValue={a.supplier} style={{ width: "auto" }}>
+                          <option value="print">Типография (наши файлы)</option>
+                          <option value="other">Другой подрядчик</option>
+                        </select>
+                      )}
+                      <button className="btn btn--ghost btn--sm">Сохранить</button>
+                    </div>
                   </form>
                 </td>
               </tr>

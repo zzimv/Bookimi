@@ -26,7 +26,7 @@ ${c.audiences.map((a) => `- ${a.title} (${a.hero}; возраст ${a.ages}; м�
 
 ## Факты
 - Цены: ${c.prices.map((p) => `${p.product} — ${rub(p.priceRub)}`).join("; ")}.
-- Допы: ${c.addons.map((a) => `${a.title} — ${a.priceRub ? rub(a.priceRub) : `−${a.percentOff}%`}`).join("; ")}.
+${c.audiences.map((au) => `- Допы (${au.title.toLowerCase()}): ${au.addons.map((a) => `${a.title} — ${a.priceRub ? rub(a.priceRub) : `−${a.percentOff}%`}`).join("; ")}.`).join("\n")}
 ${c.cartoon ? `- Мультфильм по книге: ~${Math.round(c.cartoon.durationSec / 60)} мин, ${c.cartoon.formats.join(" и ")}, ${c.cartoon.voice}; ${rub(c.cartoon.priceRub)}, своим голосом +${rub(c.cartoon.ownVoiceRub)}.\n` : ""}${c.groups.enabled ? `- Книга о группе — до ${c.groups.maxKids} детей; «книга для каждого» в группе: скидки ${c.groups.discounts.map((d) => `от ${d.fromBooks} книг −${d.percentOff}%`).join(", ")}.\n` : ""}- Печать: ${c.production.printDays}; доставка: ${c.delivery.services.join(", ")}.
 - Возрастная маркировка: дети и питомцы ${c.ageRating.CHILD}, подростки ${c.ageRating.TEEN}, взрослые ${c.ageRating.ADULT}.
 - Ближайшие праздники и сроки заказа печатной книги: ${c.url}/prazdniki.

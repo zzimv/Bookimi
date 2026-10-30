@@ -15,9 +15,10 @@ const rgb = (c: string) => {
 const acc = (s: ArtStyleDemo, i: number) => s.palette.accents[((i % s.palette.accents.length) + s.palette.accents.length) % s.palette.accents.length];
 
 /** Фильтры фигур, которые знает рендер (помимо wobble, posterize, soft из render.ts). */
-export const FIGURE_FILTERS = ["ink", "sepia", "cel", "xerox"] as const;
+export const FIGURE_FILTERS = ["ink", "sepia", "cel", "xerox", "pencil", "bleed", "palewash", "twotone", "warm"] as const;
 
-const BEHIND: DemoOverlay[] = ["town", "cutaway", "splash", "floor", "crosses"];
+// rays — за фигурами: свет не должен вуалировать лицо героя (сверено с референсами)
+const BEHIND: DemoOverlay[] = ["town", "cutaway", "splash", "floor", "crosses", "halo", "rays"];
 
 /** <defs> эффектов стиля. */
 export function fxDefs(s: ArtStyleDemo, W: number, H: number): string {
@@ -50,8 +51,60 @@ export function fxDefs(s: ArtStyleDemo, W: number, H: number): string {
     `<pattern id="fx-hatch" width="9" height="9" patternUnits="userSpaceOnUse" patternTransform="rotate(42)"><path d="M0 0V9" stroke="${s.palette.ink}" stroke-width="1.4"/></pattern>`,
     `<pattern id="fx-hatch2" width="13" height="13" patternUnits="userSpaceOnUse" patternTransform="rotate(-38)"><path d="M0 0V13" stroke="${s.palette.ink}" stroke-width="1.1"/></pattern>`,
   ];
-  return short(f.join(""));
+  // Новые эффекты (по референсам владельца) — только у стилей, которые их используют: у остальных <defs> прежние байт в байт
+  return short(f.join("")) + short(refDefs(s, box, W, H));
 }
+
+/** <defs> эффектов, добавленных по референсам (pencil, bleed, palewash, twotone, warm; фоны pencil, golden, backlight, gouache). */
+function refDefs(s: ArtStyleDemo, box: string, W: number, H: number): string {
+  const f: string[] = [];
+  const [ir, ig, ib] = rgb(s.palette.ink);
+  // Полоса тени по краю силуэта (снизу справа) — «двухтоновая» заливка целлулоида
+  const band = (dx: number, dy: number, std: number) =>
+    `<feOffset in="SourceAlpha" dx="${dx}" dy="${dy}" result="sh"/><feComposite in="SourceAlpha" in2="sh" operator="out" result="band"/><feGaussianBlur in="band" stdDeviation="${std}" result="band"/>`;
+  // Растекание акварели: размытая, сдвинутая шумом копия заливки под рисунком; заливки светлеют, тушь остаётся
+  const bleed = (gamma: number, sat: number, spread: number, op: number) =>
+    `<feTurbulence type="fractalNoise" baseFrequency=".035" numOctaves="2" seed="9" result="n"/><feGaussianBlur in="SourceGraphic" stdDeviation="4" result="b"/><feDisplacementMap in="b" in2="n" scale="${spread}" xChannelSelector="R" yChannelSelector="G" result="b"/><feComponentTransfer in="b" result="b"><feFuncA type="linear" slope="${op}"/></feComponentTransfer><feDisplacementMap in="SourceGraphic" in2="n" scale="3" xChannelSelector="G" yChannelSelector="R" result="d"/><feColorMatrix in="d" type="saturate" values="${sat}" result="d"/><feComponentTransfer in="d" result="d"><feFuncR type="gamma" exponent="${gamma}"/><feFuncG type="gamma" exponent="${gamma}"/><feFuncB type="gamma" exponent="${gamma}"/></feComponentTransfer><feMerge><feMergeNode in="b"/><feMergeNode in="d"/></feMerge>`;
+  switch (s.filter) {
+    case "pencil":
+      // Карандаш через ксерокс: дрожащий край + тёмные линии повторены со сдвигом (двойной штрих)
+      f.push(`<filter id="pencil" ${box}><feTurbulence type="fractalNoise" baseFrequency=".7" numOctaves="1" seed="4" result="n"/><feDisplacementMap in="SourceGraphic" in2="n" scale="3.2" xChannelSelector="R" yChannelSelector="G" result="d"/><feColorMatrix in="d" type="matrix" values="0 0 0 0 ${ir} 0 0 0 0 ${ig} 0 0 0 0 ${ib} -1.6 -3 -.6 0 2.2" result="dk"/><feComposite in="dk" in2="d" operator="in" result="dk"/><feOffset in="dk" dx="2.4" dy="-1.6" result="dk"/><feComponentTransfer in="dk" result="dk"><feFuncA type="linear" slope=".55"/></feComponentTransfer><feMerge><feMergeNode in="d"/><feMergeNode in="dk"/></feMerge></filter>`);
+      break;
+    case "bleed":
+      f.push(`<filter id="bleed" ${box}>${bleed(0.8, 1.25, 26, 0.5)}</filter>`);
+      break;
+    case "palewash":
+      f.push(`<filter id="palewash" ${box}>${bleed(0.82, 0.85, 20, 0.4)}</filter>`);
+      break;
+    case "twotone":
+      f.push(`<filter id="twotone" ${box}>${band(-9, -7, 0.8)}<feColorMatrix in="SourceGraphic" type="matrix" values=".8 0 0 0 0 0 .72 0 0 0 0 0 .76 0 .03 0 0 0 1 0" result="dark"/><feComposite in="dark" in2="band" operator="in" result="shade"/><feMerge><feMergeNode in="SourceGraphic"/><feMergeNode in="shade"/></feMerge></filter>`);
+      break;
+    case "warm":
+      // Тёплая живопись без контура + золотой контровой свет по краю силуэта (свет сзади-сверху)
+      f.push(`<filter id="warm" ${box}><feColorMatrix in="SourceGraphic" type="matrix" values="1.02 .1 0 0 .02 .04 .9 0 0 0 0 .02 .7 0 0 0 0 0 1 0" result="w"/><feGaussianBlur in="w" stdDeviation=".6" result="w"/>${band(9, 8, 2.2)}<feFlood flood-color="#ffd98a" flood-opacity=".85"/><feComposite in2="band" operator="in" result="rim"/><feMerge><feMergeNode in="w"/><feMergeNode in="rim"/></feMerge></filter>`);
+      break;
+  }
+  switch (s.backdrop) {
+    case "pencil":
+      f.push(`<filter id="bd-jitter" ${box}><feTurbulence type="fractalNoise" baseFrequency=".05" numOctaves="2" seed="13" result="n"/><feDisplacementMap in="SourceGraphic" in2="n" scale="7" xChannelSelector="R" yChannelSelector="G"/></filter>`);
+      break;
+    case "golden":
+      f.push(`<filter id="bd-golden" ${box}><feGaussianBlur stdDeviation="9" edgeMode="duplicate"/><feColorMatrix type="matrix" values=".04 .08 .02 0 .86 .06 .12 .02 0 .74 .09 .18 .03 0 .5 0 0 0 1 0"/><feComponentTransfer><feFuncA type="table" tableValues="1 1"/></feComponentTransfer></filter>`);
+      break;
+    case "backlight":
+      f.push(`<filter id="bd-amber" ${box}><feGaussianBlur stdDeviation="3.5" edgeMode="duplicate"/><feColorMatrix type="matrix" values=".66 .2 0 0 0 .08 .52 0 0 0 0 .04 .26 0 0 0 0 0 1 0"/><feColorMatrix type="saturate" values="1.25"/><feComponentTransfer><feFuncA type="table" tableValues="1 1"/></feComponentTransfer></filter>`);
+      f.push(`<radialGradient id="fx-sun" cx=".42" cy=".04" r=".85"><stop offset="0" stop-color="#fff4c4" stop-opacity=".95"/><stop offset=".3" stop-color="#ffc85a" stop-opacity=".55"/><stop offset=".7" stop-color="#e08a2a" stop-opacity=".12"/><stop offset="1" stop-color="#e08a2a" stop-opacity="0"/></radialGradient>`);
+      f.push(`<linearGradient id="fx-floor" x1="0" y1="0" x2="0" y2="1"><stop offset=".5" stop-color="#2a1608" stop-opacity="0"/><stop offset="1" stop-color="#2a1608" stop-opacity=".7"/></linearGradient>`);
+      break;
+    case "gouache":
+      f.push(`<filter id="bd-gouache" filterUnits="userSpaceOnUse" x="-40" y="-40" width="${W + 80}" height="${H + 80}" color-interpolation-filters="sRGB"><feTurbulence type="fractalNoise" baseFrequency=".06" numOctaves="2" seed="21" result="n"/><feGaussianBlur in="SourceGraphic" stdDeviation="2.4" edgeMode="duplicate" result="b"/><feDisplacementMap in="b" in2="n" scale="9" xChannelSelector="R" yChannelSelector="G"/><feColorMatrix type="saturate" values=".6"/><feColorMatrix type="matrix" values=".86 .08 0 0 .07 .03 .84 0 0 .07 0 .02 .64 0 .04 0 0 0 1 0"/><feComponentTransfer><feFuncA type="table" tableValues="1 1"/></feComponentTransfer></filter>`);
+      break;
+  }
+  return f.join("");
+}
+
+/** Фоны, которые обрабатывают и реквизит сцены (деревья, дома…) вместе с фоном темы — добавлены по референсам. */
+export const PROP_BACKDROPS: readonly string[] = ["pencil", "golden", "sparse", "backlight", "gouache", "mist", "journal"];
 
 /** Фон темы с обработкой стиля. */
 export function fxBackdrop(s: ArtStyleDemo, bg: string, W: number, H: number): string {
@@ -71,6 +124,29 @@ export function fxBackdrop(s: ArtStyleDemo, bg: string, W: number, H: number): s
       return `<g filter="url(#bd-dream)">${bg}</g><rect width="${W}" height="${H}" fill="url(#fx-glow)" opacity=".8"/>`;
     case "glow":
       return `<g filter="url(#bd-paint)">${bg}</g><rect width="${W}" height="${H}" fill="url(#fx-glow)"/>`;
+    case "pencil":
+      // Бледные плоские пятна на кремовой бумаге и двойной сдвинутый карандашный контур фона
+      return `<rect width="${W}" height="${H}" fill="${s.palette.paper}"/><g opacity=".24" filter="url(#bd-flat)">${bg}</g><g filter="url(#bd-jitter)"><g transform="translate(8 5)" opacity=".68" filter="url(#bd-lineonly)">${bg}</g></g><g transform="translate(2 -2)" opacity=".28" filter="url(#bd-lineonly)">${bg}</g>`;
+    case "golden": {
+      // Золотая акварель: фон темы растворён в тёплой заливке, поверх — пятна-разводы
+      const r = rnd(W + 5);
+      let blooms = "";
+      for (let i = 0; i < 9; i++) blooms += `<ellipse cx="${r() * W}" cy="${r() * H * 0.8}" rx="${120 + r() * 220}" ry="${70 + r() * 120}" fill="${["#f7d88c", "#fbe9bd", "#eebc6c", "#f3cf9a"][i % 4]}" opacity="${0.25 + r() * 0.25}"/>`;
+      return `<g filter="url(#bd-golden)">${bg}</g><g filter="url(#fx-blob)">${blooms}</g>`;
+    }
+    case "sparse":
+      // Белая бумага: от фона — лёгкий набросок тушью и едва заметный цвет
+      return `<rect width="${W}" height="${H}" fill="${s.palette.paper}"/><g opacity=".1">${bg}</g><g opacity=".26" filter="url(#bd-lineonly)">${bg}</g>`;
+    case "backlight":
+      return `<g filter="url(#bd-amber)">${bg}</g><rect width="${W}" height="${H}" fill="url(#fx-floor)"/><rect width="${W}" height="${H}" fill="url(#fx-sun)"/>`;
+    case "gouache":
+      // Чуть крупнее кадра и с запасом области фильтра: мазки (смещение шумом) не оставляют пустых краёв
+      return `<g filter="url(#bd-gouache)"><g transform="translate(${-W * 0.02} ${-H * 0.02}) scale(1.04)">${bg}</g></g>`;
+    case "journal":
+      // Фон — контур тушью на старой бумаге, цвет — лёгкой сепией (вместе с реквизитом сцены)
+      return `<g filter="url(#bd-lines)">${bg}</g><g opacity=".22" filter="url(#sepia)">${bg}</g>`;
+    case "mist":
+      return `<g filter="url(#bd-blur)">${bg}</g><rect width="${W}" height="${H}" fill="${s.palette.paper}" opacity=".74"/>`;
     default:
       return bg;
   }
@@ -189,14 +265,15 @@ const LAYER: Record<DemoOverlay, Layer> = {
     return out;
   },
 
-  // Акварельные пятна чистого цвета за героем и по краям
+  // Акварельные пятна чистого яркого цвета за героем и по краям: прозрачная середина, подсохший край
   splash(s, { W, H, heroX, feet, scale }, r) {
     let out = `<g filter="url(#fx-blob)">`;
     for (let i = 0; i < 7; i++) {
       const near = i < 3;
-      const x = near ? heroX + (r() - 0.5) * 300 * scale : r() * W;
-      const y = near ? feet - (140 + r() * 220) * scale : H * (0.15 + r() * 0.6);
-      out += `<ellipse cx="${x}" cy="${y}" rx="${(near ? 150 : 90) + r() * 90}" ry="${70 + r() * 70}" fill="${acc(s, i)}" opacity="${near ? 0.3 : 0.22}"/>`;
+      const x = near ? heroX + (r() - 0.5) * 340 * scale : r() * W;
+      const y = near ? feet - (120 + r() * 240) * scale : H * (0.15 + r() * 0.6);
+      const c = acc(s, i);
+      out += `<ellipse cx="${x}" cy="${y}" rx="${(near ? 150 : 80) + r() * 90}" ry="${60 + r() * 70}" fill="${c}" fill-opacity="${near ? 0.36 : 0.26}" stroke="${c}" stroke-width="5" stroke-opacity=".45"/>`;
     }
     return out + `</g>`;
   },
@@ -215,38 +292,61 @@ const LAYER: Record<DemoOverlay, Layer> = {
     return `<rect y="${H * 0.64}" width="${W}" height="${H * 0.36}" fill="url(#fx-hatch)" opacity=".13"/><rect width="${W * 0.18}" height="${H}" fill="url(#fx-hatch2)" opacity=".07"/><rect x="${W * 0.82}" width="${W * 0.18}" height="${H}" fill="url(#fx-hatch2)" opacity=".07"/>`;
   },
 
-  // Старая тетрадь: потемневшие края, пятна, скотч, каракули на полях, пометки красным и синим
+  // Старая тетрадь: пожелтевшие края, кофейные кольца, скотч, вклеенный «снимок», зарисовки-образцы со штриховкой,
+  // нечитаемые каракули на полях, красное подчёркивание и синяя стрелка. Никаких знаков и эмблем — только абстрактные каракули.
   aged(s, { W, H, heroX, feet, scale }, r) {
     const ink = s.palette.ink;
-    const far = heroX > W / 2 ? W * 0.06 : W * 0.68;
+    const right = heroX < W / 2; // поля — на стороне, свободной от героя
+    const far = right ? Math.max(heroX + 240 * scale, W * 0.6) : W * 0.04;
+    const span = right ? W - far - W * 0.03 : Math.min(heroX - 240 * scale, W * 0.4) - far;
     let out = `<rect width="${W}" height="${H}" fill="url(#fx-aged)"/>`;
-    for (let i = 0; i < 4; i++) {
-      const x = r() * W;
-      const y = r() * H;
-      const rr = 50 + r() * 70;
-      out += `<circle cx="${x}" cy="${y}" r="${rr}" fill="#8a5a24" opacity=".06"/><circle cx="${x}" cy="${y}" r="${rr}" fill="none" stroke="#8a5a24" stroke-width="5" opacity=".16"/>`;
+    // Кофейные кольца и пятна — по углам и полям
+    out += `<g filter="url(#fx-blob)">`;
+    for (let i = 0; i < 5; i++) {
+      const x = i < 2 ? (i ? W - 60 - r() * 120 : 40 + r() * 120) : far + r() * span;
+      const y = i < 2 ? (i ? H - 80 - r() * 100 : 60 + r() * 100) : H * (0.1 + r() * 0.8);
+      const rr = 45 + r() * 55;
+      out += `<circle cx="${x}" cy="${y}" r="${rr}" fill="#9a6428" fill-opacity=".1" stroke="#7a4a1c" stroke-width="${5 + r() * 5}" stroke-opacity=".28"/>`;
     }
-    // Скотч по углам
-    out += `<rect x="${W * 0.02}" y="18" width="200" height="54" fill="#f6eecb" opacity=".72" transform="rotate(-14 ${W * 0.02 + 100} 45)"/><rect x="${W - 230}" y="${H - 90}" width="200" height="54" fill="#f6eecb" opacity=".72" transform="rotate(10 ${W - 130} ${H - 63})"/>`;
-    // Каракули-«почерк» на полях (нечитаемые)
+    out += `</g>`;
+    // Вклеенный «снимок» (абстрактный пейзаж сепией) и скотч
+    const px = far + span * 0.55;
+    const py = H * 0.08;
+    const pw = Math.min(250, span * 0.42);
+    const ph = pw * 1.15;
+    out += `<g transform="rotate(${right ? 5 : -5} ${px + pw / 2} ${py + ph / 2})"><rect x="${px}" y="${py}" width="${pw}" height="${ph}" fill="#f4ead2" stroke="${ink}" stroke-width="1.5" stroke-opacity=".5"/><rect x="${px + 12}" y="${py + 12}" width="${pw - 24}" height="${ph - 48}" fill="#8a6a48"/><path d="M${px + 12} ${py + ph * 0.55} Q${px + pw * 0.4} ${py + ph * 0.35} ${px + pw - 12} ${py + ph * 0.5} V${py + ph - 36} H${px + 12}Z" fill="#5e452c"/><ellipse cx="${px + pw * 0.62}" cy="${py + ph * 0.3}" rx="${pw * 0.12}" ry="${pw * 0.12}" fill="#c9a87a"/><path d="M${px + 26} ${py + ph - 20} h${pw * 0.5}" stroke="${ink}" stroke-width="2" opacity=".5"/></g>`;
+    // Скотч: по углам листа и поверх снимка
+    const tape = (x: number, y: number, a: number) => `<rect x="${x - 70}" y="${y - 20}" width="140" height="40" fill="#f6edc8" fill-opacity=".62" stroke="#c9ad74" stroke-opacity=".35" transform="rotate(${a} ${x} ${y})"/>`;
+    out += tape(W * 0.03 + 50, 34, -32) + tape(W - 70, H - 40, -28) + tape(px + pw / 2, py + 4, right ? 2 : -8) + tape(W - 60, 40, 30);
+    // Зарисовки-образцы: странное существо со штриховкой и спиральное растение
+    const bx = far + span * 0.08;
+    const by = H * 0.52;
+    out += `<g fill="none" stroke="${ink}" stroke-linecap="round" stroke-linejoin="round" opacity=".85">`;
+    out += `<path d="M${bx} ${by + 60} C${bx - 10} ${by - 10} ${bx + 70} ${by - 50} ${bx + 120} ${by - 10} C${bx + 170} ${by + 20} ${bx + 160} ${by + 80} ${bx + 110} ${by + 86} C${bx + 60} ${by + 92} ${bx + 6} ${by + 96} ${bx} ${by + 60}Z" stroke-width="3"/>`;
+    out += `<circle cx="${bx + 70}" cy="${by + 6}" r="13" stroke-width="2.5"/><circle cx="${bx + 104}" cy="${by + 4}" r="11" stroke-width="2.5"/><circle cx="${bx + 72}" cy="${by + 8}" r="4" fill="${ink}"/><circle cx="${bx + 105}" cy="${by + 6}" r="3.5" fill="${ink}"/>`;
+    out += `<path d="M${bx + 20} ${by + 90} l-14 26 M${bx + 60} ${by + 94} l-4 28 M${bx + 110} ${by + 88} l8 28 M${bx + 145} ${by + 72} l20 20" stroke-width="2.6"/>`;
+    for (let k = 0; k < 9; k++) out += `<path d="M${bx + 30 + k * 12} ${by + 50 + (k % 3) * 4} l18 26" stroke-width="1.4" opacity=".7"/>`;
+    const sx = bx + 40;
+    const sy = by + 190;
+    out += `<path d="M${sx} ${sy + 140} C${sx + 10} ${sy + 80} ${sx - 6} ${sy + 40} ${sx + 6} ${sy}" stroke-width="2.6"/><path d="M${sx + 6} ${sy} c30 -6 34 -40 8 -44 c-22 -3 -26 22 -8 24" stroke-width="2.4"/><path d="M${sx + 2} ${sy + 70} q-40 -10 -50 -40 q36 0 50 40 M${sx + 4} ${sy + 100} q40 -16 48 -48 q-36 6 -48 48" stroke-width="2.2"/>`;
+    for (let k = 0; k < 6; k++) out += `<path d="M${sx - 44 + k * 7} ${sy + 34 + k * 5} l10 -8" stroke-width="1.2" opacity=".7"/>`;
+    out += `</g>`;
+    // Нечитаемые каракули-«почерк» на полях
     let scribble = "";
-    for (let l = 0; l < 7; l++) {
-      let d = `M${far} ${H * 0.1 + l * 34}`;
-      const len = W * (0.12 + r() * 0.12);
-      for (let x = 0; x < len; x += 14) d += ` q7 ${-10 - r() * 6} 14 0`;
+    const tx = far + span * 0.45;
+    for (let l = 0; l < 6; l++) {
+      let d = `M${tx} ${H * 0.52 + l * 30}`;
+      const len = span * (0.25 + r() * 0.25);
+      for (let x = 0; x < len; x += 12) d += ` q6 ${-9 - r() * 7} 12 ${r() * 3 - 1.5}`;
       scribble += `<path d="${d}"/>`;
     }
-    out += `<g fill="none" stroke="${ink}" stroke-width="2" opacity=".55">${scribble}</g>`;
-    // Зарисовка «образца»: лист с прожилками и странный жучок
-    const bx = far + 40;
-    const by = H * 0.52;
-    out += `<g fill="none" stroke="${ink}" stroke-width="2.4" opacity=".8"><path d="M${bx} ${by + 120} Q${bx + 40} ${by} ${bx + 120} ${by - 20} Q${bx + 110} ${by + 90} ${bx} ${by + 120}Z M${bx} ${by + 120} L${bx + 100} ${by}"/>`;
-    for (let k = 1; k < 5; k++) out += `<path d="M${bx + k * 22} ${by + 120 - k * 26} l${18} ${-4} M${bx + k * 22} ${by + 120 - k * 26} l${-2} ${-20}"/>`;
-    out += `<ellipse cx="${bx + 220}" cy="${by + 70}" rx="44" ry="30"/><circle cx="${bx + 208}" cy="${by + 64}" r="8"/><circle cx="${bx + 234}" cy="${by + 64}" r="8"/><path d="M${bx + 190} ${by + 96} l-16 22 M${bx + 220} ${by + 100} v26 M${bx + 250} ${by + 96} l16 22 M${bx + 200} ${by + 42} l-12 -26 M${bx + 240} ${by + 42} l12 -26"/></g>`;
-    // Красный кружок вокруг героя и синяя стрелка
-    out += `<ellipse cx="${heroX}" cy="${feet - 200 * scale}" rx="${190 * scale}" ry="${240 * scale}" fill="none" stroke="#b5352a" stroke-width="4" stroke-dasharray="40 10 6 10" opacity=".55" transform="rotate(-6 ${heroX} ${feet - 200 * scale})"/>`;
-    const ax = heroX > W / 2 ? heroX - 290 * scale : heroX + 290 * scale;
-    out += `<path d="M${ax} ${H * 0.14} Q${(ax + heroX) / 2} ${H * 0.08} ${heroX + (ax > heroX ? 120 : -120) * scale} ${feet - 410 * scale}" fill="none" stroke="#2f4f9a" stroke-width="4" opacity=".65"/>`;
+    out += `<g fill="none" stroke="${ink}" stroke-width="2" opacity=".6">${scribble}</g>`;
+    out += `<path d="M${tx} ${H * 0.52 + 6 * 30 - 8} h${span * 0.3}" stroke="#b5352a" stroke-width="3.5" opacity=".7"/>`;
+    // Синяя стрелка от поля к герою
+    const ax = right ? tx - 10 : tx + span * 0.4;
+    const hx = heroX + (right ? 150 : -150) * scale;
+    const hy = feet - 300 * scale;
+    out += `<g fill="none" stroke="#2f4f9a" stroke-width="4" opacity=".7" stroke-linecap="round"><path d="M${ax} ${H * 0.47} Q${(ax + hx) / 2} ${hy - 80} ${hx} ${hy}"/><path d="M${hx} ${hy} l${right ? 22 : -22} -6 M${hx} ${hy} l${right ? 10 : -10} -20"/></g>`;
     return out;
   },
 
@@ -270,22 +370,41 @@ const LAYER: Record<DemoOverlay, Layer> = {
     return out;
   },
 
-  // Пустыня: ночная синева сверху, звёзды-крестики, песчаные дюны карандашом
+  // Пустыня: почти белая бумага, лёгкая ночная дымка сверху, песок — бледные горизонтальные разводы акварели,
+  // тонкая дрожащая линия горизонта, звёзды — крестики, точки и маленькие контурные звёздочки тушью
   crosses(s, { W, H }, r) {
     const ink = s.palette.ink;
     const sand = acc(s, 0);
     const night = acc(s, 1);
-    // Пустыня почти заменяет фон темы: от него остаётся лёгкий «мираж»; ночная синева тает к горизонту
-    let out = `<defs><linearGradient id="fx-night" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="${night}" stop-opacity=".95"/><stop offset=".72" stop-color="${night}" stop-opacity=".25"/><stop offset="1" stop-color="${acc(s, 2)}" stop-opacity=".35"/></linearGradient></defs>`;
-    out += `<rect width="${W}" height="${H}" fill="${s.palette.paper}" opacity=".8"/><rect width="${W}" height="${H * 0.74}" fill="url(#fx-night)"/><g filter="url(#fx-blob)">`;
-    out += `<path d="M-40 ${H * 0.74} Q${W * 0.25} ${H * 0.64} ${W * 0.5} ${H * 0.72} T${W + 40} ${H * 0.69} V${H + 40} H-40Z" fill="${sand}" opacity=".9"/>`;
-    out += `<path d="M-40 ${H * 0.86} Q${W * 0.35} ${H * 0.79} ${W * 0.7} ${H * 0.86} T${W + 40} ${H * 0.84} V${H + 40} H-40Z" fill="${acc(s, 3)}" opacity=".6"/></g>`;
-    out += `<g fill="none" stroke="${ink}" stroke-width="2.8" stroke-linecap="round" opacity=".8"><path d="M0 ${H * 0.735} Q${W * 0.25} ${H * 0.64} ${W * 0.5} ${H * 0.72} T${W} ${H * 0.69}"/><path d="M0 ${H * 0.862} Q${W * 0.35} ${H * 0.79} ${W * 0.7} ${H * 0.86} T${W} ${H * 0.84}" stroke-dasharray="60 14"/>`;
-    for (let i = 0; i < 46; i++) {
+    let out = `<defs><linearGradient id="fx-night" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="${night}" stop-opacity=".9"/><stop offset=".6" stop-color="${night}" stop-opacity=".15"/><stop offset="1" stop-color="${acc(s, 2)}" stop-opacity=".2"/></linearGradient></defs>`;
+    out += `<rect width="${W}" height="${H}" fill="${s.palette.paper}" opacity=".88"/><rect width="${W}" height="${H * 0.74}" fill="url(#fx-night)"/><g filter="url(#fx-blob)">`;
+    for (let i = 0; i < 9; i++) {
+      const y = H * (0.73 + r() * 0.24);
       const x = r() * W;
-      const y = r() * H * 0.5;
-      const k = 6 + r() * 8;
-      out += r() < 0.55 ? `<path d="M${x - k} ${y} h${2 * k} M${x} ${y - k} v${2 * k}"/>` : `<circle cx="${x}" cy="${y}" r="2" fill="${ink}"/>`;
+      out += `<ellipse cx="${x}" cy="${y}" rx="${W * (0.12 + r() * 0.2)}" ry="${10 + r() * 16}" fill="${i % 3 === 2 ? acc(s, 3) : sand}" opacity="${0.55 + r() * 0.3}"/>`;
+    }
+    out += `</g><g fill="none" stroke="${ink}" stroke-width="2" stroke-linecap="round" opacity=".75"><path d="M0 ${H * 0.73} Q${W * 0.2} ${H * 0.715} ${W * 0.42} ${H * 0.73} T${W * 0.8} ${H * 0.725} T${W} ${H * 0.73}" stroke-dasharray="90 8 30 6"/>`;
+    for (let i = 0; i < 6; i++) {
+      const x = r() * W;
+      const y = H * (0.78 + r() * 0.18);
+      out += `<path d="M${x} ${y} q${30 + r() * 40} -6 ${80 + r() * 90} 0" stroke-width="1.6" opacity=".6"/>`;
+    }
+    for (let i = 0; i < 44; i++) {
+      const x = r() * W;
+      const y = r() * H * 0.62;
+      const k = 6 + r() * 7;
+      const t = r();
+      if (t < 0.45) out += `<path d="M${x - k} ${y} h${2 * k} M${x} ${y - k} v${2 * k}"/>`;
+      else if (t < 0.85) out += `<circle cx="${x}" cy="${y}" r="${2 + r() * 1.5}" fill="${ink}"/>`;
+      else {
+        let d = "";
+        for (let p = 0; p < 10; p++) {
+          const a = -Math.PI / 2 + (p * Math.PI) / 5;
+          const rr = p % 2 ? k * 0.45 : k * 1.2;
+          d += `${p ? "L" : "M"}${x + rr * Math.cos(a)} ${y + rr * Math.sin(a)}`;
+        }
+        out += `<path d="${d}Z" stroke-width="1.8"/>`;
+      }
     }
     return out + `</g>`;
   },
@@ -335,5 +454,43 @@ const LAYER: Record<DemoOverlay, Layer> = {
   // Рисунок-виньетка: края тают в бумаге
   vignette(_s, { W, H }) {
     return `<rect width="${W}" height="${H}" fill="url(#fx-vig)"/>`;
+  },
+
+  // Бледное тёплое сияние вокруг героя на светлом фоне (за фигурами)
+  halo(_s, { heroX, feet, scale }) {
+    const cy = feet - 230 * scale;
+    const rr = 360 * scale;
+    return `<defs><radialGradient id="fx-halo"><stop offset="0" stop-color="#fffbe2" stop-opacity="1"/><stop offset=".55" stop-color="#fbf3cf" stop-opacity=".75"/><stop offset="1" stop-color="#fbf3cf" stop-opacity="0"/></radialGradient></defs><ellipse cx="${heroX}" cy="${cy}" rx="${rr}" ry="${rr * 1.05}" fill="url(#fx-halo)"/>`;
+  },
+
+  // Светящиеся пылинки и светлячки в лучах
+  motes(_s, { W, H }, r) {
+    let out = `<g fill="#ffe7a0">`;
+    for (let i = 0; i < 46; i++) {
+      const x = r() * W;
+      const y = r() * H * 0.85;
+      const k = 1.5 + r() * 3.5;
+      out += `<circle cx="${x}" cy="${y}" r="${k * 3}" opacity=".14"/><circle cx="${x}" cy="${y}" r="${k}" fill="#fff6d0" opacity=".9"/>`;
+    }
+    return out + `</g>`;
+  },
+
+  // Быстрые штрихи тушью у головы героя: «ахнул», «подпрыгнул» (без слов)
+  flicks(s, { heroX, feet, scale }, r) {
+    const cy = feet - 260 * scale;
+    let out = `<g fill="none" stroke="${s.palette.ink}" stroke-linecap="round" stroke-width="3.2">`;
+    for (const side of [-1, 1]) {
+      const x0 = heroX + side * 120 * scale;
+      for (let k = 0; k < 3; k++) {
+        const a = (-0.5 + k * 0.4) * (side > 0 ? 1 : -1);
+        const l = (30 + r() * 18) * scale;
+        const x = x0 + side * k * 6 * scale;
+        const y = cy - 40 * scale + k * 34 * scale;
+        out += `<path d="M${x} ${y} l${side * l * Math.cos(a)} ${-l * Math.sin(a) * side}"/>`;
+      }
+    }
+    // Пара «капель» и короткая дуга движения
+    out += `<path d="M${heroX - 175 * scale} ${cy + 70 * scale} q-10 16 0 22 q10 -6 0 -22Z" stroke-width="2.4"/><path d="M${heroX + 160 * scale} ${cy + 150 * scale} q30 -20 46 -60" stroke-width="2.6" stroke-dasharray="14 8"/>`;
+    return out + `</g>`;
   },
 };

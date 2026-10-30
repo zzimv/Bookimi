@@ -131,7 +131,7 @@ export default async function Page({ params, searchParams }: { params: Promise<{
       {book && (
         <section className="panel">
           <b>Книга</b> <span className="badge">{book.status}</span>{" "}
-          {book.files.filter((f) => ["pdf-screen", "print-block", "print-cover"].includes(f.kind)).map((f) => (
+          {book.files.filter((f) => ["pdf-screen", "print-block", "print-cover"].includes(f.kind) || f.kind.startsWith("print-addon-") || f.kind.startsWith("addon-")).map((f) => (
             <a key={f.kind} className="small" style={{ marginRight: 8 }} href={`/api/admin/books/${book.id}/download?kind=${f.kind}`}>{f.kind}</a>
           ))}
           {photos.length > 0 && (

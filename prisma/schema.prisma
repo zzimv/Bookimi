@@ -216,6 +216,10 @@ model Addon {
   requiresPrint Boolean  @default(false)
   sortOrder    Int       @default(0)
   isActive     Boolean   @default(true)
+  /// Для каких книг: CHILD | TEEN | ADULT | PET; пусто — для всех (src/lib/addons-core.ts)
+  audiences    String[]  @default([])
+  /// Кто изготавливает физический доп: print — типография (наши файлы), other — другой подрядчик (вручную)
+  supplier     String    @default("print")
 }
 
 // ───────────── Герои, фото, книги, генерация ─────────────

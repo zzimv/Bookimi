@@ -11,8 +11,17 @@ import { track } from "./events";
 import { shipQuote, type ShipAddress, type ShipMethod } from "./shipping";
 import { hmac } from "./crypto";
 import { addToAddressBook, cleanAddress, parseAddressBook } from "./delivery";
+import { addonFits, audienceOfParams } from "./addons-core";
+import type { AudienceKey } from "../content/profiles";
 
-export async function catalogForPricing(): Promise<{ formats: CatalogFormat[]; addons: CatalogAddon[] }> {
+/** Аудитория книги (из анкеты): от неё зависит набор допов. Нет книги или анкеты — детская. */
+export async function bookAudience(bookId: string): Promise<AudienceKey> {
+  const b = await db.book.findUnique({ where: { id: bookId }, select: { params: true } }).catch(() => null);
+  return audienceOfParams(b?.params);
+}
+
+/** Каталог для расчёта: включённые форматы и допы; с аудиторией — только допы для книг этой аудитории. */
+export async function catalogForPricing(audience?: string): Promise<{ formats: CatalogFormat[]; addons: CatalogAddon[] }> {
   const [formats, addons, audio, flags, cartoon] = await Promise.all([
     db.productFormat.findMany({ where: { isActive: true }, orderBy: { sortOrder: "asc" } }),
     db.addon.findMany({ where: { isActive: true }, orderBy: { sortOrder: "asc" } }),
@@ -23,6 +32,7 @@ export async function catalogForPricing(): Promise<{ formats: CatalogFormat[]; a
   return {
     formats: formats.filter((f) => f.kind === "PDF" || flags.printEnabled) as CatalogFormat[],
     addons: (addons as CatalogAddon[])
+      .filter((a) => addonFits(a, audience))
       .filter((a) => flags.printEnabled || !a.requiresPrint)
       .filter((a) => a.key !== "audio-self" || audio.selfReadEnabled)
       .filter((a) => !a.key.startsWith("cartoon") || cartoon.enabled)
@@ -58,6 +68,26 @@ export async function usePromo(promoId: string, client: Pick<PrismaClient, "prom
 export async function cartoonPaidFor(bookId: string) {
   const n = await db.orderItem.count({ where: { bookId, refKey: "cartoon", order: { paidAt: { not: null }, status: { notIn: ["REFUNDED", "CANCELLED"] } } } });
   return n > 0;
+}
+
+/** Допы этой книги из оплаченных (не возвращённых) заказов. */
+export async function paidAddonKeys(bookId: string) {
+  const items = await db.orderItem.findMany({
+    where: { bookId, kind: "addon", order: { paidAt: { not: null }, status: { notIn: ["REFUNDED", "CANCELLED"] } } },
+    select: { refKey: true },
+  });
+  return [...new Set(items.map((i) => i.refKey))];
+}
+
+/**
+ * Кабинет → «Добавить к книге»: цифровые допы для аудитории книги, которые ещё не куплены
+ * (мультфильм и «своим голосом» — своя панель, физические — только с заказом печати).
+ */
+export async function laterAddonsFor(bookId: string) {
+  const [{ addons }, paid] = await Promise.all([catalogForPricing(await bookAudience(bookId)), paidAddonKeys(bookId)]);
+  return addons
+    .filter((a) => a.kind === "DIGITAL" && !a.requiresPrint && !a.key.startsWith("cartoon") && !paid.includes(a.key))
+    .map((a) => ({ key: a.key, title: a.title, description: a.description && a.description !== a.title ? a.description : "", priceRub: a.priceRub ?? 0 }));
 }
 
 /**
@@ -141,6 +171,8 @@ async function priceBulk(userId: string, input: CheckoutInput) {
 
 export async function priceCheckout(userId: string, input: CheckoutInput) {
   if (input.bulk) return priceBulk(userId, input);
+  // Каталог целиком, аудитория — в quote: доп чужой аудитории получает понятную ошибку «не для этой книги»
+  const audience = await bookAudience(input.bookId);
   const { formats, addons } = await catalogForPricing();
   const ship = await cfg("shipping");
   let shippingRub = 0;
@@ -164,6 +196,8 @@ export async function priceCheckout(userId: string, input: CheckoutInput) {
       freeShippingBooks: ship.freeShippingBooks,
       addonsOnly: input.addonsOnly,
       cartoonPaid: await cartoonPaidFor(input.bookId),
+      audience,
+      paidAddons: await paidAddonKeys(input.bookId),
     },
     promo,
     newbie,

@@ -10,6 +10,7 @@ import { bookText, bookTextHash, cartoonPurchase, cartoonView, createShare, dele
 import { CARTOON_VOICE_DOC_VERSION, VOICE_LIMITS } from "@/lib/cartoon-guide";
 import { dedicationText } from "@/lib/gen/text";
 import { Answers } from "@/lib/quiz";
+import { addonFits, audienceOfParams } from "@/lib/addons-core";
 
 // «Мультфильм по книге» в кабинете: состояние, покупка (докупка к оплаченной книге), голос и субтитры,
 // пересборка (одна бесплатная), свой голос, ссылка «Поделиться», согласие на голос и удаление записей.
@@ -18,7 +19,9 @@ export async function GET(_: Request, { params }: { params: Promise<{ id: string
   const { id } = await params;
   const own = await ownBook(id);
   if (!own) return err("Не найдено", 404);
-  const [view, bought, set, audio] = await Promise.all([cartoonView(id), cartoonPurchase(id), cfg("cartoon"), cfg("audio")]);
+  const [view, bought, set, audio, row] = await Promise.all([cartoonView(id), cartoonPurchase(id), cfg("cartoon"), cfg("audio"), db.addon.findUnique({ where: { key: "cartoon" } })]);
+  // Мультфильм выключен для аудитории этой книги (админка → Каталог → Допы) — панель покупки не показываем
+  const forBook = !row || (row.isActive && addonFits(row, audienceOfParams(own.book.params)));
   const consent = own.user ? await hasConsent("VOICE", { userId: own.user.id }) : false;
   // Плеер в кабинете: подписанные ссылки на час
   const files = view.status === "READY" ? await db.bookFile.findMany({ where: { bookId: id, kind: { in: ["cartoon", "cartoon-vertical", "cartoon-poster"] } } }) : [];
@@ -33,7 +36,7 @@ export async function GET(_: Request, { params }: { params: Promise<{ id: string
     urls: { video: await url("cartoon"), poster: await url("cartoon-poster"), vertical: await url("cartoon-vertical") },
     prices: { cartoon: set.priceRub, ownVoice: set.ownVoiceRub },
     voices: audio.voices,
-    enabled: set.enabled,
+    enabled: set.enabled && forBook,
   });
 }
 

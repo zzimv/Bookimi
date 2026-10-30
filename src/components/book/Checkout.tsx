@@ -7,6 +7,7 @@ import { toggleAddon } from "@/lib/pricing";
 import { addressError, cleanAddress, type Prefill } from "@/lib/delivery";
 import { CityInput } from "./CityInput";
 import { PvzPicker } from "./PvzPicker";
+import { AddonThumb } from "./AddonThumb";
 
 export interface Fmt { key: string; kind: "PDF" | "PRINT"; title: string; priceRub: number; widthMm: number | null; heightMm: number | null; cover: string; pages: number }
 export interface Add { key: string; kind: string; title: string; description: string; priceRub: number | null; percentOff: number | null; requiresPrint: boolean }
@@ -299,9 +300,11 @@ export function Checkout(props: {
             <h2 style={{ fontSize: "var(--fs-lg)", marginTop: 24 }}>Добавить к книге</h2>
             <div className="choice-cards">
               {shownAddons.map((a) => (
-                <button key={a.key} className="choice" aria-pressed={addons.includes(a.key)} onClick={() => setAddons(toggleAddon(addons, a.key))}>
+                <button key={a.key} className="choice addon-choice" data-addon={a.key} aria-pressed={addons.includes(a.key)} onClick={() => setAddons(toggleAddon(addons, a.key))}>
+                  <AddonThumb addonKey={a.key} coverUrl={props.coverUrl} />
                   <div>
                     <strong>{a.title}</strong>
+                    {a.description && a.description !== a.title && <small className="addon-choice__desc">{a.description}</small>}
                     <span>{a.percentOff ? `−${a.percentOff}% от цены книги` : a.priceRub ? `+${rub(a.priceRub)}` : ""}</span>
                   </div>
                 </button>

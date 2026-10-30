@@ -194,19 +194,46 @@ export const FORMATS = [
   { key: "big-hard", kind: "PRINT", title: "Большой 30×30 см, твёрдая обложка", w: 300, h: 300, cover: "HARD", price: 5490, isDefault: false },
 ] as const;
 
+/**
+ * Допы. audiences — для каких книг (пусто — для всех), supplier — кто делает физический доп: «print» — типография по
+ * нашим файлам (src/lib/addon-files.ts), «other» — другой подрядчик (рамка, магнит): выключен, пока владелец не
+ * договорится. Порядок = sortOrder: первые три подходящих видны в оформлении сразу. Цены — ASSUMPTIONS.md, «Допы по аудиториям».
+ * Для уже работающей базы те же значения вносит миграция 0008_addon_audiences (тест сверяет).
+ */
 export const ADDONS = [
-  { key: "height-chart", kind: "PHYSICAL", title: "Именной ростомер с героем", price: 790, pct: null, print: true },
-  { key: "gift-box", kind: "PHYSICAL", title: "Подарочная упаковка с картой приключений и открыткой", price: 490, pct: null, print: true },
-  { key: "stickers", kind: "PHYSICAL", title: "Наклейки с героем (лист А5)", price: 350, pct: null, print: true },
-  { key: "poster", kind: "PHYSICAL", title: "Постер с обложкой А3", price: 590, pct: null, print: true },
-  { key: "audiobook", kind: "DIGITAL", title: "Аудиокнига: озвучка диктором", price: 390, pct: null, print: false },
-  { key: "audio-self", kind: "DIGITAL", title: "Аудиокнига вашим голосом: запишите сами в кабинете", price: 490, pct: null, print: false },
-  { key: "coloring", kind: "DIGITAL", title: "Раскраска PDF по иллюстрациям книги", price: 290, pct: null, print: false },
-  { key: "second-copy", kind: "MODIFIER", title: "Второй экземпляр книги", price: null, pct: 30, print: true },
-  { key: "urgent", kind: "MODIFIER", title: "Срочное изготовление", price: 500, pct: null, print: true },
+  // ── Дети ──
+  { key: "height-chart", kind: "PHYSICAL", title: "Именной ростомер с героем", description: "Ростомер с героем книги и шкалой роста — повесить в детской.", price: 790, pct: null, print: true, audiences: ["CHILD"], supplier: "print", active: true },
+  { key: "gift-box", kind: "PHYSICAL", title: "Подарочная упаковка с картой приключений и открыткой", description: "Коробка под книгу, карта мест из сказки и открытка с посвящением.", price: 490, pct: null, print: true, audiences: ["CHILD"], supplier: "print", active: true },
+  { key: "stickers", kind: "PHYSICAL", title: "Наклейки с героем (лист А5)", description: "Лист наклеек с героем и картинками из сказки — на тетради и шкафчик.", price: 350, pct: null, print: true, audiences: ["CHILD"], supplier: "print", active: true },
+  { key: "poster", kind: "PHYSICAL", title: "Постер с обложкой А3", description: "Обложка сказки с именем героя на плотной бумаге 29,7×42 см.", price: 590, pct: null, print: true, audiences: ["CHILD"], supplier: "print", active: true },
+  { key: "coloring", kind: "DIGITAL", title: "Раскраска PDF по иллюстрациям книги", description: "Контуры иллюстраций сказки — распечатать дома на А4 и раскрасить.", price: 290, pct: null, print: false, audiences: ["CHILD"], supplier: "print", active: true },
+  { key: "audio-self", kind: "DIGITAL", title: "«Читаю сам»: аудиосказка вашим голосом", description: "Запишите сказку по страницам прямо в кабинете — ребёнок слушает ваш голос.", price: 490, pct: null, print: false, audiences: ["CHILD"], supplier: "print", active: true },
+  // ── Подростки ──
+  { key: "teen-poster", kind: "PHYSICAL", title: "Постер А3 в стиле книги", description: "Иллюстрация из книги с названием — на стену в комнату, 29,7×42 см.", price: 590, pct: null, print: true, audiences: ["TEEN"], supplier: "print", active: true },
+  { key: "teen-stickers", kind: "PHYSICAL", title: "Стикерпак для ноутбука и телефона", description: "Виниловые стикеры с героем и фразами из книги, вырезаны по контуру.", price: 390, pct: null, print: true, audiences: ["TEEN"], supplier: "print", active: true },
+  { key: "teen-bookmarks", kind: "PHYSICAL", title: "Закладки-карточки с героем (4 шт.)", description: "Четыре двусторонние закладки 5×15 см с кадрами из книги.", price: 290, pct: null, print: true, audiences: ["TEEN"], supplier: "print", active: true },
+  { key: "notebook", kind: "PHYSICAL", title: "Скетчбук А5 с обложкой-иллюстрацией", description: "Блокнот на пружине, 48 листов, обложка — иллюстрация из книги.", price: 690, pct: null, print: true, audiences: ["TEEN"], supplier: "print", active: true },
+  { key: "wallpapers", kind: "DIGITAL", title: "Обои для телефона и компьютера", description: "Два файла PNG: 1170×2532 для телефона и 2560×1440 для компьютера.", price: 290, pct: null, print: false, audiences: ["TEEN"], supplier: "print", active: true },
+  // ── Взрослые ──
+  { key: "premium-box", kind: "PHYSICAL", title: "Подарочная коробка премиум с открыткой", description: "Плотная коробка под книгу с наклейкой-названием и открытка с вашим посвящением.", price: 690, pct: null, print: true, audiences: ["ADULT"], supplier: "print", active: true },
+  { key: "postcards", kind: "PHYSICAL", title: "Набор открыток с иллюстрациями книги (6 шт.)", description: "Шесть открыток 10×15 см: на лицевой — иллюстрации, на обороте — место для слов.", price: 490, pct: null, print: true, audiences: ["ADULT"], supplier: "print", active: true },
+  { key: "adult-calendar", kind: "PHYSICAL", title: "Календарь 2027 с иллюстрациями книги", description: "Настенный перекидной А4: 12 месяцев — 12 иллюстраций, праздники отмечены.", price: 990, pct: null, print: true, audiences: ["ADULT"], supplier: "print", active: true },
+  { key: "adult-print", kind: "PHYSICAL", title: "Принт А3 с иллюстрацией книги", description: "Иллюстрация с паспарту и подписью на плотной бумаге 29,7×42 см — под рамку.", price: 590, pct: null, print: true, audiences: ["ADULT"], supplier: "print", active: true },
+  { key: "bookmark", kind: "PHYSICAL", title: "Закладка с иллюстрацией", description: "Двусторонняя закладка 5×15 см с героем книги.", price: 190, pct: null, print: true, audiences: ["ADULT"], supplier: "print", active: true },
+  { key: "framed-print", kind: "PHYSICAL", title: "Принт А3 в раме", description: "Принт с паспарту в деревянной раме под стеклом.", price: 2490, pct: null, print: true, audiences: ["ADULT"], supplier: "other", active: false },
+  // ── Питомцы ──
+  { key: "pet-poster", kind: "PHYSICAL", title: "Постер А3 с питомцем", description: "Портрет питомца из книги с кличкой крупно, 29,7×42 см.", price: 590, pct: null, print: true, audiences: ["PET"], supplier: "print", active: true },
+  { key: "pet-calendar", kind: "PHYSICAL", title: "Календарь 2027 с питомцем", description: "Настенный перекидной А4: 12 месяцев с вашим питомцем, праздники отмечены.", price: 990, pct: null, print: true, audiences: ["PET"], supplier: "print", active: true },
+  { key: "pet-postcards", kind: "PHYSICAL", title: "Открытки и наклейки с питомцем", description: "Четыре открытки 10×15 см и лист наклеек А5 с питомцем.", price: 390, pct: null, print: true, audiences: ["PET"], supplier: "print", active: true },
+  { key: "pet-passport", kind: "PHYSICAL", title: "«Паспорт питомца»: карточка-вкладыш", description: "Карточка 10×15 см: портрет, кличка, порода, окрас и графы, которые заполните сами.", price: 290, pct: null, print: true, audiences: ["PET"], supplier: "print", active: true },
+  { key: "pet-magnet", kind: "PHYSICAL", title: "Магнит с питомцем", description: "Виниловый магнит 9×6 см с портретом питомца.", price: 350, pct: null, print: true, audiences: ["PET"], supplier: "other", active: false },
+  // ── Общие ──
+  { key: "audiobook", kind: "DIGITAL", title: "Аудиокнига: озвучка диктором", description: "Книга голосом диктора — MP3 в кабинете и плеер на сайте.", price: 390, pct: null, print: false, audiences: ["CHILD", "TEEN", "ADULT"], supplier: "print", active: true },
   // Цены мультфильма — из настроек cartoon.priceRub / cartoon.ownVoiceRub (здесь — значения по умолчанию)
-  { key: "cartoon", kind: "DIGITAL", title: "Мультфильм по книге: 2 минуты с вашими героями и озвучкой", price: 690, pct: null, print: false },
-  { key: "cartoon-own-voice", kind: "MODIFIER", title: "Мультфильм своим голосом: озвучите сами по готовому сценарию", price: 400, pct: null, print: false },
+  { key: "cartoon", kind: "DIGITAL", title: "Мультфильм по книге: 2 минуты с вашими героями и озвучкой", description: "Квадратный 1080×1080 и вертикальный 9:16 — для телевизора, сторис и коротких видео.", price: 690, pct: null, print: false, audiences: [], supplier: "print", active: true },
+  { key: "cartoon-own-voice", kind: "MODIFIER", title: "Мультфильм своим голосом: озвучите сами по готовому сценарию", description: "Запишите реплики в кабинете — мультфильм соберётся с голосом близких.", price: 400, pct: null, print: false, audiences: ["CHILD", "ADULT"], supplier: "print", active: true },
+  { key: "second-copy", kind: "MODIFIER", title: "Второй экземпляр книги", description: "Ещё одна такая же печатная книга со скидкой.", price: null, pct: 30, print: true, audiences: [], supplier: "print", active: true },
+  { key: "urgent", kind: "MODIFIER", title: "Срочное изготовление", description: "Изготовим на 2 рабочих дня быстрее.", price: 500, pct: null, print: true, audiences: [], supplier: "print", active: true },
 ] as const;
 
 export const PDF_PRICE = 990;

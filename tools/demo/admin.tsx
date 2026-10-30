@@ -11,6 +11,7 @@ import { ORDER_STATUS } from "../../src/lib/labels";
 import { ruDate } from "../../src/lib/pricing";
 import { METHOD_TITLES } from "../../src/lib/shipping";
 import { ADDONS, FORMATS } from "../../src/lib/catalog-defaults";
+import { audiencesLabel } from "../../src/lib/addons-core";
 import { DEFAULTS, getReadiness } from "../../src/lib/settings";
 import { addPromo, bookById, confirmTransfer, mskDay, orderById, pageUrl, resetLimits, S, setLimits, setPrices, setStatus, spentTodayRub, STATUS_FLOW, togglePromo } from "./api";
 import { NotFoundError } from "./router";
@@ -465,7 +466,7 @@ export function AdminPromos() {
 
 // ───────── цены ─────────
 export function AdminCatalog() {
-  const items = [...FORMATS.map((f) => ({ key: f.key, title: f.title, price: f.price as number })), ...ADDONS.filter((a) => a.price !== null).map((a) => ({ key: a.key, title: a.title, price: a.price as number }))];
+  const items = [...FORMATS.map((f) => ({ key: f.key, title: f.title, price: f.price as number })), ...ADDONS.filter((a) => a.price !== null).map((a) => ({ key: a.key, title: `${a.title} · ${audiencesLabel(a.audiences)}${a.active ? "" : " (выкл.: другой подрядчик)"}`, price: a.price as number }))];
   const [p, setP] = useState<Record<string, string>>(() => Object.fromEntries(items.map((i) => [i.key, String(i.price)])));
   const [msg, setMsg] = useState("");
   return (

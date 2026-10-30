@@ -869,3 +869,10 @@ details.edit summary { cursor: pointer; color: var(--forest); font-weight: 600; 
   .tbl--cards td[data-label=""]::before { display: none; }
   .tbl--cards .select { width: 100% !important; }
 }
+
+/* Допы в оформлении и кабинете: миниатюра изделия + описание (src/components/book/AddonThumb.tsx) */
+.addon-choice { align-items: flex-start; }
+.addon-thumb { flex: none; border-radius: 8px; background: var(--sage, #e3efe6); padding: 3px; }
+.addon-choice__desc { display: block; font-size: var(--fs-xs, 0.8rem); color: var(--ink-soft); line-height: 1.35; margin: 2px 0 4px; }
+.addon-form .check { white-space: nowrap; }
+.later-addons { display: grid; gap: 10px; margin-top: 10px; }

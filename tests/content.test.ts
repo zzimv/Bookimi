@@ -180,3 +180,30 @@ describe("анкета v2", () => {
     expect(ContactV2.parse({ phone: "+7 912 345 67 89", email: "A@B.ru" })).toEqual({ phone: "+79123456789", email: "a@b.ru" });
   });
 });
+
+describe("пробные стили по референсам владельца", () => {
+  const plot = { slug: "ref", theme: "forest", heroKind: "child" as const };
+  it("новые эффекты демо есть только у своих стилей и рисуются без NaN", async () => {
+    const { TRIAL_ART_STYLES } = await import("@/content/art/trial");
+    const fresh = /id="(pencil|bleed|palewash|twotone|warm|bd-jitter|bd-golden|bd-amber|bd-gouache|fx-sun|fx-floor|fx-halo)"/;
+    for (const st of TRIAL_ART_STYLES) {
+      for (const kind of ["child", "teen", "adult", "pet"] as const) {
+        const svg = renderDemoSpread({ plot: { ...plot, heroKind: kind }, spreadIndex: 1, artStyle: st.id, hero: { species: "dog" }, extras: [{ role: "pet", look: { species: "cat" } }] });
+        expect(svg).not.toMatch(/NaN|undefined/);
+        const usesNew = ["pencil", "golden", "sparse", "backlight", "gouache", "mist", "journal"].includes(st.demo.backdrop ?? "") || ["pencil", "bleed", "palewash", "twotone", "warm"].includes(st.demo.filter ?? "") || (st.demo.overlays ?? []).includes("halo");
+        if (!usesNew) expect(svg).not.toMatch(fresh);
+      }
+    }
+  });
+  it("негативы закрывают провалы референсов", async () => {
+    const { artStyle } = await import("@/content/art/index");
+    expect(artStyle("cel-70s")!.negative).toMatch(/bulging eyes/);
+    expect(artStyle("cel-70s")!.negative).toMatch(/gaping mouth/);
+    expect(artStyle("desert-stars")!.negative).toMatch(/green coat.*long scarf|long scarf/);
+    expect(artStyle("desert-stars")!.negative).toMatch(/costume of a known character/);
+    expect(artStyle("golden-animation")!.negative).toMatch(/villain/);
+    expect(artStyle("field-journal")!.negative).toMatch(/insignia/);
+    expect(artStyle("mystery-toon")!.negative).toMatch(/pine tree cap/);
+    for (const id of ["cel-70s", "desert-stars", "fable-ink", "mystery-toon", "xerox-pencil"]) expect(artStyle(id)!.prompt).toMatch(/natural|own everyday clothing/);
+  });
+});
