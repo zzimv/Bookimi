@@ -1,4 +1,5 @@
 import { z } from "zod";
+import "@/lib/zod-ru";
 import { db } from "@/lib/db";
 import { AnswersV2 } from "@/lib/quiz";
 import { plotBySlug } from "@/content/registry";

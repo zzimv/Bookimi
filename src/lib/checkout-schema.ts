@@ -1,4 +1,5 @@
 import { z } from "zod";
+import "./zod-ru";
 import { ShipAddressSchema } from "./delivery";
 
 export const Checkout = z.object({

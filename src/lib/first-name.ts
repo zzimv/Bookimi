@@ -11,3 +11,11 @@ export function checkFirstName(raw: string | null | undefined): string | null | 
   if (v.length > FIRST_NAME_MAX || !/^\p{L}+(?:[ -]\p{L}+)*$/u.test(v)) return false;
   return v;
 }
+
+/** Имя для приветствия в кабинете — только «Как к вам обращаться» (User.firstName), целиком («Анна Петровна»). */
+export function greetName(firstName: string | null | undefined): string | null {
+  return checkFirstName(firstName) || null;
+}
+
+/** «Здравствуйте, Анна!» или просто «Здравствуйте!». */
+export const greeting = (name: string | null) => (name ? `Здравствуйте, ${name}!` : "Здравствуйте!");

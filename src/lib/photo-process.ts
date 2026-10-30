@@ -51,16 +51,46 @@ async function faceMetrics(original: Buffer, W: number, H: number, face: Box | n
   return { sharpness: Math.round(laplacianVariance(g, 256, 256)), brightness: Math.round(mean), contrast: Math.round(std) };
 }
 
-async function makePortrait(original: Buffer, W: number, H: number, face: Box | null, kind: "human" | "pet") {
+/**
+ * Автоуровни (1–99%) только для кадра с заметным разбросом яркости. Почти однотонный кадр (стена, туман,
+ * засвет — СКО < 12 из 255 или 1–99% уже внутри 40 уровней) растягивать нельзя: шум становится контрастом, светлый
+ * кадр темнеет. Тогда оставляем как есть.
+ */
+export const LEVELS_MIN_STD = 12;
+export const LEVELS_MIN_RANGE = 40;
+export function levelsWanted(grey: Uint8Array | Buffer): boolean {
+  const { std } = meanStd(grey);
+  if (std < LEVELS_MIN_STD) return false;
+  const hist = new Uint32Array(256);
+  for (const v of grey) hist[v]++;
+  const n = grey.length;
+  let acc = 0;
+  let lo = 0;
+  let hi = 255;
+  for (let i = 0; i < 256; i++) {
+    acc += hist[i];
+    if (acc >= n * 0.01) {
+      lo = i;
+      break;
+    }
+  }
+  acc = 0;
+  for (let i = 255; i >= 0; i--) {
+    acc += hist[i];
+    if (acc >= n * 0.01) {
+      hi = i;
+      break;
+    }
+  }
+  return hi - lo >= LEVELS_MIN_RANGE;
+}
+
+export async function makePortrait(original: Buffer, W: number, H: number, face: Box | null, kind: "human" | "pet") {
   const c = portraitCrop(face, W, H, kind);
-  return sharp(original)
-    .extract({ left: c.left, top: c.top, width: c.side, height: c.side })
-    .resize(1024, 1024, { kernel: "lanczos3" })
-    .median(3)
-    .normalise({ lower: 1, upper: 99 })
-    .sharpen({ sigma: 0.8 })
-    .jpeg({ quality: 90, mozjpeg: true })
-    .toBuffer();
+  const base = sharp(original).extract({ left: c.left, top: c.top, width: c.side, height: c.side }).resize(1024, 1024, { kernel: "lanczos3" }).median(3);
+  const grey = await sharp(original).extract({ left: c.left, top: c.top, width: c.side, height: c.side }).resize(128, 128, { fit: "fill" }).greyscale().raw().toBuffer();
+  const img = levelsWanted(grey) ? base.normalise({ lower: 1, upper: 99 }) : base;
+  return img.sharpen({ sigma: 0.8 }).jpeg({ quality: 90, mozjpeg: true }).toBuffer();
 }
 
 /** Полная обработка загрузки. PhotoError — понятная покупателю причина отказа. */

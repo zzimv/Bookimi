@@ -5,6 +5,7 @@ import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { api } from "@/lib/client";
 import type { Cue } from "@/lib/gen/cartoon-script";
+import { SILENT_ERROR, isSilent, levelMeter } from "@/lib/cartoon-guide";
 
 type Rec = Record<string, { sec: number; warnings: string[] }>;
 
@@ -95,8 +96,10 @@ export function OwnVoice(p: {
     const buf = new Float32Array(an.fftSize);
     const t0 = performance.now();
     let clipSeen = false;
+    const total = levelMeter();
     const tick = () => {
       an.getFloatTimeDomainData(buf);
+      total.add(buf);
       let s = 0;
       let pk = 0;
       for (const v of buf) {
@@ -125,6 +128,12 @@ export function OwnVoice(p: {
       stream.getTracks().forEach((t) => t.stop());
       ctx.close().catch(() => {});
       const blob = new Blob(chunks, { type: r.mimeType || "audio/webm" });
+      // Тишина (микрофон выключен или заглушён) — не отправляем; сервер проверяет так же
+      const lv = total.result();
+      if (lv.frames > 0 && isSilent(lv)) {
+        setError(SILENT_ERROR);
+        return;
+      }
       setLocal((l) => ({ ...l, [n]: URL.createObjectURL(blob) }));
       await upload(n, blob, `cue-${n}`);
     };

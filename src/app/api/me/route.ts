@@ -1,4 +1,5 @@
 import { z } from "zod";
+import "@/lib/zod-ru";
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { body, err, json } from "@/lib/api";

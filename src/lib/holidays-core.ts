@@ -2,6 +2,7 @@
 // Чистые функции без БД — безопасно для клиента (редактор в админке, демо-стенд) и покрыто тестами.
 // Список праздников хранится в настройке `holidays` (таблица Setting, JSON) — см. src/lib/holidays.ts.
 import { z } from "zod";
+import "./zod-ru";
 
 /** Правило даты: каждый год (день-месяц), разовая дата, N-й день недели месяца, «всегда» (дни рождения). */
 export type HolidayRule =
@@ -343,9 +344,12 @@ export function parseHoliday(v: unknown): { ok: true; holiday: Holiday } | { ok:
   const r = HolidayInput.safeParse(v);
   if (r.success) return { ok: true, holiday: r.data as Holiday };
   const i = r.error.issues[0];
-  const field: Record<string, string> = { title: "Название", occasionKey: "Ключ повода", giftDeadlineDays: "Срок заказа", showFromDays: "Показывать за", description: "Описание", sortOrder: "Порядок" };
-  const f = i?.path?.[0] != null ? field[String(i.path[0])] : undefined;
-  return { ok: false, error: f && !/^[А-ЯЁ]/.test(i.message) ? `${f}: ${i.message}` : (i?.message ?? "Проверьте поля") };
+  const field: Record<string, string> = { title: "Название", occasionKey: "Ключ повода", giftDeadlineDays: "Срок заказа", showFromDays: "Показывать за (дней)", description: "Описание", sortOrder: "Порядок", bookSlugs: "Книги", month: "Месяц", day: "День", weekday: "День недели", n: "Номер недели", date: "Дата" };
+  const key = i?.path?.length ? String(i.path[i.path.length - 1]) : undefined;
+  const f = key ? field[key] : undefined;
+  const msg = i?.message ?? "Проверьте поля";
+  // Сообщения zod — по-русски (zod-ru); поле добавляем, если сообщение само его не называет
+  return { ok: false, error: f && !msg.startsWith(f.split(" ")[0]) ? `${f}: ${msg[0].toLowerCase()}${msg.slice(1)}` : msg };
 }
 
 /** Проверка всего списка (настройка целиком): каждый праздник и уникальные id. */

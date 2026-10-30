@@ -1,7 +1,7 @@
 "use server";
 // Действия раздела «Праздники»: владелец и маркетолог (PERMS.holidaysEdit), каждое — в журнал.
 // Список хранится в настройке `holidays` (Setting, JSON); проверка — zod (holidays-core).
-import { revalidatePath } from "next/cache";
+import { revalidateHolidays } from "@/lib/holidays-revalidate";
 import { requireAdmin } from "@/lib/admin";
 import { audit } from "@/lib/orders";
 import { getHolidays, saveHolidays } from "@/lib/holidays";
@@ -11,7 +11,7 @@ export type HolidayResult = { ok: true; items: Holiday[] } | { ok: false; error:
 
 async function commit(items: Holiday[]): Promise<HolidayResult> {
   await saveHolidays(items);
-  revalidatePath("/", "layout");
+  revalidateHolidays();
   return { ok: true, items };
 }
 

@@ -4,6 +4,7 @@
 // Модуль безопасен для клиента (только zod).
 
 import { z } from "zod";
+import "../lib/zod-ru";
 import { normalizeName } from "../lib/declension";
 import { EXTRA_ROLES, GROUP_ADULT_ROLES, GROUP_MAX_LIMIT, HERO_KIND_BY_AUDIENCE, type HeroKind } from "./types";
 import type { AudienceKey } from "./profiles";

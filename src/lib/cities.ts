@@ -109,17 +109,76 @@ export function matchRank(c: { n: string; words: string[]; rn: string[] }, q: st
   return null;
 }
 
-/** Подсказки с первой буквы: ранг совпадения, затем население. */
+/**
+ * Разговорные названия и сокращения крупных городов (ключ — после normalizeCity): «спб», «питер», «мск», «екб»…
+ * Двусмысленные («крас» — Краснодар или Красноярск) не добавлены.
+ */
+export const CITY_ALIASES: Record<string, string> = {
+  спб: "Санкт-Петербург",
+  "с пб": "Санкт-Петербург",
+  "с петербург": "Санкт-Петербург",
+  "санкт петербург": "Санкт-Петербург",
+  "санкт питер": "Санкт-Петербург",
+  питер: "Санкт-Петербург",
+  петербург: "Санкт-Петербург",
+  ленинград: "Санкт-Петербург",
+  мск: "Москва",
+  масква: "Москва",
+  екб: "Екатеринбург",
+  ебург: "Екатеринбург",
+  екат: "Екатеринбург",
+  свердловск: "Екатеринбург",
+  нск: "Новосибирск",
+  новосиб: "Новосибирск",
+  нн: "Нижний Новгород",
+  "н новгород": "Нижний Новгород",
+  нижний: "Нижний Новгород",
+  горький: "Нижний Новгород",
+  рнд: "Ростов-на-Дону",
+  ростов: "Ростов-на-Дону",
+  "ростов на дону": "Ростов-на-Дону",
+  влад: "Владивосток",
+  владик: "Владивосток",
+  челяба: "Челябинск",
+  челны: "Набережные Челны",
+  "наб челны": "Набережные Челны",
+  "в новгород": "Великий Новгород",
+  "петропавловск камчатский": "Петропавловск-Камчатский",
+  пкм: "Петропавловск-Камчатский",
+  "южно сахалинск": "Южно-Сахалинск",
+  ксм: "Комсомольск-на-Амуре",
+  "комсомольск на амуре": "Комсомольск-на-Амуре",
+  кенигсберг: "Калининград",
+  калик: "Калининград",
+  тлт: "Тольятти",
+  "ст петербург": "Санкт-Петербург",
+};
+
+/** Полное название по сокращению: точное совпадение; от 4 букв — и начало длинного («пите» → Питер). */
+export function cityAlias(q: string): string | null {
+  const n = normalizeCity(q);
+  if (CITY_ALIASES[n]) return CITY_ALIASES[n];
+  if (n.length >= 4) {
+    const hit = Object.keys(CITY_ALIASES).find((k) => k.length >= 5 && !k.includes(" ") && k.startsWith(n));
+    if (hit) return CITY_ALIASES[hit];
+  }
+  return null;
+}
+
+/** Подсказки с первой буквы: ранг совпадения, затем население. Сокращения («спб», «мск», «екб») — первыми. */
 export function searchCities(query: string, limit = 10): City[] {
   let q = normalizeCity(query);
   if (q.replace(/\s/g, "").length < 1) return [];
   const alt = fromLatinLayout(q);
   const variants = alt ? [q, normalizeCity(alt)] : [q];
+  const alias = cityAlias(q) ?? (alt ? cityAlias(alt) : null);
+  const aliasN = alias ? normalizeCity(alias) : null;
+  if (aliasN) variants.push(aliasN);
   const scored: { c: City; r: number }[] = [];
   for (const c of cities()) {
     let best: number | null = null;
     for (const v of variants) {
-      const r = matchRank(c, v, v.split(" "));
+      const r = v === aliasN && c.n === aliasN ? -1 : matchRank(c, v, v.split(" "));
       if (r != null && (best == null || r < best)) best = r;
     }
     if (best != null) scored.push({ c, r: best });

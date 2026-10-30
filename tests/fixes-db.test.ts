@@ -33,6 +33,13 @@ vi.mock("@/lib/pdf", () => ({
   },
 }));
 
+// Счётчик проверок TOTP (сама проверка настоящая): параллельный подбор не должен проверять больше 5 кодов
+const totpChecks = vi.hoisted(() => ({ n: 0 }));
+vi.mock("@/lib/crypto", async (importOriginal) => {
+  const orig = await importOriginal<typeof import("@/lib/crypto")>();
+  return { ...orig, totpVerify: (...a: Parameters<typeof orig.totpVerify>) => (totpChecks.n++, orig.totpVerify(...a)) };
+});
+
 const enabled = Boolean(process.env.DATABASE_URL);
 const d = enabled ? describe : describe.skip;
 
@@ -108,6 +115,12 @@ d("исправления по отчёту 30.10: БД", async () => {
   const jobs = async (queue: string, bookId: string) =>
     (await db.$queryRawUnsafe<{ n: bigint }[]>(`SELECT count(*)::bigint AS n FROM pgboss.job WHERE name = $1 AND data->>'bookId' = $2`, queue, bookId))[0].n;
 
+  /** Алерты «Подбор кода 2FA» про этого сотрудника: по каналам. */
+  const alerts2fa = async (email: string) => {
+    const where = (ch: string) => ({ action: `outbox.${ch}`, AND: [{ details: { path: ["text"], string_contains: email } }, { OR: [{ details: { path: ["subject"], string_contains: "Подбор кода 2FA" } }, { details: { path: ["text"], string_contains: "Подбор кода 2FA" } }] }] });
+    return { telegram: await db.auditLog.count({ where: where("telegram") }), email: await db.auditLog.count({ where: where("email") }) };
+  };
+
   beforeAll(async () => {
     await setupSellerAndPayments();
     ctx.headers.set("x-forwarded-for", randomIp());
@@ -144,15 +157,40 @@ d("исправления по отчёту 30.10: БД", async () => {
         return fd;
       };
       for (let i = 0; i < 4; i++) expect(await nav(totpVerifyAction(f("000000")))).toContain("error=1");
-      const before = await db.auditLog.count({ where: { action: "outbox.telegram" } });
+      expect(await alerts2fa(op.email!)).toEqual({ telegram: 0, email: 0 });
       expect(await nav(totpVerifyAction(f("000000")))).toContain("locked=1");
       expect(await db.session.findUnique({ where: { id: s.id } })).toBeNull();
       expect(await db.auditLog.count({ where: { action: "auth.2fa_locked", entityId: op.id } })).toBe(1);
-      expect(await db.auditLog.count({ where: { action: "outbox.telegram" } })).toBeGreaterThan(before); // алерт владельцу
+      expect(await alerts2fa(op.email!)).toEqual({ telegram: 1, email: 0 }); // алерт владельцу — один, в Telegram (настройка alerts)
       // Новая сессия (код с почты) и даже верный код — пока блокировка
       ctx.headers.set("x-forwarded-for", randomIp());
       await login(op.id);
       expect(await nav(totpVerifyAction(f(totpNow(secret))))).toContain("locked=1");
+      ctx.headers.set("x-forwarded-for", randomIp());
+    });
+
+    it("40 параллельных неверных кодов: проверено не больше 5, одна блокировка и один алерт; верный код потом не пускает", async () => {
+      const { totpVerifyAction } = await import("@/app/admin/actions");
+      const secret = totpSecret();
+      const op = await user("par", { role: "OPERATOR", totpEnabled: true, totpSecret: encrypt(secret) });
+      ctx.headers.set("x-forwarded-for", randomIp());
+      await login(op.id);
+      const checkedBefore = totpChecks.n;
+      const f = () => {
+        const fd = new FormData();
+        fd.set("code", "000000");
+        return fd;
+      };
+      const res = await Promise.all(Array.from({ length: 40 }, () => nav(totpVerifyAction(f()))));
+      const checked = totpChecks.n - checkedBefore;
+      expect(checked).toBeLessThanOrEqual(5);
+      expect(res.every((r) => r.includes("error=1") || r.includes("locked=1"))).toBe(true);
+      expect(await db.auditLog.count({ where: { action: "auth.2fa_fail", entityId: op.id } })).toBe(5);
+      expect(await db.auditLog.count({ where: { action: "auth.2fa_locked", entityId: op.id } })).toBe(1);
+      expect(await alerts2fa(op.email!)).toEqual({ telegram: 1, email: 0 });
+      ctx.headers.set("x-forwarded-for", randomIp());
+      await login(op.id);
+      expect(await nav(totpVerifyAction((() => { const fd = new FormData(); fd.set("code", totpNow(secret)); return fd; })()))).toContain("locked=1");
       ctx.headers.set("x-forwarded-for", randomIp());
     });
 

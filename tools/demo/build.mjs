@@ -217,6 +217,8 @@ const demoPlugin = {
     b.onResolve({ filter: /\.css$/ }, () => ({ path: shim("empty.cjs") }));
     b.onLoad({ filter: /src[\\/]content[\\/]text-styles\.ts$/ }, (a) => ({ contents: textStylesStub(readFileSync(a.path, "utf8")), loader: "ts", resolveDir: dirname(a.path) }));
     b.onResolve({ filter: /^zod$/ }, () => ({ path: shim("zod.ts") }));
+    // Русские сообщения zod: у мини-zod они свои
+    b.onResolve({ filter: /(^|\/)zod-ru$/ }, () => ({ path: shim("empty.cjs") }));
     // Офлайн-список городов (доставка): в демо — 400 крупнейших (строки уже по убыванию населения), сжатым, как сюжеты
     b.onLoad({ filter: /src[\\/]lib[\\/]cities\.json$/ }, (a) => {
       const c = JSON.parse(readFileSync(a.path, "utf8"));
@@ -273,7 +275,7 @@ const html = `<!doctype html>
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>БУКИМИ демо rev 04</title>
+<title>БУКИМИ демо rev 05</title>
 <meta name="description" content="Интерактивный демо-стенд БУКИМИ: витрина, анкета, книга, оплата, кабинет и админка — без сервера.">
 <meta name="claude:viewport-fit-sides" content="cover">
 <script>${themeScript}</script>

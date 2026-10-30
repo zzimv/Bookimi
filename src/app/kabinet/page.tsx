@@ -12,6 +12,7 @@ import { upcomingBirthdays } from "@/lib/holidays-core";
 import { getLeadTimes } from "@/lib/holidays";
 import { journeyLine } from "../zakaz/journey";
 import { heroAcc, heroOf } from "../zakaz/journey-data";
+import { greetName, greeting } from "@/lib/first-name";
 
 const STATUS: Record<string, [string, string]> = {
   DRAFT: ["Черновик", ""],
@@ -27,21 +28,15 @@ const STATUS: Record<string, [string, string]> = {
 
 const OPEN_ORDER: OrderStatus[] = ["PENDING_PAYMENT", "AWAITING_CONFIRMATION", "PAID", "IN_PRINT", "PACKED", "SHIPPED"];
 
-function firstName(s?: string | null) {
-  const n = (s ?? "").trim().split(/\s+/)[0];
-  return n && /^[\p{L}-]{2,}$/u.test(n) ? n : null;
-}
-
 export default async function Page() {
   const user = await userOrLogin();
-  const [books, heroes, lastOrder, ref, orders] = await Promise.all([
+  const [books, heroes, ref, orders] = await Promise.all([
     db.book.findMany({
       where: { userId: user.id },
       orderBy: { createdAt: "desc" },
       include: { pages: { where: { index: 0 } }, story: { select: { coverUrl: true } } },
     }),
     db.hero.findMany({ where: { userId: user.id, role: "main", birthDate: { not: null } }, select: { id: true, name: true, gender: true, birthDate: true }, orderBy: { createdAt: "desc" } }),
-    db.order.findFirst({ where: { userId: user.id, contactName: { not: null } }, orderBy: { createdAt: "desc" }, select: { contactName: true } }),
     cfg("referral"),
     db.order.findMany({
       where: { userId: user.id, status: { in: OPEN_ORDER } },
@@ -50,8 +45,8 @@ export default async function Page() {
     }),
   ]);
 
-  // «Как к вам обращаться» со входа → имя из профиля → получатель прошлого заказа
-  const name = firstName(user.firstName) ?? firstName(user.name) ?? firstName(lastOrder?.contactName);
+  // Только «Как к вам обращаться» (User.firstName): получатель заказа — часто другой человек (бабушка, подруга)
+  const name = greetName(user.firstName);
   const paidCount = books.filter((b) => b.paidFull).length;
 
   // Ближайший повод: дни рождения героев (из «Моих героев» и анкет книг) + поводы прошлых книг
@@ -106,7 +101,7 @@ export default async function Page() {
   return (
     <>
       <header className="cab-hello">
-        <h1>{name ? `Здравствуйте, ${name}` : "Здравствуйте"}</h1>
+        <h1>{greeting(name)}</h1>
         <p className="muted">
           {paidCount > 0
             ? "Рады, что вы с нами. Здесь живут ваши книги — их можно читать, скачивать и заказывать в печать."

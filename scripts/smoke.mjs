@@ -37,6 +37,10 @@ const h = await a.f("/");
 ok(h.headers.get("x-frame-options") === "DENY", "X-Frame-Options: DENY");
 ok((h.headers.get("content-security-policy") ?? "").includes("frame-ancestors 'none'"), "CSP запрещает встраивание");
 ok(Boolean(h.headers.get("strict-transport-security")), "HSTS");
+{
+  const pp = h.headers.get("permissions-policy") ?? "";
+  ok(pp.includes("microphone=(self)") && pp.includes("camera=()") && pp.includes("geolocation=()"), "Permissions-Policy: микрофон — свой сайт (запись голоса), камера и геолокация — выкл.");
+}
 
 // CSRF: POST без своего Origin
 const csrf = await a.f("/api/books", { method: "POST", json: {}, origin: false, headers: { origin: "https://evil.example" } });

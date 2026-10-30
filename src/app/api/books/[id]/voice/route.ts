@@ -1,6 +1,25 @@
 import { db } from "@/lib/db";
 import { err, json, ownBook, throttle } from "@/lib/api";
 import { putFile, deleteFile, signedUrl } from "@/lib/storage";
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { SILENT_ERROR, isSilent } from "@/lib/cartoon-guide";
+
+/** Беззвучная запись (выключенный микрофон)? Замер ffmpeg; не получилось замерить — не мешаем сохранить. */
+async function silent(buf: Buffer) {
+  const dir = await mkdtemp(join(tmpdir(), "voice-page-"));
+  try {
+    const f = join(dir, "in");
+    await writeFile(f, buf);
+    const { levels } = await import("@/lib/gen/cartoon-voice");
+    return isSilent(await levels(f));
+  } catch {
+    return false;
+  } finally {
+    await rm(dir, { recursive: true, force: true }).catch(() => {});
+  }
+}
 
 // «Читаю сам»: родитель записывает книгу постранично. Доступно после покупки допа audio-self.
 async function allowed(bookId: string) {
@@ -30,9 +49,11 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   if (!(file instanceof File) || !Number.isInteger(index) || index < 0 || index > 12) return err("Некорректная запись");
   if (file.size > 8 * 1024 * 1024) return err("Запись слишком длинная — не больше 3 минут на страницу");
   const ext = file.type.includes("ogg") ? "ogg" : file.type.includes("mp4") ? "m4a" : "webm";
+  const buf = Buffer.from(await file.arrayBuffer());
+  if (await silent(buf)) return err(SILENT_ERROR);
   const kind = `voice-${String(index).padStart(2, "0")}`;
   const key = `${id}/voice/${kind}-${Date.now().toString(36)}.${ext}`;
-  await putFile("books", key, Buffer.from(await file.arrayBuffer()), file.type || "audio/webm");
+  await putFile("books", key, buf, file.type || "audio/webm");
   const old = await db.bookFile.findMany({ where: { bookId: id, kind } });
   for (const o of old) await deleteFile("books", o.storageKey).catch(() => {});
   await db.bookFile.deleteMany({ where: { bookId: id, kind } });

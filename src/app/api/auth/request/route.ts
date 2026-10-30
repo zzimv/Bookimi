@@ -1,4 +1,5 @@
 import { z } from "zod";
+import "@/lib/zod-ru";
 import { normalizeTarget, requestOtp } from "@/lib/auth";
 import { body, err, json, throttle } from "@/lib/api";
 import { cfg } from "@/lib/settings";

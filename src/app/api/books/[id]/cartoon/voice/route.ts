@@ -6,7 +6,7 @@ import { err, json, ownBook, throttle } from "@/lib/api";
 import { hasConsent } from "@/lib/consent";
 import { deleteFile, putFile, signedUrl } from "@/lib/storage";
 import { cueKind } from "@/lib/cartoon";
-import { VOICE_LIMITS, sniffAudio } from "@/lib/cartoon-guide";
+import { SILENT_ERROR, VOICE_LIMITS, isSilent, sniffAudio } from "@/lib/cartoon-guide";
 import { levels, splitUpload, validateVoiceFile } from "@/lib/gen/cartoon-voice";
 import type { Cue } from "@/lib/gen/cartoon-script";
 
@@ -58,6 +58,8 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   try {
     const v = await validateVoiceFile(buf, work, "in");
     if (!v.ok) return err(v.error);
+    // Беззвучная запись (выключенный микрофон) — не принимаем, а не сохраняем с предупреждением
+    if (isSilent(await levels(v.file))) return err(SILENT_ERROR);
     const rec: Rec = { ...((a.c.voiceCues ?? {}) as Rec) };
     const save = async (n: number, path: string, ext: string, type: string) => {
       const lv = await levels(path);

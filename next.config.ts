@@ -10,7 +10,10 @@ const csp = [
   "style-src 'self' 'unsafe-inline'",
   "img-src 'self' data: blob: https://*.yandexcloud.net https://storage.yandexcloud.net https://mc.yandex.ru",
   "font-src 'self'",
-  "connect-src 'self' https://mc.yandex.ru https://smartcaptcha.yandexcloud.net",
+  // blob: — своя запись голоса (волна и прослушивание до загрузки)
+  "connect-src 'self' blob: https://mc.yandex.ru https://smartcaptcha.yandexcloud.net",
+  // Аудио и мультфильм: свои записи (blob:), файлы по подписанным ссылкам Object Storage
+  "media-src 'self' blob: https://*.yandexcloud.net https://storage.yandexcloud.net",
   "frame-src https://smartcaptcha.yandexcloud.net",
   "frame-ancestors 'none'",
   "base-uri 'self'",
@@ -23,7 +26,7 @@ const securityHeaders = [
   { key: "X-Frame-Options", value: "DENY" },
   { key: "X-Content-Type-Options", value: "nosniff" },
   { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
-  { key: "Permissions-Policy", value: "camera=(self), microphone=(), geolocation=(), payment=(self)" },
+  { key: "Permissions-Policy", value: "camera=(), microphone=(self), geolocation=(), payment=(self)" },
 ];
 
 const config: NextConfig = {

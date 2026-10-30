@@ -3,7 +3,7 @@
 // по желанию — пара слов о внешности или фото (только с согласия родителей; по умолчанию советуем описание),
 // взрослые группы (воспитатели, учитель — с отчеством). CTA «Сделать книгу для каждого ребёнка группы».
 import { useState } from "react";
-import { parseNames, rosterIssues, adultGender, guessChildGender } from "@/lib/roster";
+import { addWithLimit, parseNames, rosterIssues, adultGender, guessChildGender } from "@/lib/roster";
 import { bulkPct, nextTier, type BulkTier } from "@/lib/bulk";
 import type { AudienceKey } from "@/content/profiles";
 import { PhotoSlot, type ConsentState, type PhotoView } from "./PhotoSlot";
@@ -50,6 +50,7 @@ export function GroupStep(p: {
 }) {
   const max = Math.max(0, p.group.max - 1);
   const [paste, setPaste] = useState("");
+  const [pasteNote, setPasteNote] = useState<string | null>(null);
   const [photoRow, setPhotoRow] = useState<number | null>(null);
   const kids = p.members;
   const issues = rosterIssues(kids, { heroName: p.heroName, max });
@@ -63,9 +64,11 @@ export function GroupStep(p: {
   function addPasted() {
     const parsed = parseNames(paste);
     if (!parsed.length) return;
-    const room = max - kids.length;
-    p.onChange([...kids, ...parsed.slice(0, Math.max(0, room)).map((x) => ({ name: x.name, gender: x.gender, description: "" }))], p.adults);
-    setPaste("");
+    const r = addWithLimit(kids.length, parsed, max, p.group.label);
+    if (r.added.length) p.onChange([...kids, ...r.added.map((x) => ({ name: x.name, gender: x.gender, description: "" }))], p.adults);
+    // Не поместившиеся имена остаются в поле — их можно поправить или добавить, освободив место
+    setPaste(r.overflow.map((x) => x.name).join("\n"));
+    setPasteNote(r.message);
   }
 
   return (
@@ -77,12 +80,17 @@ export function GroupStep(p: {
       <div className="panel paste-box">
         <label className="field">
           <span>Вставьте имена — по одному в строке или через запятую</span>
-          <textarea className="textarea" name="roster-paste" rows={4} value={paste} onChange={(e) => setPaste(e.target.value)} placeholder={"Аня\nМаша К.\nПетя, Ваня, Саша"} />
+          <textarea className="textarea" name="roster-paste" rows={4} value={paste} onChange={(e) => { setPaste(e.target.value); if (!e.target.value.trim()) setPasteNote(null); }} placeholder={"Аня\nМаша К.\nПетя, Ваня, Саша"} />
           <small>Пол угадаем по имени — проверьте. Фамилии не нужны: если два одинаковых имени, добавьте букву («Маша К.»).</small>
         </label>
         <button type="button" className="btn btn--ghost btn--sm" data-roster-add disabled={!paste.trim() || kids.length >= max} onClick={addPasted}>
           Добавить в список
         </button>
+        {pasteNote && (
+          <p className="warnline" role="alert" data-roster-overflow>
+            {pasteNote}
+          </p>
+        )}
       </div>
 
       <p className="roster-count" aria-live="polite">

@@ -97,7 +97,18 @@ export async function probe(file: string): Promise<{ duration: number; sampleRat
   const { stdout } = await ff(["-v", "error", "-show_entries", "format=duration,format_name:stream=codec_type,codec_name,sample_rate,channels", "-of", "json", file], { bin: FFPROBE() });
   const j = JSON.parse(stdout.toString()) as { format?: { duration?: string; format_name?: string }; streams?: { codec_type: string; codec_name: string; sample_rate?: string; channels?: number }[] };
   const a = j.streams?.find((s) => s.codec_type === "audio");
-  return { duration: Number(j.format?.duration ?? 0), sampleRate: Number(a?.sample_rate ?? 0), channels: a?.channels ?? 0, codec: a?.codec_name ?? "", format: j.format?.format_name ?? "" };
+  let duration = Number(j.format?.duration ?? 0);
+  // Запись MediaRecorder (WebM/Opus из браузера) идёт потоком — длительности в заголовке нет: меряем декодированием
+  if (!Number.isFinite(duration) || duration <= 0) duration = await decodedDuration(file).catch(() => 0);
+  return { duration, sampleRate: Number(a?.sample_rate ?? 0), channels: a?.channels ?? 0, codec: a?.codec_name ?? "", format: j.format?.format_name ?? "" };
+}
+
+/** Длительность по декодированию (последнее «time=» ffmpeg) — для файлов без длительности в заголовке. */
+export async function decodedDuration(file: string): Promise<number> {
+  const { stderr } = await ff(["-hide_banner", "-i", file, "-vn", "-f", "null", "-"]);
+  const all = [...stderr.toString().matchAll(/time=(\d+):(\d+):(\d+(?:\.\d+)?)/g)];
+  const m = all[all.length - 1];
+  return m ? Number(m[1]) * 3600 + Number(m[2]) * 60 + Number(m[3]) : 0;
 }
 
 /** Декодировать в PCM s16le 48 кГц моно. */

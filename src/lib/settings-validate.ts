@@ -1,6 +1,7 @@
 // Проверка настроек и промокодов из админки (серверные действия). Без БД — чистые функции, покрыты тестами.
 // Ошибка — понятный текст для владельца; при ошибке ничего не сохраняется.
 import { z } from "zod";
+import "./zod-ru";
 import { innIsValid, type Settings, type SettingKey } from "./settings";
 import { normalizePhone } from "../content/answers";
 

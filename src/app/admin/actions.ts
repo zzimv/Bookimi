@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import type { OrderStatus, Role } from "@prisma/client";
 import { db } from "@/lib/db";
-import { mfaFresh, recordTotpFailure, requireAdmin, safeAdminNext, totpFailures } from "@/lib/admin";
+import { mfaFresh, requireAdmin, safeAdminNext, totpAttempt } from "@/lib/admin";
 import { clientIp, currentSession, isStaffRole } from "@/lib/auth";
 import { audit, confirmTransfer, refundOrder, setStatus, STATUS_FLOW } from "@/lib/orders";
 import { sendToPrint } from "@/lib/print";
@@ -402,25 +402,25 @@ export async function totpVerifyAction(f: FormData) {
   const next = safeAdminNext(s(f, "next"));
   const back = `/admin/2fa?${reauth ? `reauth=1&next=${encodeURIComponent(next)}&` : ""}`;
   const ip = await clientIp();
-  if ((await totpFailures(sess.user.id, ip)).blocked) redirect(`${back}locked=1`);
   const user = sess.user;
   const setup = !user.totpEnabled;
   const code = s(f, "code");
-  let ok = totpVerify(decrypt(user.totpSecret!), code);
   let usedRecovery = false;
-  if (!ok && !setup && looksLikeRecovery(code)) {
+  // Проверка — под блокировкой сотрудника и IP: параллельные запросы идут по одному, после 5-й неудачи код не проверяется
+  const r = await totpAttempt(user.id, user.email, ip, async (tx) => {
+    if (totpVerify(decrypt(user.totpSecret!), code)) return true;
+    if (setup || !looksLikeRecovery(code)) return false;
     const h = recoveryHash(user.id, code);
     // Атомарно: код сгорает при первом использовании
-    const n = await db.$executeRaw`UPDATE "User" SET "totpRecovery" = array_remove("totpRecovery", ${h}) WHERE "id" = ${user.id}::uuid AND ${h} = ANY("totpRecovery")`;
-    ok = usedRecovery = n === 1;
-  }
-  if (!ok) {
-    const r = await recordTotpFailure(user.id, user.email, ip);
-    if (r.blocked) {
+    const n = await tx.$executeRaw`UPDATE "User" SET "totpRecovery" = array_remove("totpRecovery", ${h}) WHERE "id" = ${user.id}::uuid AND ${h} = ANY("totpRecovery")`;
+    return (usedRecovery = n === 1);
+  });
+  if (!r.ok) {
+    if (r.justLocked) {
       await db.session.deleteMany({ where: { id: sess.id } });
       redirect("/vhod?next=/admin&locked=1");
     }
-    redirect(`${back}error=1`);
+    redirect(`${back}${r.locked ? "locked=1" : "error=1"}`);
   }
   const now = new Date();
   if (setup) {

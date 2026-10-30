@@ -1,4 +1,5 @@
 import { z } from "zod";
+import "@/lib/zod-ru";
 import { body, err, json, throttle } from "@/lib/api";
 import { anonId, currentUser } from "@/lib/auth";
 import { consentState, grantConsents } from "@/lib/consent";

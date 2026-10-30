@@ -7,8 +7,12 @@ export const TEST_PAYMENTS = {
   yookassa: { enabled: false },
 };
 
+/** Алерты владельцу — только в Telegram (seed-demo ставит почту): тесты считают алерты по outbox.telegram. */
+export const TEST_ALERTS = { email: "", telegramChatId: "test-alerts", spendPct: [80, 100], npdPct: [80, 95] };
+
 export async function setupSellerAndPayments() {
   const { saveSetting } = await import("@/lib/settings");
+  await saveSetting("alerts", TEST_ALERTS);
   await saveSetting("seller", TEST_SELLER);
   await saveSetting("payments", TEST_PAYMENTS);
 }

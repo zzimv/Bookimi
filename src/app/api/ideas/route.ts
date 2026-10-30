@@ -1,4 +1,5 @@
 import { z } from "zod";
+import "@/lib/zod-ru";
 import { AnswersV2 } from "@/lib/quiz";
 import { body, deviceKey, err, json, throttle } from "@/lib/api";
 import { cfg } from "@/lib/settings";

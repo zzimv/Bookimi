@@ -2,6 +2,7 @@ import "server-only";
 import { NextResponse } from "next/server";
 import { cookies, headers } from "next/headers";
 import type { z, ZodTypeAny } from "zod";
+import "./zod-ru";
 import { db } from "./db";
 import { anonId, clientIp, currentUser } from "./auth";
 import { rateLimit } from "./limits";

@@ -27,6 +27,7 @@ import { bookAudience, bookById, bulkState, cartoonOf, catalogForPricing, demoPr
 import { NotFoundError, RedirectError } from "./router";
 import { HeroBirthdays } from "../../src/app/kabinet/Birthdays";
 import { demoBirthdays } from "./holidays";
+import { greetName, greeting } from "../../src/lib/first-name";
 
 const needUser = (next: string) => {
   if (!S.user) throw new RedirectError(`/vhod?next=${next}`);
@@ -232,16 +233,10 @@ const STATUS: Record<string, [string, string]> = {
   FAILED: ["Ошибка — повторите", "badge--red"],
 };
 const OPEN_ORDER = ["PENDING_PAYMENT", "AWAITING_CONFIRMATION", "PAID", "IN_PRINT", "PACKED", "SHIPPED"];
-function firstName(s?: string | null) {
-  const n = (s ?? "").trim().split(/\s+/)[0];
-  return n && /^[\p{L}-]{2,}$/u.test(n) ? n : null;
-}
-
 export async function KabinetHome() {
   const user = S.user!;
   const books = [...S.books].sort((x, y) => y.createdAt - x.createdAt);
-  const lastOrder = S.orders.find((o) => o.contactName);
-  const name = firstName(user.firstName) ?? firstName(user.name) ?? firstName(lastOrder?.contactName);
+  const name = greetName(user.firstName);
   const paidCount = books.filter((b) => b.paidFull).length;
 
   const bdays = new Map<string, { name: string; nameGen?: string; date: Date }>();
@@ -273,7 +268,7 @@ export async function KabinetHome() {
   return (
     <>
       <header className="cab-hello">
-        <h1>{name ? `Здравствуйте, ${name}` : "Здравствуйте"}</h1>
+        <h1>{greeting(name)}</h1>
         <p className="muted">
           {paidCount > 0
             ? "Рады, что вы с нами. Здесь живут ваши книги — их можно читать, скачивать и заказывать в печать."

@@ -6,7 +6,7 @@
   --gold: #c8952f;
   --gold-soft: #f3e4c2;
   --gold-ink: #6b4a0e;      /* текст на gold-soft */
-  --gold-mark: #a87a1c;     /* мелкое золото на светлом: звёзды, точка логотипа (≥ 3:1 к paper, surface, gold-soft) */
+  --gold-mark: #835f16;     /* мелкое золото на светлом: звёзды, точка логотипа (≥ 4,5:1 к paper, surface, gold-soft; тот же тон, что #a87a1c) */
   --paper: #fcfbf7;         /* фон страницы */
   --paper-glass: rgba(252, 251, 247, 0.95); /* липкая шапка и нижние панели */
   --surface: #ffffff;       /* карточки, поля ввода */
@@ -384,7 +384,7 @@ body:has(.flow-nav) .cookie, body:has(.sticky-cta) .cookie { bottom: calc(92px +
 .badge { display: inline-flex; align-items: center; padding: 2px 10px; border-radius: var(--r-pill); font-size: 12px; font-weight: 700; background: var(--sage); color: var(--forest-deep); }
 .badge--gold { background: var(--gold-soft); color: var(--gold-ink); }
 .badge--red { background: var(--danger-soft); color: var(--danger); }
-.badge--trial { background: transparent; color: var(--forest-deep); border: 1px dashed currentColor; padding: 1px 9px; }
+.badge--trial { background: var(--gold-soft); color: var(--gold-ink); border: 1px dashed currentColor; padding: 1px 9px; }
 .spinner { width: 44px; height: 44px; border-radius: 50%; border: 4px solid var(--sage); border-top-color: var(--forest); animation: spin 1s linear infinite; }
 @keyframes spin { to { transform: rotate(360deg); } }
 

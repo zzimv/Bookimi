@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { api, rub } from "@/lib/client";
 import { AddonThumb } from "@/components/book/AddonThumb";
 import { CartoonPanel } from "./CartoonPanel";
+import { SILENT_ERROR, isSilent, levelMeter } from "@/lib/cartoon-guide";
 
 const FILE_TITLES: Record<string, string> = {
   "pdf-screen": "PDF для экрана",
@@ -194,8 +195,30 @@ function VoiceRecorder({ bookId, pages }: { bookId: string; pages: { index: numb
       const chunks: Blob[] = [];
       const r = new MediaRecorder(stream);
       r.ondataavailable = (e) => chunks.push(e.data);
+      // Уровень записи: беззвучную (микрофон выключен) не отправляем — сервер проверяет так же
+      const total = levelMeter();
+      let ctx: AudioContext | null = null;
+      let timer = 0;
+      try {
+        ctx = new AudioContext();
+        const an = ctx.createAnalyser();
+        an.fftSize = 2048;
+        ctx.createMediaStreamSource(stream).connect(an);
+        const buf = new Float32Array(an.fftSize);
+        timer = window.setInterval(() => {
+          an.getFloatTimeDomainData(buf);
+          total.add(buf);
+        }, 100);
+      } catch {}
       r.onstop = async () => {
+        window.clearInterval(timer);
+        ctx?.close().catch(() => {});
         stream.getTracks().forEach((t) => t.stop());
+        const lv = total.result();
+        if (lv.frames > 0 && isSilent(lv)) {
+          setError(SILENT_ERROR);
+          return;
+        }
         const blob = new Blob(chunks, { type: r.mimeType });
         const fd = new FormData();
         fd.append("file", blob, `page-${index}`);

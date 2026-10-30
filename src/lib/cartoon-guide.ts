@@ -13,6 +13,37 @@ export const VOICE_LIMITS = {
   purgeDays: 30,
 };
 
+/**
+ * Тишина вместо голоса: пик ниже −40 dBFS или средний уровень ниже −55 dBFS — так звучит выключенный или
+ * заглушённый микрофон (голос с 15–20 см даёт пик −20…−3 dBFS). Такую запись не принимаем — ни в браузере,
+ * ни на сервере. «Тихо» (RMS ниже −38 dBFS) — по-прежнему только предупреждение.
+ */
+export const SILENCE = { peakDb: -40, rmsDb: -55 };
+export const SILENT_ERROR = "Запись почти беззвучная — похоже, микрофон выключен или заглушён. Проверьте, что выбран нужный микрофон, поднесите телефон ближе (15–20 см) и запишите ещё раз.";
+export const isSilent = (lv: { peakDb: number; rmsDb: number }) => !(lv.peakDb >= SILENCE.peakDb) || !(lv.rmsDb >= SILENCE.rmsDb);
+/** dBFS из линейной амплитуды (0…1). */
+export const toDb = (x: number) => 20 * Math.log10(Math.max(1e-5, x));
+
+/** Накопитель уровня записи в браузере: кадры AnalyserNode → общий RMS и пик. */
+export function levelMeter() {
+  let sum = 0;
+  let count = 0;
+  let peak = 0;
+  return {
+    add(buf: ArrayLike<number>) {
+      for (let i = 0; i < buf.length; i++) {
+        const v = buf[i];
+        sum += v * v;
+        peak = Math.max(peak, Math.abs(v));
+      }
+      count += buf.length;
+    },
+    result() {
+      return { peakDb: toDb(peak), rmsDb: toDb(Math.sqrt(sum / Math.max(1, count))), frames: count };
+    },
+  };
+}
+
 /** «С чего начать» — показываем перед записью. */
 export const OWN_VOICE_GUIDE: { title: string; text: string }[] = [
   { title: "Найдите тихое место без эха", text: "Лучше всего — комната с мягкой мебелью, коврами и шторами. Самая честная студия звукозаписи — шкаф с одеждой или большое одеяло над головой: смешно, но звучит отлично. Кухня и ванная гулкие — их лучше обойти." },

@@ -1,5 +1,6 @@
 import { randomBytes } from "node:crypto";
 import { z } from "zod";
+import "@/lib/zod-ru";
 import { db } from "@/lib/db";
 import { body, err, json, throttle } from "@/lib/api";
 import { DOC_VERSION } from "@/lib/legal";

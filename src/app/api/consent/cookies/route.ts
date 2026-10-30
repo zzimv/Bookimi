@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
+import "@/lib/zod-ru";
 import { db, hasDatabase } from "@/lib/db";
 
 const body = z.object({ value: z.enum(["necessary", "analytics"]) });

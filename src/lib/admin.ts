@@ -1,7 +1,7 @@
 import "server-only";
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
-import type { Session, User } from "@prisma/client";
+import type { Prisma, Session, User } from "@prisma/client";
 import { adminSession, can, clientIp, isDemo, type Perm } from "./auth";
 import { db } from "./db";
 
@@ -58,21 +58,50 @@ export async function totpFailures(userId: string, ip: string) {
   return { byUser, byIp, blocked: byUser >= TOTP_MAX_FAILS || byIp >= TOTP_MAX_FAILS };
 }
 
-/** Записать неудачную попытку. Возвращает true, если лимит только что исчерпан (блокировка + алерт владельцу). */
-export async function recordTotpFailure(userId: string, email: string | null, ipArg?: string) {
-  const ip = ipArg ?? (await clientIp());
-  await db.auditLog.create({ data: { actorId: userId, action: "auth.2fa_fail", entity: "user", entityId: userId, details: { ip } } });
-  const f = await totpFailures(userId, ip);
-  const justLocked = f.byUser === TOTP_MAX_FAILS || f.byIp === TOTP_MAX_FAILS;
-  if (justLocked) {
-    await db.auditLog.create({ data: { actorId: userId, action: "auth.2fa_locked", entity: "user", entityId: userId, details: { ip, byUser: f.byUser, byIp: f.byIp } } });
+/** Результат попытки кода 2FA (см. totpAttempt). */
+export type TotpAttempt = { ok: boolean; locked: boolean; justLocked: boolean; byUser: number; byIp: number };
+
+/**
+ * Одна попытка кода 2FA, строго по очереди на сотрудника и на IP (pg_advisory_xact_lock): параллельные запросы
+ * не проскакивают мимо счётчика. Под блокировкой: уже ≥ 5 неудач за 15 минут — код даже не проверяется (locked);
+ * иначе verify(tx); неверно — попытка записывается, и если счётчик стал ≥ 5 (а был < 5) — запись auth.2fa_locked
+ * и (после фиксации) один алерт владельцу. verify получает транзакцию — код восстановления сгорает в ней же.
+ */
+export async function totpAttempt(
+  userId: string,
+  email: string | null,
+  ip: string,
+  verify: (tx: Prisma.TransactionClient) => Promise<boolean> | boolean,
+): Promise<TotpAttempt> {
+  const r = await db.$transaction(
+    async (tx) => {
+      // Порядок захвата одинаковый (сначала сотрудник, затем IP) — взаимных блокировок нет
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`2fa:user:${userId}`}))`;
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`2fa:ip:${ip}`}))`;
+      const since = new Date(Date.now() - TOTP_WINDOW_MINUTES * 60_000);
+      const [byUser, byIp] = await Promise.all([
+        tx.auditLog.count({ where: { action: "auth.2fa_fail", entityId: userId, createdAt: { gte: since } } }),
+        tx.auditLog.count({ where: { action: "auth.2fa_fail", createdAt: { gte: since }, details: { path: ["ip"], equals: ip } } }),
+      ]);
+      if (byUser >= TOTP_MAX_FAILS || byIp >= TOTP_MAX_FAILS) return { ok: false, locked: true, justLocked: false, byUser, byIp };
+      if (await verify(tx)) return { ok: true, locked: false, justLocked: false, byUser, byIp };
+      await tx.auditLog.create({ data: { actorId: userId, action: "auth.2fa_fail", entity: "user", entityId: userId, details: { ip } } });
+      const nu = byUser + 1;
+      const ni = byIp + 1;
+      const justLocked = nu >= TOTP_MAX_FAILS || ni >= TOTP_MAX_FAILS;
+      if (justLocked) await tx.auditLog.create({ data: { actorId: userId, action: "auth.2fa_locked", entity: "user", entityId: userId, details: { ip, byUser: nu, byIp: ni } } });
+      return { ok: false, locked: justLocked, justLocked, byUser: nu, byIp: ni };
+    },
+    { maxWait: 30_000, timeout: 30_000 },
+  );
+  if (r.justLocked) {
     const { alertOwner } = await import("./notify");
     await alertOwner(
       "Подбор кода 2FA в админку",
       `${TOTP_MAX_FAILS} неверных кодов 2FA за ${TOTP_WINDOW_MINUTES} минут: сотрудник ${email ?? userId}, IP ${ip}. Вход заблокирован на ${TOTP_WINDOW_MINUTES} минут, сессия завершена. Если это не сотрудник — смените ему роль в «Команде».`,
     ).catch(() => {});
   }
-  return { ...f, justLocked };
+  return r;
 }
 
 /** Для API админки: сотрудник с правом perm и пройденной 2FA — иначе null (ответ 404, без редиректа). */

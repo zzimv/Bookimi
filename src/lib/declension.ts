@@ -21,8 +21,26 @@ export function guessGender(name: string): "boy" | "girl" {
   if (words.length > 1 && FEM_PATRONYMIC.test(words[1])) return "girl";
   if (words.length > 1 && MASC_PATRONYMIC.test(words[1])) return "boy";
   const low = name.trim().split(/[\s-]/)[0].toLowerCase();
+  if (/^[a-z']+$/.test(low)) return guessLatin(low);
   if (/^(илья|никита|кузьма|фома|лука|савва|данила|гаврила|миша|саша|паша|гоша|лёша|алёша|ваня|петя|вася|дима|женя|витя|толя|коля|серёжа|юра|слава|сеня|федя|тёма|тима|лёва|вова|костя|стёпа|гриша|боря)$/.test(low)) return "boy";
   if (/[ая]$/.test(low) || /^(любовь|рысь|ночь|мышь)$/.test(low)) return "girl";
+  return "boy";
+}
+
+/** Мужские имена латиницей на -a/-ya (транслит и иностранные): Nikita, Ilya, Luca… */
+const LATIN_BOY_A = new Set(["nikita", "ilya", "ilia", "ilja", "iliya", "kuzma", "foma", "luka", "luca", "savva", "danila", "gavrila", "misha", "pasha", "grisha", "vanya", "vania", "petya", "petia", "dima", "kolya", "kolia", "tolya", "vitya", "yura", "jura", "fedya", "tyoma", "tema", "tima", "lyova", "leva", "vova", "kostya", "kostia", "styopa", "stepa", "borya", "gosha", "lyosha", "alyosha", "yasha", "senya", "joshua", "andrea", "jonah", "noah", "elijah", "isaiah", "ezra", "dobrynya", "sasha", "zhenya", "zhenia", "slava", "valya", "shura"]);
+/** Женские имена латиницей не на -a: Ann, Kate, Sophie… */
+const LATIN_GIRL = new Set(["ann", "anne", "kate", "marie", "sophie", "natalie", "julie", "alice", "grace", "rose", "chloe", "zoe", "mary", "emily", "lucy", "elizabeth", "ruth", "esther", "ingrid", "karin", "miriam", "lyubov", "lubov", "nadezhda", "esfir", "adel", "assol", "abigail", "isabel", "rachel", "ellie", "amelie", "nicole", "michelle", "olivia", "evelyn", "lily", "ruby", "sarah", "hannah", "leah", "eve", "elise", "anais", "ines", "carmen"]);
+
+/**
+ * Пол по имени латиницей («Anna», «Maria», «Nikita»): на -a/-ya/-ia — девочка, кроме известных мужских (Nikita, Ilya,
+ * Luca…; Sasha, Zhenya — бывают и у девочек, в списках группы их спрашиваем); отдельные женские не на -a (Ann, Kate).
+ * Остальное — мальчик (переключатель пола в анкете остаётся).
+ */
+function guessLatin(low: string): "boy" | "girl" {
+  if (LATIN_BOY_A.has(low)) return "boy";
+  if (LATIN_GIRL.has(low)) return "girl";
+  if (/a$/.test(low)) return "girl";
   return "boy";
 }
 
@@ -57,6 +75,9 @@ export function normalizeName(name: string): string {
     })
     .join("");
 }
+
+/** Отчества с ударным «-и́ч»: творительный на «-ом» (Ильичом, Кузьмичом). Остальные -ович/-евич/-ич — «-ем». */
+const STRESSED_ICH = new Set(["ильич", "лукич", "кузьмич", "фомич"]);
 
 export function declineName(name: string, c: Case, gender: Gender): string {
   const n = normalizeName(name);
@@ -110,8 +131,9 @@ export function declineName(name: string, c: Case, gender: Gender): string {
     const s2 = n.slice(0, -2) + "ьк";
     return { род: s2 + "а", дат: s2 + "у", вин: s2 + "а", тв: s2 + "ом", пр: s2 + "е" }[c];
   }
-  // Согласная: Марк, Иван, Глеб, Миша-нет; шипящие — «-ем» в творительном (Святослав-ом, но Игнат-ом)
-  const tv = HUSHING.test(low) ? "ем" : "ом";
+  // Согласная: Марк, Иван, Глеб, Миша-нет; шипящие — «-ем» в творительном (Святослав-ом, но Игнат-ом).
+  // Под ударением после шипящей — «-ом»: отчества Ильич, Лукич, Кузьмич, Фомич → Ильичом (но Петровичем, Сергеевичем)
+  const tv = HUSHING.test(low) && !STRESSED_ICH.has(low.replace(/ё/g, "е")) ? "ем" : "ом";
   return { род: n + "а", дат: n + "у", вин: n + "а", тв: n + tv, пр: n + "е" }[c];
 }
 
@@ -368,7 +390,8 @@ export function fillTags(text: string, ctx: TagContext) {
     return e ? mark(declineName(e.name, c ?? "им", e.gender)) : "";
   });
   out = capitalizeStarts(fixPrepositions(out));
-  return out.replace(new RegExp(`[${OPEN}${CLOSE}]`, "g"), "").replace(/ {2,}/g, " ");
+  // Имя с точкой в конце («Саша К.») перед точкой предложения: «К..» → «К.» (многоточие «...» не трогаем)
+  return out.replace(new RegExp(`[${OPEN}${CLOSE}]`, "g"), "").replace(/ {2,}/g, " ").replace(/(?<!\.)\.\.(?!\.)/g, ".");
 }
 
 /** Метки и блоки группы (часть fillTags). Значения помечены для правки предлогов и заглавных. */

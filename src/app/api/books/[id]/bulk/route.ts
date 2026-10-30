@@ -1,4 +1,5 @@
 import { z } from "zod";
+import "@/lib/zod-ru";
 import { body, err, json, ownBook, throttle } from "@/lib/api";
 import { bulkState, ensureBulkCopies } from "@/lib/bulk-server";
 import { cfg } from "@/lib/settings";

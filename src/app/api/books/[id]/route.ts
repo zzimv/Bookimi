@@ -1,4 +1,5 @@
 import { z } from "zod";
+import "@/lib/zod-ru";
 import { db } from "@/lib/db";
 import { body, err, json, ownBook } from "@/lib/api";
 import { signedUrl } from "@/lib/storage";
