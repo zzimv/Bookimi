@@ -5,7 +5,8 @@ import { Breadcrumbs, JsonLd, StickyCta } from "@/components/Layout";
 import { PriceSection } from "@/components/Sections";
 import { getMinPrice } from "@/lib/catalog";
 import { OCCASIONS as OCCASION_KEYS, SEGMENTS } from "@/content/profiles";
-import { audiencePage } from "@/lib/storefront";
+import { audiencePage, getSoon } from "@/lib/storefront";
+import { SoonBanner } from "@/components/Soon";
 import { og } from "@/lib/og";
 
 export const metadata: Metadata = {
@@ -17,7 +18,8 @@ export const metadata: Metadata = {
 
 export default async function Page({ searchParams }: { searchParams: Promise<SP> }) {
   const q = parseCatalogQuery(await searchParams);
-  const [{ matching, others }, minPrice] = await Promise.all([filteredStories(q), getMinPrice()]);
+  const [{ matching, others }, minPrice, soon] = await Promise.all([filteredStories(q), getMinPrice(), getSoon()]);
+  const isSoon = Boolean(q.audience && soon.audiences.includes(q.audience));
   // С поводом — разделы как в анкете и на странице повода (plotSections)
   const sections = q.povod ? await sectionedStories(q.povod, q.audience, q.segments) : null;
   const page = q.audience ? audiencePage(q.audience) : null;
@@ -35,6 +37,7 @@ export default async function Page({ searchParams }: { searchParams: Promise<SP>
       ] }} />
       <section className="section section--tight">
         <div className="wrap">
+          {isSoon && <SoonBanner audience={q.audience!} />}
           <h1>{h1}</h1>
           <p className="lead">
             {occ
@@ -45,11 +48,11 @@ export default async function Page({ searchParams }: { searchParams: Promise<SP>
           <p className="small muted" aria-live="polite">
             {total} {total % 10 === 1 && total % 100 !== 11 ? "книга" : [2, 3, 4].includes(total % 10) && ![12, 13, 14].includes(total % 100) ? "книги" : "книг"}
           </p>
-          {sections ? <OccasionSectionsView sections={sections} minPrice={minPrice} /> : <StoryGroups matching={matching} others={others} povod={q.povod} minPrice={minPrice} />}
+          {sections ? <OccasionSectionsView sections={sections} minPrice={minPrice} soon={soon.audiences} /> : <StoryGroups matching={matching} others={others} povod={q.povod} minPrice={minPrice} soon={soon.audiences} />}
         </div>
       </section>
       <PriceSection />
-      <StickyCta href={q.audience ? `/sozdat?dlya=${q.audience}${q.povod ? `&povod=${q.povod}` : ""}` : "/sozdat"} />
+      <StickyCta href={q.audience ? `/sozdat?dlya=${q.audience}${q.povod ? `&povod=${q.povod}` : ""}` : "/sozdat"} soon={isSoon} />
     </>
   );
 }

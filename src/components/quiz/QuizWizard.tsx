@@ -96,6 +96,9 @@ const empty = (audience: AudienceKey = "CHILD"): Draft => ({
   contact: { phone: "", email: "" },
 });
 
+/** Черновик открыт по ссылке с готовыми ответами: шаг восстанавливаем, только если ссылка та же. */
+const linkKey = (i: Partial<Draft>) => [i.story?.slug, i.audience, i.occasion?.key, i.segment, i.hero?.gender].map((x) => x ?? "").join("|");
+
 const KIND_CARDS: { key: AudienceKey; label: string }[] = [
   { key: "CHILD", label: "Ребёнок" },
   { key: "TEEN", label: "Подросток" },
@@ -216,7 +219,7 @@ export function QuizWizard({
   bulkTiers?: BulkTier[];
 }) {
   const router = useRouter();
-  const [a, setA] = useState<Draft>(() => ({ ...empty(initial.audience), ...initial, group: { members: [], adults: [], ...(initial.group ?? {}) } }));
+  const [a, setA] = useState<Draft>(() => { const e = empty(initial.audience); return { ...e, ...initial, hero: { ...e.hero, ...initial.hero }, group: { members: [], adults: [], ...(initial.group ?? {}) } }; });
   const [stepKey, setStepKey] = useState<FlowStep>("heroes");
   const [occChosen, setOccChosen] = useState(presetOccasion || locked);
   const [own, setOwn] = useState(false);
@@ -249,11 +252,14 @@ export function QuizWizard({
         if (initial.story?.slug) base.story = { slug: initial.story.slug, idea: "" };
         else if (fromLink) base.story = { slug: "", idea: "" };
         if (initial.occasion?.key) base.occasion = initial.occasion;
+        // Полка главной: пол героя и сегмент из ссылки (?pol=, ?segment=)
+        if (fromLink && initial.segment) base.segment = initial.segment;
+        if (fromLink && initial.hero?.gender) base.hero = { ...base.hero, gender: initial.hero.gender };
         if (!base.hero.name && name) base.hero = { ...base.hero, name };
         ids = [...(base.hero.photoIds ?? []), ...base.extras.map((e) => e.photoId ?? ""), ...base.group.members.map((m) => m.photoId ?? "")].filter(Boolean);
         return { ...base };
       });
-      if (saved?.stepKey && (!fromLink || saved.fromLink === `${initial.story?.slug ?? ""}|${initial.audience ?? ""}|${initial.occasion?.key ?? ""}`)) {
+      if (saved?.stepKey && (!fromLink || saved.fromLink === linkKey(initial))) {
         if (FLOW_KEYS.includes(saved.stepKey)) setStepKey(saved.stepKey);
         if (!fromLink) setOccChosen(Boolean(saved.occChosen));
         setOwn(Boolean(saved.own));
@@ -287,8 +293,7 @@ export function QuizWizard({
   useEffect(() => {
     if (!loaded) return;
     try {
-      const fromLink = `${initial.story?.slug ?? ""}|${initial.audience ?? ""}|${initial.occasion?.key ?? ""}`;
-      localStorage.setItem(KEY, JSON.stringify({ a, stepKey, occChosen, own, modes, bulk, fromLink }));
+      localStorage.setItem(KEY, JSON.stringify({ a, stepKey, occChosen, own, modes, bulk, fromLink: linkKey(initial) }));
     } catch {}
   }, [a, stepKey, occChosen, own, modes, bulk, loaded, initial]);
 

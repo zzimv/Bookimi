@@ -1,21 +1,22 @@
-// Витрина (главная, каталог, страницы аудиторий): сезон, «Для кого книга?», подписка, рейтинг.
+// Витрина (главная, каталог, страницы аудиторий): сезон, «скоро», подписка, рейтинг.
 // Только сервер: читает настройки и БД. Данные для клиента передаются пропсами.
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { db, hasDatabase } from "./db";
 import { cfg } from "./settings";
-import { sampleUrl } from "./obrazec";
+import { soonAudiences } from "./shelf";
 import { getApprovedReviews, type PublicStory } from "./catalog";
 import { OCCASIONS as OCCASION_KEYS, SEGMENTS, type AudienceKey } from "../content/profiles";
 import { getNearestHoliday } from "./holidays";
 import { dayFromIso, dayOf, fmtDay, mskToday, orderDeadline, type Day } from "./holidays-core";
 
 /** Посадочные аудиторий: /dlya/<slug>. ?dlya= в каталоге и анкете принимает и slug, и ключ (CHILD). */
-export const AUDIENCE_PAGES: { slug: string; key: AudienceKey; nav: string; h1: string; lead: string; title: string; description: string; hero: string }[] = [
+export const AUDIENCE_PAGES: { slug: string; key: AudienceKey; nav: string; /** Пункт верхнего меню (макет rev 06). */ menu: string; h1: string; lead: string; title: string; description: string; hero: string }[] = [
   {
     slug: "detyam",
     key: "CHILD",
     nav: "Детям",
+    menu: "Дети",
     h1: "Сказки, где ваш ребёнок — главный герой",
     lead: "Для малышей 2–4 лет — тихие сказки на ночь и повторялки, для 5–10 лет — приключения, загадки и стихи. Имя, внешность и любимые игрушки ребёнка — на каждой странице.",
     title: "Персональные сказки для детей 2–10 лет",
@@ -26,6 +27,7 @@ export const AUDIENCE_PAGES: { slug: string; key: AudienceKey; nav: string; h1: 
     slug: "podrostkam",
     key: "TEEN",
     nav: "Подросткам",
+    menu: "Подростки",
     h1: "Книга, в которой подросток узнаёт себя",
     lead: "Квесты с юмором, детективы, космос и шуточная былина — без сюсюканья. Для 11–17 лет: на день рождения, выпускной или просто так.",
     title: "Персональные книги для подростков 11–17 лет",
@@ -36,6 +38,7 @@ export const AUDIENCE_PAGES: { slug: string; key: AudienceKey; nav: string; h1: 
     slug: "vzroslym",
     key: "ADULT",
     nav: "Взрослым",
+    menu: "Взрослые",
     h1: "Книга-подарок о любимом человеке",
     lead: "История вашей пары, былина о домашних подвигах мамы или папы, сказка для бабушки и дедушки от внуков, эпос о коллеге. Подарок, который перечитывают.",
     title: "Персональные книги для взрослых: паре, родителям, бабушке и дедушке, коллеге",
@@ -46,6 +49,7 @@ export const AUDIENCE_PAGES: { slug: string; key: AudienceKey; nav: string; h1: 
     slug: "pitomcam",
     key: "PET",
     nav: "Питомцам",
+    menu: "Питомцы",
     h1: "Книга, где герой — ваша собака или кошка",
     lead: "Смешные истории от лица питомца: «мой человек», носочный клад, сказание о диване. Кличка, порода и окрас — как в жизни, хозяева — рядом на страницах.",
     title: "Книга о вашем питомце: собаке или кошке",
@@ -65,18 +69,11 @@ export function audienceFromParam(v?: string | null): AudienceKey | undefined {
 }
 export const audiencePage = (key: AudienceKey) => AUDIENCE_PAGES.find((a) => a.key === key)!;
 
-/** Карточки «Для кого книга?» на главной — ведут в каталог с фильтром по сегменту. */
-export const FOR_WHOM: { title: string; sub: string; href: string; audience: AudienceKey; img: string }[] = [
-  { title: "Малыши", sub: "2–4 года", href: "/skazki?dlya=detyam&segment=kids-2-4", audience: "CHILD", img: sampleUrl({ slug: "sonnaya-strana", age: 3, gender: "girl", hairstyle: "хвостик", style: "soft-gouache" }) },
-  { title: "Дети", sub: "5–10 лет", href: "/skazki?dlya=detyam&segment=kids-5-7,kids-8-10", audience: "CHILD", img: sampleUrl({ slug: "imya-i-zvyozdnyj-drakonchik", age: 7, gender: "boy" }) },
-  { title: "Подростки", sub: "11–17 лет", href: "/skazki?dlya=podrostkam", audience: "TEEN", img: sampleUrl({ slug: "stazher-orbity", gender: "girl" }) },
-  { title: "Для двоих", sub: "Любимому человеку", href: "/skazki?dlya=vzroslym&segment=adult-couple", audience: "ADULT", img: sampleUrl({ slug: "dve-planety" }) },
-  { title: "Маме и папе", sub: "От детей", href: "/skazki?dlya=vzroslym&segment=adult-parent", audience: "ADULT", img: sampleUrl({ slug: "bylina-o-domashnih-podvigah", gender: "girl", age: 38 }) },
-  { title: "Бабушке и дедушке", sub: "От внуков", href: "/skazki?dlya=vzroslym&segment=adult-grandparent", audience: "ADULT", img: sampleUrl({ slug: "skazka-pro-carya-nesmeyana", gender: "boy", age: 68, hair: "седые", glasses: true }) },
-  { title: "Коллеге и другу", sub: "Юбилей, пенсия", href: "/skazki?dlya=vzroslym&segment=adult-friend", audience: "ADULT", img: sampleUrl({ slug: "bylina-o-bogatyre-otdela", gender: "boy", beard: true }) },
-  { title: "Собаке", sub: "Книга о псе", href: "/skazki?dlya=pitomcam&segment=pet-dog", audience: "PET", img: sampleUrl({ slug: "bolshaya-progulka", species: "dog", fur: "рыжий" }) },
-  { title: "Кошке", sub: "Книга о кошке", href: "/skazki?dlya=pitomcam&segment=pet-cat", audience: "PET", img: sampleUrl({ slug: "skazanie-o-divane", species: "cat", fur: "серый" }) },
-];
+/** «Скоро» из настроек (storefront.soon): аудитории без продаж и отметки полки главной. */
+export async function getSoon() {
+  const soon = (await cfg("storefront")).soon;
+  return { soon, audiences: soonAudiences(soon) };
+}
 
 /** Сегменты аудитории для чипсов фильтра (короткие подписи). */
 const SEGMENT_SHORT: Record<string, string> = {
@@ -201,15 +198,17 @@ export async function getNewsletter() {
 
 // ───────── «Самые любимые» ─────────
 
-/** 4 книги для главной: сначала сезонные, не больше двух на аудиторию, без «Своей идеи». */
+/** 4 книги для главной: сначала сезонные, не больше двух на аудиторию (если аудиторий хватает), без «Своей идеи». */
 export function pickFavorites(stories: PublicStory[], occasion?: string | null, n = 4) {
   const list = stories.filter((s) => s.slug !== SVOYA_IDEYA);
   const rank = (s: PublicStory) => (occasion && s.occasions.includes(occasion) ? s.occasions.indexOf(occasion) : 100);
   const sorted = list.map((s, i) => ({ s, i })).sort((a, b) => rank(a.s) - rank(b.s) || a.i - b.i).map((x) => x.s);
   const out: PublicStory[] = [];
   const per: Record<string, number> = {};
+  // Не больше двух на аудиторию; если аудиторий мало (остальные «скоро») — поровну между оставшимися
+  const cap = Math.max(2, Math.ceil(n / Math.max(1, new Set(list.map((s) => s.audience)).size)));
   for (const s of sorted) {
-    if ((per[s.audience] ?? 0) >= 2) continue;
+    if ((per[s.audience] ?? 0) >= cap) continue;
     per[s.audience] = (per[s.audience] ?? 0) + 1;
     out.push(s);
     if (out.length === n) break;

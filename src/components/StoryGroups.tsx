@@ -29,14 +29,15 @@ export async function filteredStories(q: CatalogQuery) {
   return { matching, others };
 }
 
-export function StoryGroups({ matching, others, povod, minPrice }: { matching: PublicStory[]; others: PublicStory[]; povod?: string; minPrice: number }) {
+/** soon — аудитории «скоро» (storefront.soon): их книги видны, «Создать» выключена. */
+export function StoryGroups({ matching, others, povod, minPrice, soon = [] }: { matching: PublicStory[]; others: PublicStory[]; povod?: string; minPrice: number; soon?: AudienceKey[] }) {
   if (povod && !matching.length)
     return (
       <>
         <p className="muted small">Повод впишем в любую книгу: первая и последняя страницы расскажут о празднике, а посвящение вы напишете сами.</p>
         <div className="grid">
           {others.map((s) => (
-            <BookCard key={s.slug} story={s} minPrice={minPrice} badge="впишем ваш повод" povod={povod} />
+            <BookCard key={s.slug} story={s} minPrice={minPrice} soon={soon.includes(s.audience)} badge="впишем ваш повод" povod={povod} />
           ))}
         </div>
       </>
@@ -45,7 +46,7 @@ export function StoryGroups({ matching, others, povod, minPrice }: { matching: P
     <>
       <div className="grid">
         {matching.map((s) => (
-          <BookCard key={s.slug} story={s} minPrice={minPrice} badge={povod ? "к вашему поводу" : undefined} povod={povod} />
+          <BookCard key={s.slug} story={s} minPrice={minPrice} soon={soon.includes(s.audience)} badge={povod ? "к вашему поводу" : undefined} povod={povod} />
         ))}
       </div>
       {others.length > 0 && (
@@ -54,7 +55,7 @@ export function StoryGroups({ matching, others, povod, minPrice }: { matching: P
           <p className="muted small">Первая и последняя страницы расскажут о празднике, а посвящение вы напишете сами.</p>
           <div className="grid">
             {others.map((s) => (
-              <BookCard key={s.slug} story={s} minPrice={minPrice} badge="впишем ваш повод" povod={povod} />
+              <BookCard key={s.slug} story={s} minPrice={minPrice} soon={soon.includes(s.audience)} badge="впишем ваш повод" povod={povod} />
             ))}
           </div>
         </>
@@ -90,7 +91,7 @@ export async function sectionedStories(povod: string, audience?: AudienceKey, se
   return { povod, customFirst: sec.customFirst, core, fits, others: sec.strong ? others : [...others, ...rest], hidden: sec.strong ? rest : [] };
 }
 
-export function OccasionSectionsView({ sections, minPrice }: { sections: StorySections; minPrice: number }) {
+export function OccasionSectionsView({ sections, minPrice, soon = [] }: { sections: StorySections; minPrice: number; soon?: AudienceKey[] }) {
   const { povod } = sections;
   const own = (
     <Link key="own" href={`/sozdat?povod=${povod}`} className="own-card panel" data-own-card>
@@ -104,7 +105,7 @@ export function OccasionSectionsView({ sections, minPrice }: { sections: StorySe
   const grid = (list: PublicStory[], badge?: string) => (
     <div className="grid">
       {list.map((s) => (
-        <BookCard key={s.slug} story={s} minPrice={minPrice} badge={badge} povod={povod} />
+        <BookCard key={s.slug} story={s} minPrice={minPrice} soon={soon.includes(s.audience)} badge={badge} povod={povod} />
       ))}
     </div>
   );

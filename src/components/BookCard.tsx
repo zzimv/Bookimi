@@ -2,9 +2,13 @@ import Link from "next/link";
 import { Cover } from "./Cover";
 import { ageLabel, displayTitle, HERO_WORD, rub, type PublicStory } from "@/lib/catalog";
 import { sampleUrl } from "@/lib/obrazec";
+import { SOON_SHORT } from "@/lib/shelf";
 
-/** Карточка книги: обложка с именем, одна строка, «от 990 ₽», «Создать». badge — «к вашему поводу». */
-export function BookCard({ story, minPrice, badge, povod }: { story: PublicStory; minPrice: number; badge?: string; povod?: string }) {
+/**
+ * Карточка книги: обложка с именем, одна строка, «от 990 ₽», «Создать». badge — «к вашему поводу».
+ * soon — аудитория пока «скоро» (storefront.soon): книгу можно посмотреть, «Создать» выключена.
+ */
+export function BookCard({ story, minPrice, badge, povod, soon }: { story: PublicStory; minPrice: number; badge?: string; povod?: string; soon?: boolean }) {
   const title = displayTitle(story.title, story.audience);
   const create = `/sozdat?skazka=${story.slug}${povod ? `&povod=${povod}` : ""}`;
   return (
@@ -21,9 +25,18 @@ export function BookCard({ story, minPrice, badge, povod }: { story: PublicStory
         <span className="muted">{ageLabel(story.ageMin, story.ageMax, story.audience)}</span>
         <span className="book__price">от {rub(minPrice)}</span>
       </div>
-      <Link className="btn btn--primary" href={create} aria-label={`Создать книгу «${title}»`}>
-        Создать
-      </Link>
+      {soon ? (
+        <>
+          <button type="button" className="btn btn--primary" disabled aria-describedby={`soon-${story.slug}`}>
+            Создать
+          </button>
+          <p className="book__soon" id={`soon-${story.slug}`}>{SOON_SHORT}</p>
+        </>
+      ) : (
+        <Link className="btn btn--primary" href={create} aria-label={`Создать книгу «${title}»`}>
+          Создать
+        </Link>
+      )}
     </article>
   );
 }

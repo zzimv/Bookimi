@@ -110,6 +110,8 @@ export interface Store {
   addresses?: SavedAddress[] | null;
   /** Мультфильм по книге: согласие на голос и режим озвучки (диктор / свой голос). Записи голоса — только в памяти вкладки. */
   cartoons?: Record<string, { consent: boolean; mode: "auto" | "own" }>;
+  /** «Скоро» (storefront.soon) из админки демо; нет — как на сайте по умолчанию. */
+  soon?: typeof DEFAULTS.storefront.soon;
 }
 
 export const KEY = "bookimi.demo.v1";
@@ -177,6 +179,8 @@ const BASE_PRICES = Object.fromEntries([...FORMATS.map((f) => [f.key, f.price]),
 // Демо для тестирования: тексты, превью, «Переписать», перерисовки и смены настроения — по 999 (сброс — «Сбросить лимиты»)
 const BASE_LIMITS = { ...DEFAULTS.limits, textsPerDevice: 999, textsPerIp: 999, previewsPerContact: 999, rewrites: 999, freeRedraws: 999, moodChangesPreview: 999 };
 
+const BASE_SOON = structuredClone(DEFAULTS.storefront.soon);
+
 export function applySettings() {
   Object.assign(DEFAULTS.seller, { fullName: "Иванова Анна Сергеевна (демо)", inn: "770012345606", email: "hello@bookimi.demo", phone: "+7 900 000-00-00" });
   DEFAULTS.payments.sbpQr = { enabled: true, provider: "demo", confirmMinutes: 60 };
@@ -185,6 +189,7 @@ export function applySettings() {
   DEFAULTS.flags.demoMode = true;
   DEFAULTS.alerts.email = "owner@bookimi.demo";
   Object.assign(DEFAULTS.limits, BASE_LIMITS, S.limits);
+  DEFAULTS.storefront.soon = structuredClone(S.soon ?? BASE_SOON);
   for (const f of FORMATS as unknown as { key: string; price: number }[]) f.price = S.prices[f.key] ?? BASE_PRICES[f.key];
   for (const a of ADDONS as unknown as { key: string; price: number | null }[]) if (a.price !== null) a.price = S.prices[a.key] ?? BASE_PRICES[a.key];
 }
@@ -192,6 +197,12 @@ applySettings();
 
 export function setPrices(p: Record<string, number>) {
   S.prices = p;
+  applySettings();
+  commit();
+}
+/** Админка демо → «Скоро»: аудитории и книги полки. */
+export function setSoon(soon: typeof DEFAULTS.storefront.soon | undefined) {
+  S.soon = soon;
   applySettings();
   commit();
 }

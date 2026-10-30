@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { BookCard } from "@/components/BookCard";
 import { Breadcrumbs, StickyCta } from "@/components/Layout";
 import { getAgePage, getMinPrice, getStories } from "@/lib/catalog";
+import { getSoon } from "@/lib/storefront";
 import { AGE_PAGES } from "@/lib/catalog-defaults";
 
 export const revalidate = 300;
@@ -26,7 +27,7 @@ export default async function Page({ params }: { params: Promise<{ slug: string 
   const { slug } = await params;
   const age = getAgePage(slug);
   if (!age) notFound();
-  const [stories, minPrice] = await Promise.all([getStories({ audience: "CHILD" }), getMinPrice()]);
+  const [stories, minPrice, soon] = await Promise.all([getStories({ audience: "CHILD" }), getMinPrice(), getSoon()]);
   const list = stories.filter((s) => s.ageMin <= age.max && s.ageMax >= age.min);
 
   return (
@@ -41,7 +42,7 @@ export default async function Page({ params }: { params: Promise<{ slug: string 
           </p>
           <div className="grid" style={{ marginTop: 32 }}>
             {list.map((s) => (
-              <BookCard key={s.slug} story={s} minPrice={minPrice} />
+              <BookCard key={s.slug} story={s} minPrice={minPrice} soon={soon.audiences.includes(s.audience)} />
             ))}
           </div>
         </div>

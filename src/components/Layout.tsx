@@ -1,6 +1,8 @@
 import Link from "next/link";
 import { getPromoBar, getSeller, sellerIsComplete } from "@/lib/settings";
-import { AUDIENCE_PAGES } from "@/lib/storefront";
+import { AUDIENCE_PAGES, getSoon } from "@/lib/storefront";
+import { SOON_SHORT } from "@/lib/shelf";
+import { SoonBadge } from "./Soon";
 import { getNearestHoliday } from "@/lib/holidays";
 import { daysLeftText, fmtDay } from "@/lib/holidays-core";
 import { ThemeToggle } from "./ThemeToggle";
@@ -25,27 +27,29 @@ export async function PromoBar() {
   return <div className="promo">{p.text}</div>;
 }
 
+// Шапка по макету владелицы (rev 06): аудитории со значком «скоро» и блог. «Ближайшие праздники», «Все книги» и «Поводы» —
+// в меню-бургере (первым пунктом — праздники) и в подвале; на компьютере праздник ещё и в полосе промо, если печать успевает.
 export async function Header() {
-  const links = [
-    { href: "/skazki", label: "Книги" },
-    ...AUDIENCE_PAGES.map((a) => ({ href: `/dlya/${a.slug}`, label: a.nav })),
-    { href: "/povody", label: "Поводы" },
-  ];
+  const { soon } = await getSoon();
+  const audiences = AUDIENCE_PAGES.map((a) => ({ href: `/dlya/${a.slug}`, label: a.menu, soon: Boolean(soon[a.key]) }));
   return (
     <header className="header">
       <div className="wrap header__in">
         <Link href="/" className="logo" aria-label="букими — на главную">
-          букими<span>.</span>
+          <span className="logo__star" aria-hidden="true">★</span>букими
         </Link>
         <nav className="nav" aria-label="Основное меню">
-          {links.map((l) => (
-            <Link key={l.href} href={l.href}>{l.label}</Link>
+          {audiences.map((l) => (
+            <Link key={l.href} href={l.href}>
+              {l.label}
+              {l.soon && <SoonBadge />}
+            </Link>
           ))}
-          <Link href="/prazdniki" className="nav__season">Ближайшие праздники</Link>
+          <Link href="/blog">Блог</Link>
         </nav>
         <div className="header__right">
           <Link href="/kabinet" className="header__cab" aria-label="Личный кабинет">
-            <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><circle cx="12" cy="8" r="4" fill="none" stroke="currentColor" strokeWidth="2" /><path d="M4 21c1.5-4 4.5-6 8-6s6.5 2 8 6" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" /></svg>
+            <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><circle cx="12" cy="8" r="4" fill="none" stroke="currentColor" strokeWidth="2" /><path d="M4 21c1.5-4 4.5-6 8-6s6.5 2 8 6" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" /></svg>
             <span>Кабинет</span>
           </Link>
           <Link href="/sozdat" className="btn btn--primary header__cta">
@@ -58,9 +62,15 @@ export async function Header() {
             </summary>
             <nav className="burger__menu" aria-label="Меню">
               <Link href="/prazdniki" className="nav__season">Ближайшие праздники</Link>
-              {links.map((l) => (
-                <Link key={l.href} href={l.href}>{l.label}</Link>
+              {audiences.map((l) => (
+                <Link key={l.href} href={l.href}>
+                  {l.label}
+                  {l.soon && <SoonBadge />}
+                </Link>
               ))}
+              <Link href="/skazki">Все книги</Link>
+              <Link href="/povody">Поводы</Link>
+              <Link href="/blog">Блог</Link>
               <Link href="/kabinet">Личный кабинет</Link>
               <Link href="/sozdat" className="btn btn--primary btn--block">Создать книгу</Link>
             </nav>
@@ -130,12 +140,22 @@ export async function Footer() {
   );
 }
 
-export function StickyCta({ href = "/sozdat", label = "Создать книгу" }: { href?: string; label?: string }) {
+/** Липкая кнопка на телефоне. soon — аудитория пока «скоро»: кнопка выключена, под ней подпись. */
+export function StickyCta({ href = "/sozdat", label = "Создать книгу", soon }: { href?: string; label?: string; soon?: boolean }) {
   return (
     <div className="sticky-cta">
-      <Link href={href} className="btn btn--primary btn--block">
-        {label}
-      </Link>
+      {soon ? (
+        <>
+          <button type="button" className="btn btn--primary btn--block" disabled aria-describedby="sticky-soon">
+            {label}
+          </button>
+          <p className="sticky-cta__soon" id="sticky-soon">{SOON_SHORT}</p>
+        </>
+      ) : (
+        <Link href={href} className="btn btn--primary btn--block">
+          {label}
+        </Link>
+      )}
     </div>
   );
 }

@@ -177,7 +177,7 @@ function View() {
       <div className="demo-bar">
         <div className="wrap demo-bar__in">
           <span className="demo-bar__text">
-            <b>Демо-стенд <span className="demo-rev">rev 05</span>.</b> <span className="demo-bar__long">Всё работает в этом окне: оплата понарошку, фото не покидает браузер, письма не отправляются.</span>
+            <b>Демо-стенд <span className="demo-rev">rev 06</span>.</b> <span className="demo-bar__long">Всё работает в этом окне: оплата понарошку, фото не покидает браузер, письма не отправляются.</span>
           </span>
           <nav className="demo-tabs" aria-label="Демо">
             <a href="#/" aria-current={!admin ? "page" : undefined}>Сайт</a>
@@ -255,7 +255,11 @@ document.addEventListener(
     const a = (e.target as HTMLElement).closest?.("a[href]") as HTMLAnchorElement | null;
     if (!a) return;
     const href = a.getAttribute("href") ?? "";
-    if (href === "#/api/me") {
+    if (/^#[a-z]/i.test(href)) {
+      // Якорь на странице («Как это работает» → #kak): адреса демо живут в hash — прокручиваем сами
+      e.preventDefault();
+      document.getElementById(href.slice(1))?.scrollIntoView({ behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth", block: "start" });
+    } else if (href === "#/api/me") {
       // «Скачать мои данные»: JSON из хранилища демо — как выгрузка /api/me на сайте
       e.preventDefault();
       const url = URL.createObjectURL(new Blob([JSON.stringify(exportData(), null, 2)], { type: "application/json" }));

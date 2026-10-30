@@ -8,7 +8,8 @@ import { Faq } from "@/components/Sections";
 import { getMinPrice, getStories } from "@/lib/catalog";
 import { FAQ } from "@/lib/catalog-defaults";
 import { OCCASIONS as OCCASION_KEYS } from "@/content/profiles";
-import { AUDIENCE_PAGES, catalogStories, segmentChips } from "@/lib/storefront";
+import { AUDIENCE_PAGES, catalogStories, getSoon, segmentChips } from "@/lib/storefront";
+import { SoonBanner } from "@/components/Soon";
 
 export const revalidate = 300;
 
@@ -28,7 +29,9 @@ export default async function Page({ params }: { params: Promise<{ audience: str
   const { audience } = await params;
   const a = AUDIENCE_PAGES.find((x) => x.slug === audience);
   if (!a) notFound();
-  const [stories, minPrice] = await Promise.all([getStories({ audience: a.key }), getMinPrice()]);
+  const [stories, minPrice, soon] = await Promise.all([getStories({ audience: a.key }), getMinPrice(), getSoon()]);
+  // «Скоро» (storefront.soon): примеры видны, «Создать» выключены, почту не собираем
+  const isSoon = soon.audiences.includes(a.key);
   const list = catalogStories(stories);
   const occasions = OCCASION_KEYS.filter((o) => o.audiences.includes(a.key) && o.key !== "svoj" && o.key !== "bez");
   const domain = process.env.DOMAIN ?? "bookimi.ru";
@@ -46,6 +49,7 @@ export default async function Page({ params }: { params: Promise<{ audience: str
       />
       <section className="section section--tight">
         <div className="wrap">
+          {isSoon && <SoonBanner audience={a.key} />}
           <h1>{a.h1}</h1>
           <p className="lead">{a.lead}</p>
           <div className="filters" role="group" aria-label="Кому именно">
@@ -57,7 +61,7 @@ export default async function Page({ params }: { params: Promise<{ audience: str
           </div>
           <div className="grid">
             {list.map((s) => (
-              <BookCard key={s.slug} story={s} minPrice={minPrice} />
+              <BookCard key={s.slug} story={s} minPrice={minPrice} soon={isSoon} />
             ))}
           </div>
         </div>
@@ -76,7 +80,7 @@ export default async function Page({ params }: { params: Promise<{ audience: str
         </div>
       </section>
       <Faq items={FAQ} />
-      <StickyCta href={`/sozdat?dlya=${a.key}`} />
+      <StickyCta href={`/sozdat?dlya=${a.key}`} soon={isSoon} />
     </>
   );
 }

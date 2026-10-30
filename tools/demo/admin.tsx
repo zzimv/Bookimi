@@ -13,7 +13,9 @@ import { METHOD_TITLES } from "../../src/lib/shipping";
 import { ADDONS, FORMATS } from "../../src/lib/catalog-defaults";
 import { audiencesLabel } from "../../src/lib/addons-core";
 import { DEFAULTS, getReadiness } from "../../src/lib/settings";
-import { addPromo, bookById, confirmTransfer, mskDay, orderById, pageUrl, resetLimits, S, setLimits, setPrices, setStatus, spentTodayRub, STATUS_FLOW, togglePromo } from "./api";
+import { addPromo, bookById, confirmTransfer, mskDay, orderById, pageUrl, resetLimits, S, setLimits, setPrices, setSoon, setStatus, spentTodayRub, STATUS_FLOW, togglePromo } from "./api";
+import { AUDIENCE_PAGES } from "../../src/lib/storefront";
+import { SHELF } from "../../src/lib/shelf";
 import { NotFoundError } from "./router";
 
 const NAV = [
@@ -551,6 +553,7 @@ export function AdminSettings() {
         </div>
         {msg && <p className="ok small">{msg}</p>}
       </form>
+      <SoonSettings />
       <section className="panel" style={{ marginTop: 16 }}>
         <h2 style={{ fontSize: "var(--fs-lg)" }}>Сейчас в демо</h2>
         <ul className="small">
@@ -561,6 +564,43 @@ export function AdminSettings() {
         </ul>
       </section>
     </>
+  );
+}
+
+/** «Скоро» (storefront.soon) — как раздел настроек сайта: галочка снята — аудитория и книга полки работают как обычно. */
+function SoonSettings() {
+  const soon = DEFAULTS.storefront.soon;
+  const [msg, setMsg] = useState("");
+  const toggle = (path: string, on: boolean) => {
+    const next = structuredClone(soon);
+    if (path.startsWith("shelf.")) next.shelf[path.slice(6)] = on;
+    else (next as unknown as Record<string, boolean>)[path] = on;
+    setSoon(next);
+    setMsg("Сохранено — меню, полка на главной и страницы аудиторий уже обновились.");
+  };
+  return (
+    <section className="panel" style={{ marginTop: 16 }} id="storefront" data-demo="soon-settings">
+      <h2 style={{ fontSize: "var(--fs-lg)" }}>«Скоро»: что ещё не продаётся</h2>
+      <p className="small muted">Значок «скоро» в меню и на полке главной; ссылка ведёт к примерам с плашкой, кнопки «Создать» там выключены. Почту не собираем.</p>
+      <div className="grid3">
+        {AUDIENCE_PAGES.map((a) => (
+          <label key={a.key} className="check">
+            <input type="checkbox" name={`soon-${a.key}`} checked={Boolean(soon[a.key])} onChange={(e: Event) => toggle(a.key, (e.target as HTMLInputElement).checked)} />
+            <span>{a.menu}: скоро</span>
+          </label>
+        ))}
+      </div>
+      <div className="grid3">
+        {SHELF.map((it) => (
+          <label key={it.id} className="check">
+            <input type="checkbox" name={`soon-shelf-${it.id}`} checked={Boolean(soon.shelf[it.id])} onChange={(e: Event) => toggle(`shelf.${it.id}`, (e.target as HTMLInputElement).checked)} />
+            <span>Полка: {it.coverLead ? `${it.coverLead} ${it.title}` : it.title}</span>
+          </label>
+        ))}
+      </div>
+      <button type="button" className="btn btn--ghost btn--sm" data-demo="soon-reset" onClick={() => { setSoon(undefined); setMsg("Как на макете: подростки, взрослые и питомцы — скоро."); }}>Как на макете</button>
+      {msg && <p className="ok small">{msg}</p>}
+    </section>
   );
 }
 

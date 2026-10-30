@@ -272,9 +272,9 @@ describe("окружение, образ, контраст, демо", () => {
       for (const bg of ["paper", "surface", "gold-soft"]) expect(cr(mark, tok(block, bg)), `${mark} / ${bg}`).toBeGreaterThanOrEqual(4.5);
     }
   });
-  it("демо: подпись версии rev 05; значок «пробный» заметный", () => {
-    expect(read("tools/demo/app.tsx")).toContain('<span className="demo-rev">rev 05</span>');
-    expect(read("tools/demo/build.mjs")).toContain("<title>БУКИМИ демо rev 05</title>");
+  it("демо: подпись версии (с rev 05, сейчас rev 06); значок «пробный» заметный", () => {
+    expect(read("tools/demo/app.tsx")).toContain('<span className="demo-rev">rev 06</span>');
+    expect(read("tools/demo/build.mjs")).toContain("<title>БУКИМИ демо rev 06</title>");
     expect(read("src/app/globals.css")).toMatch(/\.badge--trial \{ background: var\(--gold-soft\); color: var\(--gold-ink\)/);
   });
 });

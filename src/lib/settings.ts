@@ -159,6 +159,36 @@ export const DEFAULTS = {
     ] as { min: number; pct: number }[],
     previewCopies: 3,
   },
+  /**
+   * Витрина: «скоро» — аудитория или книга на полке главной ещё не продаётся. Значок «скоро» в меню и на полке;
+   * ссылка ведёт к примерам (страница аудитории / каталог) с плашкой, кнопки «Создать» там выключены.
+   * Почту «сообщить о запуске» не собираем — новых персональных данных нет. Ключи полки — SHELF в src/lib/shelf.ts.
+   * По умолчанию — как на макете владелицы (30.10.2026).
+   */
+  storefront: {
+    soon: {
+      CHILD: false,
+      TEEN: true,
+      ADULT: true,
+      PET: true,
+      shelf: {
+        syn: false,
+        "pervyj-klass": false,
+        doch: false,
+        babushka: true,
+        "den-rozhdeniya": false,
+        mama: true,
+        "brat-sestra": false,
+        papa: true,
+        pitomec: true,
+        "novyj-god": false,
+        vypusknoj: false,
+        dedushka: true,
+        lyubimomu: true,
+        podruge: true,
+      } as Record<string, boolean>,
+    },
+  },
   /** Стили картинок. Пробные (status "trial" в ART_STYLE_IDS) на сайте скрыты, пока showTrialStyles = false; в демо видны всегда. */
   art: { showTrialStyles: false },
 };

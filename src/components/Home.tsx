@@ -1,14 +1,15 @@
-// Секции главной (порядок как у Wonderbly): первый экран → «Для кого книга?» → «Самые любимые» →
-// «Фото → иллюстрация» → «Подарок за 5 минут» → отзывы → «Кто мы» + вопросы → подписка.
+// Секции главной: первый экран с полкой (макет rev 06; полка заменила «Для кого книга?») → «Самые любимые» →
+// «Фото → иллюстрация» → «Подарок за 5 минут» (#kak — кнопка «Как это работает») → отзывы → «Кто мы» + вопросы → подписка.
 // Всё — серверные компоненты; клиентский JS только у формы подписки.
 import Link from "next/link";
 import { BookCard } from "./BookCard";
-import { Cover } from "./Cover";
 import { NewsletterForm } from "./NewsletterForm";
 import { ART_STYLE_IDS } from "@/content/profiles";
 import { sampleUrl } from "@/lib/obrazec";
 import type { PublicStory } from "@/lib/catalog";
-import { FOR_WHOM, getShowcase, type Season } from "@/lib/storefront";
+import { getShowcase } from "@/lib/storefront";
+import type { ShelfLink } from "@/lib/shelf";
+import { Shelf } from "./Shelf";
 
 const plural = (n: number, one: string, few: string, many: string) => {
   const a = n % 10;
@@ -16,63 +17,36 @@ const plural = (n: number, one: string, few: string, many: string) => {
   return a === 1 && b !== 11 ? one : a >= 2 && a <= 4 && (b < 12 || b > 14) ? few : many;
 };
 
-export function HomeHero({ season, rating }: { season: Season | null; rating: { avg: number; count: number } | null }) {
-  const cta = season ? { href: season.href, label: season.cta } : { href: "/sozdat", label: "Создать книгу" };
+// Первый экран по макету владелицы (rev 06): надзаголовок, заголовок в две строки, две кнопки, полка с книгами.
+export function HomeHero({ shelf, rating }: { shelf: ShelfLink[]; rating: { avg: number; count: number } | null }) {
   return (
-    <section className="hhero">
-      <div className="wrap hhero__grid">
-        <div className="hhero__text">
-          {season && <p className="eyebrow">{season.label}: книги к празднику</p>}
-          <h1>Сказка, где главный герой — тот, кого вы любите</h1>
-          <p className="lead">
-            Ребёнок, подросток, мама, любимый человек или даже кот. Имя, внешность и ваши истории — на каждой странице, а
-            иллюстрации по фото рисует нейросеть в выбранном стиле.
+    <section className="home-hero" aria-labelledby="home-h">
+      <div className="wrap home-hero__in">
+        <p className="home-hero__eyebrow">
+          <span aria-hidden="true">★</span> Персональные книги по фото
+        </p>
+        <h1 id="home-h">
+          Книга, где главный герой —{" "}
+          <span className="home-hero__line">тот, кого вы любите</span>
+        </h1>
+        <p className="home-hero__lead">Загрузите фото — и за 5 минут получите бесплатное превью сказки с узнаваемым героем</p>
+        <div className="home-hero__cta">
+          <Link href="/sozdat" className="btn btn--primary btn--lg">
+            Создать книгу <span aria-hidden="true">→</span>
+          </Link>
+          <a href="#kak" className="btn btn--soft btn--lg">
+            Как это работает
+          </a>
+        </div>
+        <p className="home-hero__note">Превью бесплатно · платите, только если понравилось</p>
+        {rating && (
+          <p className="hhero__rating" aria-label={`Оценка ${rating.avg} из 5 по ${rating.count} отзывам`}>
+            <span aria-hidden="true">★★★★★</span> {rating.avg.toFixed(1).replace(".", ",")} — {rating.count} {plural(rating.count, "отзыв", "отзыва", "отзывов")} покупателей
           </p>
-          <Link href={cta.href} className="btn btn--primary btn--lg">
-            {cta.label}
-          </Link>
-          <p className="hhero__note small">Превью бесплатно, вход по коду на почту · PDF от 990 ₽ · печатная книга от 2 490 ₽</p>
-          {rating && (
-            <p className="hhero__rating" aria-label={`Оценка ${rating.avg} из 5 по ${rating.count} отзывам`}>
-              <span aria-hidden="true">★★★★★</span> {rating.avg.toFixed(1).replace(".", ",")} — {rating.count} {plural(rating.count, "отзыв", "отзыва", "отзывов")} покупателей
-            </p>
-          )}
-        </div>
-        <div className="hhero__art" aria-hidden="true">
-          <div className="hhero__book hhero__book--2">
-            <Cover theme="" title="Носочный клад" name="Бублик" sample={sampleUrl({ slug: "nosochnyj-klad", species: "dog", fur: "палевый", extras: [] })} />
-          </div>
-          <div className="hhero__book hhero__book--3">
-            <Cover theme="" title="Две планеты" name="Аня и Илья" sample={sampleUrl({ slug: "dve-planety" })} />
-          </div>
-          <div className="hhero__book hhero__book--1">
-            <Cover theme="" title="Новогоднее путешествие с Дедом Морозом" name="Варя" eager sample={sampleUrl({ slug: "novogodnee-puteshestvie-s-dedom-morozom", gender: "girl", hairstyle: "косички", hair: "рыжие", freckles: true })} />
-          </div>
-          <span className="hhero__tag">пример</span>
-        </div>
+        )}
       </div>
-    </section>
-  );
-}
-
-export function ForWhom() {
-  return (
-    <section className="section" aria-labelledby="dlya-h">
       <div className="wrap">
-        <div className="sec-head">
-          <h2 id="dlya-h">Для кого книга?</h2>
-          <Link href="/skazki" className="sec-head__more">Все книги →</Link>
-        </div>
-      <div className="rail" role="list">
-        {FOR_WHOM.map((c) => (
-          <Link key={c.title} href={c.href} className="whom" role="listitem">
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src={c.img} alt="" loading="lazy" decoding="async" width={220} height={220} />
-            <strong>{c.title}</strong>
-            <span>{c.sub}</span>
-          </Link>
-        ))}
-      </div>
+        <Shelf items={shelf} />
       </div>
     </section>
   );
@@ -153,7 +127,7 @@ export function PhotoShowcase() {
 
 export function FiveMinutes() {
   return (
-    <section className="section section--sage" aria-labelledby="five-h">
+    <section className="section section--sage" id="kak" aria-labelledby="five-h">
       <div className="wrap">
         <h2 id="five-h">Подарок за 5 минут</h2>
         <ol className="steps steps--4">

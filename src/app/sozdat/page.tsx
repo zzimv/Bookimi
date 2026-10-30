@@ -3,7 +3,7 @@ import { QuizWizard } from "@/components/quiz/QuizWizard";
 import { getStories } from "@/lib/catalog";
 import { db, hasDatabase } from "@/lib/db";
 import { currentUser } from "@/lib/auth";
-import { ART_STYLE_IDS, OCCASIONS } from "@/content/profiles";
+import { ART_STYLE_IDS, OCCASIONS, SEGMENTS } from "@/content/profiles";
 import { visibleArtStyleIds } from "@/content/art/index";
 import { cfg } from "@/lib/settings";
 import { audienceFromParam, SVOYA_IDEYA } from "@/lib/storefront";
@@ -59,7 +59,7 @@ export default async function Page({ searchParams }: { searchParams: Promise<Rec
   const stories = all.filter((s) => s.slug !== SVOYA_IDEYA);
   const initial: Record<string, unknown> = {};
   // ?dlya=ADULT|TEEN|PET|CHILD (или detyam/podrostkam/…) — аудитория; ?skazka=<slug> — книга (аудитория берётся из неё);
-  // ?povod=<ключ> — повод. Книга выбрана → анкета не спрашивает ни повод, ни сюжет.
+  // ?povod=<ключ> — повод; ?pol=, ?segment= — см. ниже. Книга выбрана → анкета не спрашивает ни повод, ни сюжет.
   const dlya = audienceFromParam(sp.dlya);
   if (dlya) initial.audience = dlya;
   const picked = sp.skazka ? stories.find((s) => s.slug === sp.skazka) : undefined;
@@ -71,6 +71,12 @@ export default async function Page({ searchParams }: { searchParams: Promise<Rec
     const own = picked.occasions.filter((o) => o !== "bez");
     initial.occasion = { key: povod ?? (own.length === 1 ? own[0] : "bez"), custom: "" };
   } else if (povod) initial.occasion = { key: povod, custom: "" };
+  // Полка главной: ?pol=boy|girl — пол героя («Сын», «Дочь», «Мама»…), ?segment=<сегмент аудитории> — кому книга
+  // («Папа» → adult-parent). Только вместе с аудиторией из ссылки и без выбранной книги.
+  if (dlya && !picked) {
+    if (sp.pol === "boy" || sp.pol === "girl") initial.hero = { gender: sp.pol };
+    if (sp.segment && SEGMENTS.some((x) => x.id === sp.segment && x.audience === dlya)) initial.segment = sp.segment;
+  }
   // «Новая книга с этим героем» из кабинета
   if (sp.geroj) {
     const user = await currentUser();

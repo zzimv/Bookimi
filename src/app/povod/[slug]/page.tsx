@@ -4,7 +4,7 @@ import { OccasionSectionsView, sectionedStories } from "@/components/StoryGroups
 import { Breadcrumbs, JsonLd, StickyCta } from "@/components/Layout";
 import { Faq } from "@/components/Sections";
 import { getMinPrice, getOccasion, getOccasions } from "@/lib/catalog";
-import { printDeadlineLine } from "@/lib/storefront";
+import { getSoon, printDeadlineLine } from "@/lib/storefront";
 import { cfg } from "@/lib/settings";
 import { FAQ } from "@/lib/catalog-defaults";
 
@@ -30,7 +30,7 @@ export default async function Page({ params }: { params: Promise<{ slug: string 
   const [occasion, minPrice] = await Promise.all([getOccasion(slug), getMinPrice()]);
   if (!occasion) notFound();
   // Разделы повода — как в анкете (plotSections): написанные к поводу, «Своя история», «Тоже подойдут», остальные
-  const sections = await sectionedStories(occasion.slug);
+  const [sections, soon] = await Promise.all([sectionedStories(occasion.slug), getSoon()]);
   const deadline = printDeadlineLine(occasion.slug, (await cfg("season")).printDeadline);
 
   return (
@@ -46,7 +46,7 @@ export default async function Page({ params }: { params: Promise<{ slug: string 
           <h1>{occasion.h1}</h1>
           <p className="lead">{occasion.intro}</p>
           {deadline && <p className="deadline">{deadline}</p>}
-          <OccasionSectionsView sections={sections} minPrice={minPrice} />
+          <OccasionSectionsView sections={sections} minPrice={minPrice} soon={soon.audiences} />
         </div>
       </section>
       <Faq items={FAQ} />

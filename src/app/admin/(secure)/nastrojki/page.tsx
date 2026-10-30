@@ -4,6 +4,8 @@ import { getSettings, getSetting, type SettingKey } from "@/lib/settings";
 import { LEGAL } from "@/lib/legal";
 import { legalAction, printHouseAction, settingsAction } from "../../actions";
 import { formatTiers } from "@/lib/settings-validate";
+import { AUDIENCE_PAGES } from "@/lib/storefront";
+import { SHELF } from "@/lib/shelf";
 
 type Field =
   | { p: string; label: string; t?: "text" | "number" | "password" | "email" | "time"; hint?: string }
@@ -221,6 +223,15 @@ const SECTIONS: { key: SettingKey; title: string; note?: string; fields: Field[]
       { p: "enabled", label: "Показывать", t: "bool" },
       { p: "holidayAuto", label: "Ближайший праздник вместо текста", t: "bool", hint: "Пока печать успевает к празднику из раздела «Праздники»: «Новый год: осталось 63 дня. Печатную книгу успеем, если заказать до 17 декабря». Выключите — всегда текст ниже." },
       { p: "text", label: "Текст" },
+    ],
+  },
+  {
+    key: "storefront",
+    title: "«Скоро»: что ещё не продаётся",
+    note: "Отмеченное получает значок «скоро» в меню и на полке главной. Ссылка ведёт к примерам с плашкой «Скоро — книги … готовим к запуску», кнопки «Создать» там выключены (почту не собираем). Снимите отметку — всё работает как обычно.",
+    fields: [
+      ...AUDIENCE_PAGES.map((a) => ({ p: `soon.${a.key}`, label: `${a.menu}: скоро`, t: "bool" as const })),
+      ...SHELF.map((it) => ({ p: `soon.shelf.${it.id}`, label: `Полка: ${it.coverLead ? `${it.coverLead} ${it.title}` : it.title} — скоро`, t: "bool" as const })),
     ],
   },
   {

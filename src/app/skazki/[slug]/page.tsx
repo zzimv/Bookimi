@@ -9,7 +9,9 @@ import { ageLabel, displayTitle, getAddonsFor, getPriceTable, getStories, getSto
 import { FAQ } from "@/lib/catalog-defaults";
 import { sampleUrl } from "@/lib/obrazec";
 import { og } from "@/lib/og";
-import { getSeason, segmentTitle, SVOYA_IDEYA } from "@/lib/storefront";
+import { getSeason, getSoon, segmentTitle, SVOYA_IDEYA } from "@/lib/storefront";
+import { SOON_SHORT } from "@/lib/shelf";
+import { SoonBanner } from "@/components/Soon";
 import { EXTRA_ROLE_LABELS } from "@/lib/quiz";
 import { ART_STYLE_IDS, OCCASIONS as OCCASION_KEYS, TEXT_STYLE_IDS } from "@/content/profiles";
 
@@ -42,8 +44,10 @@ const shortAddon = (t: string) => {
 // голос и стили, для кого, цены из каталога, сроки печати к сезону, «Создать» → анкета с выбранной книгой.
 export default async function Page({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params;
-  const [story, prices, season] = await Promise.all([getStory(slug), getPriceTable(), getSeason()]);
+  const [story, prices, season, soon] = await Promise.all([getStory(slug), getPriceTable(), getSeason(), getSoon()]);
   if (!story || story.slug === SVOYA_IDEYA) notFound();
+  // Аудитория «скоро» (storefront.soon): книгу можно посмотреть, «Создать» выключена
+  const isSoon = soon.audiences.includes(story.audience);
   // Допы — свои для аудитории книги; в блоке цены — четыре первых (без «второго экземпляра» и срочности)
   const extras = (await getAddonsFor(story.audience)).filter((a) => a.kind !== "MODIFIER" && a.priceRub).slice(0, 4);
   const title = displayTitle(story.title, story.audience);
@@ -113,10 +117,22 @@ export default async function Page({ params }: { params: Promise<{ slug: string 
             </p>
           )}
           {season?.printLine && seasonFits && <p className="deadline">{season.printLine}</p>}
-          <Link href={create} className="btn btn--primary btn--lg btn--block product__cta">
-            Создать книгу
-          </Link>
-          <p className="small muted" style={{ textAlign: "center" }}>Превью бесплатно — платите, только если понравится</p>
+          {isSoon ? (
+            <>
+              <button type="button" className="btn btn--primary btn--lg btn--block product__cta" disabled aria-describedby="product-soon">
+                Создать книгу
+              </button>
+              <p className="small muted" id="product-soon" style={{ textAlign: "center" }}>{SOON_SHORT}</p>
+              <SoonBanner audience={story.audience} />
+            </>
+          ) : (
+            <>
+              <Link href={create} className="btn btn--primary btn--lg btn--block product__cta">
+                Создать книгу
+              </Link>
+              <p className="small muted" style={{ textAlign: "center" }}>Превью бесплатно — платите, только если понравится</p>
+            </>
+          )}
 
           <dl className="specs">
             <div>
@@ -181,7 +197,7 @@ export default async function Page({ params }: { params: Promise<{ slug: string 
         </div>
       </section>
       <Faq items={FAQ.slice(0, 4)} />
-      <StickyCta href={create} label="Создать книгу" />
+      <StickyCta href={create} label="Создать книгу" soon={isSoon} />
     </>
   );
 }
