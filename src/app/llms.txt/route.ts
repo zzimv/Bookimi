@@ -2,7 +2,7 @@ import { catalogData } from "@/lib/geo";
 
 export const revalidate = 600;
 
-// llms.txt — краткое описание сервиса для языковых моделей (Алиса, Яндекс Нейро, ChatGPT, Perplexity).
+// llms.txt — краткое описание сервиса для поисковых помощников (Алиса, ChatGPT, Perplexity).
 export async function GET() {
   const c = await catalogData();
   const lines = [

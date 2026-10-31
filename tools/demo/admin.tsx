@@ -176,7 +176,7 @@ function AdminHomeView({ readiness }: { readiness: Awaited<ReturnType<typeof get
       </section>
       <div className="kpis">
         <Link href="/admin/perevody" className="kpi" style={{ textDecoration: "none", color: "inherit" }}><small>Переводы на подтверждении</small><b>{transfers}</b></Link>
-        <div className="kpi"><small>Очередь генерации</small><b>{queue}</b></div>
+        <div className="kpi"><small>Очередь подготовки книг</small><b>{queue}</b></div>
         <div className="kpi"><small>Обращения</small><b>0</b></div>
         <div className="kpi"><small>Отзывы на модерации</small><b>0</b></div>
         <div className="kpi"><small>Оплат сегодня</small><b>{today}</b></div>
@@ -187,7 +187,7 @@ function AdminHomeView({ readiness }: { readiness: Awaited<ReturnType<typeof get
           <p className="small" style={{ margin: "10px 0 0" }}><Link href="/admin/dashboard">Все графики →</Link></p>
         </section>
         <section className="panel" style={{ display: "grid", gap: 18, alignContent: "start" }}>
-          <Progress title="Генерация сегодня" value={spentTodayRub()} max={DEFAULTS.limits.dailySpendRub} />
+          <Progress title="Расходы на подготовку книг сегодня" value={spentTodayRub()} max={DEFAULTS.limits.dailySpendRub} />
           <Gauge title="Лимит НПД" value={d.npd.income} max={d.npd.limit} forecast={d.npd.yearEnd} note={d.npd.forecastDate ? <>Темп: лимит будет достигнут {ruDate(d.npd.forecastDate)}.</> : null} />
         </section>
       </div>
@@ -201,7 +201,7 @@ export function AdminDashboard() {
   const d = data();
   const spendPanel = (
     <section className="panel">
-      <ColumnChart title="Расходы на ИИ по дням" sub="30 дней" unit="₽" bars={d.spend.map((s) => ({ label: dayLabel(s.day), value: s.value }))} limit={{ value: DEFAULTS.limits.dailySpendRub, label: "Суточный лимит" }} />
+      <ColumnChart title="Расходы на сервисы по дням" sub="30 дней" unit="₽" bars={d.spend.map((s) => ({ label: dayLabel(s.day), value: s.value }))} limit={{ value: DEFAULTS.limits.dailySpendRub, label: "Суточный лимит" }} />
     </section>
   );
   return (
@@ -502,14 +502,14 @@ export function AdminCatalog() {
 
 // ───────── лимиты ─────────
 const LIMIT_FIELDS: [keyof typeof DEFAULTS.limits, string][] = [
-  ["dailySpendRub", "Лимит расходов на генерацию в сутки, ₽"],
+  ["dailySpendRub", "Лимит расходов на подготовку книг в сутки, ₽"],
   ["previewsPerContact", "Превью в сутки на один контакт"],
   ["textsPerDevice", "Сказок в сутки с одного устройства"],
   ["rewrites", "Бесплатных «Переписать»"],
   ["freeRedraws", "Бесплатных перерисовок после покупки"],
   ["moodChangesPreview", "Смен настроения превью до оплаты"],
   ["redrawPriceRub", "Цена перерисовки сверх лимита, ₽"],
-  ["staffDailySpendRub", "Сотрудники: лимит расходов на ИИ в сутки, ₽ (лимиты покупателя на них не действуют)"],
+  ["staffDailySpendRub", "Сотрудники: лимит расходов на сервисы текста и иллюстраций в сутки, ₽ (лимиты покупателя на них не действуют)"],
 ];
 export function AdminSettings() {
   const [l, setL] = useState<Record<string, string>>(() => Object.fromEntries(LIMIT_FIELDS.map(([k]) => [k, String(DEFAULTS.limits[k])])));
@@ -558,9 +558,9 @@ export function AdminSettings() {
         <h2 style={{ fontSize: "var(--fs-lg)" }}>Сейчас в демо</h2>
         <ul className="small">
           <li>Оплата: СБП по QR (тестовый) и перевод по номеру телефона — подтверждается в разделе «Переводы».</li>
-          <li>Тексты — заготовленные развороты сюжетов (как демо-режим сайта без YandexGPT), иллюстрации — демо-SVG без GPU.</li>
+          <li>Тексты — заготовленные развороты сюжетов (как демо-режим сайта без сервиса текста), иллюстрации — демо-SVG без GPU.</li>
           <li>Письма и СМС не отправляются — они пишутся в «Журнал».</li>
-          <li>Сегодня потрачено на генерацию (оценка): {spentTodayRub()} ₽ из {DEFAULTS.limits.dailySpendRub} ₽.</li>
+          <li>Сегодня потрачено на подготовку книг (оценка): {spentTodayRub()} ₽ из {DEFAULTS.limits.dailySpendRub} ₽.</li>
         </ul>
       </section>
     </>

@@ -51,7 +51,7 @@ export default async function Page({ searchParams }: { searchParams: Promise<{ d
       )}
       <div className="kpis">
         <Link href="/admin/perevody" className="kpi" style={{ textDecoration: "none", color: "inherit" }}><small>Переводы на подтверждении</small><b>{transfers}</b></Link>
-        <div className="kpi"><small>Очередь генерации</small><b>{queue}</b></div>
+        <div className="kpi"><small>Очередь подготовки книг</small><b>{queue}</b></div>
         <Link href="/admin/podderzhka" className="kpi" style={{ textDecoration: "none", color: "inherit" }}><small>Обращения</small><b>{tickets}</b></Link>
         <Link href="/admin/otzyvy" className="kpi" style={{ textDecoration: "none", color: "inherit" }}><small>Отзывы на модерации</small><b>{reviews}</b></Link>
         <div className="kpi"><small>Оплат сегодня</small><b>{todayOrders}</b></div>
@@ -62,7 +62,7 @@ export default async function Page({ searchParams }: { searchParams: Promise<{ d
           <p className="small" style={{ margin: "10px 0 0" }}><Link href="/admin/dashboard">Все графики →</Link></p>
         </section>
         <section className="panel" style={{ display: "grid", gap: 18, alignContent: "start" }}>
-          <Progress title="Генерация сегодня" value={spent} max={limits.dailySpendRub} />
+          <Progress title="Расходы на подготовку книг сегодня" value={spent} max={limits.dailySpendRub} />
           {tax.regime === "npd" && (
             <Gauge
               title="Лимит НПД"

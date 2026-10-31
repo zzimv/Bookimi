@@ -70,7 +70,7 @@ export async function POST(req: Request) {
 
   const limits = await cfg("limits");
   const [user, anon] = await Promise.all([currentUser(), anonId()]);
-  // Сотрудники тестируют без лимитов устройства и сети (расходы ИИ — в свой суточный лимит, src/lib/staff.ts)
+  // Сотрудники тестируют без лимитов устройства и сети (расходы на сервисы — в свой суточный лимит, src/lib/staff.ts)
   const staff = isStaff(user?.role);
   if (!staff && !(await hit(await deviceKey(), "text", limits.textsPerDevice))) {
     return err(`Сегодня можно сочинить не больше ${limits.textsPerDevice} сказок. Возвращайтесь завтра — черновик сохранится.`, 429);

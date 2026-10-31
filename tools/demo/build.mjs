@@ -4,7 +4,7 @@
 // путь книги, оформление, оплату, путь заказа и графики админки. React заменён мини-рантаймом
 // (tools/demo/shims/react.ts), Next — заглушками (link/navigation/headers), база — хранилищем браузера,
 // API — tools/demo/api.ts (перехват fetch). Системные промпты голосов в бандл не попадают (заглушка
-// text-styles), описания сцен для нейросети вырезаются из сюжетов — демо они не нужны.
+// text-styles), описания сцен для иллюстраций вырезаются из сюжетов — демо они не нужны.
 import { build, transform } from "esbuild";
 import { readFileSync, mkdirSync, writeFileSync } from "node:fs";
 import { deflateRawSync } from "node:zlib";
@@ -224,7 +224,7 @@ const demoPlugin = {
       const c = JSON.parse(readFileSync(a.path, "utf8"));
       return { contents: `import { unpack } from ${JSON.stringify(shim("unpack.ts"))};\nexport default unpack(${JSON.stringify(pack({ ...c, rows: c.rows.slice(0, 400) }))});`, loader: "ts", resolveDir: dirname(a.path) };
     });
-    // Общие крючки поводов: английские сцены для нейросети демо не нужны
+    // Общие крючки поводов: английские описания сцен демо не нужны
     b.onLoad({ filter: /src[\\/]content[\\/]occasions\.ts$/ }, (a) => ({ contents: packStrings(readFileSync(a.path, "utf8").replace(SCENES, '$1: ""')), loader: "ts", resolveDir: dirname(a.path) }));
     // Тексты витрины (FAQ, поводы, посвящения) — тоже сжатой таблицей строк
     b.onLoad({ filter: /src[\\/]lib[\\/](catalog-defaults|dedications|storefront)\.ts$/ }, (a) => ({ contents: packStrings(readFileSync(a.path, "utf8")), loader: "ts", resolveDir: dirname(a.path) }));
@@ -275,7 +275,7 @@ const html = `<!doctype html>
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>БУКИМИ демо rev 06</title>
+<title>БУКИМИ демо rev 07</title>
 <meta name="description" content="Интерактивный демо-стенд БУКИМИ: витрина, анкета, книга, оплата, кабинет и админка — без сервера.">
 <meta name="claude:viewport-fit-sides" content="cover">
 <script>${themeScript}</script>

@@ -10,7 +10,7 @@ import { SHELF } from "@/lib/shelf";
 type Field =
   | { p: string; label: string; t?: "text" | "number" | "password" | "email" | "time"; hint?: string }
   | { p: string; label: string; t: "bool"; hint?: string; disabled?: boolean }
-  | { p: string; label: string; t: "select"; options: [string, string][]; hint?: string }
+  | { p: string; label: string; t: "select"; options: [string, string][]; hint?: string; /** Показать технический код выбранного варианта мелким серым тегом. */ code?: boolean }
   | { p: string; label: string; t: "list"; hint?: string };
 
 const SECTIONS: { key: SettingKey; title: string; note?: string; fields: Field[] }[] = [
@@ -72,7 +72,7 @@ const SECTIONS: { key: SettingKey; title: string; note?: string; fields: Field[]
     key: "limits",
     title: "Лимиты",
     fields: [
-      { p: "dailySpendRub", label: "Расходы на генерацию в сутки, ₽", t: "number", hint: "Ограничивает только бесплатные превью. Оплаченные книги генерируются всегда." },
+      { p: "dailySpendRub", label: "Расходы на подготовку книг в сутки, ₽", t: "number", hint: "Ограничивает только бесплатные превью. Оплаченные книги готовятся всегда." },
       { p: "previewsPerContact", label: "Превью в сутки на телефон/email", t: "number" },
       { p: "textsPerDevice", label: "Сказок в сутки с устройства", t: "number" },
       { p: "textsPerIp", label: "Сказок в сутки с одной сети (IP /24)", t: "number", hint: "Защита от сброса cookie; выше лимита устройства — соседи по сети делят его." },
@@ -82,7 +82,7 @@ const SECTIONS: { key: SettingKey; title: string; note?: string; fields: Field[]
       { p: "photoTtlDays", label: "Хранить фото, дней", t: "number" },
       { p: "photoTtlNoBookHours", label: "Фото без книги (анкета брошена), часов", t: "number", hint: "Фото загружают на первом шаге анкеты; если книга не создана — удаляем через столько часов." },
       { p: "moodChangesPreview", label: "Смен настроения до оплаты", t: "number" },
-      { p: "staffDailySpendRub", label: "Расходы сотрудников на тесты в сутки, ₽", t: "number", hint: "Владелец, оператор и маркетолог тестируют без лимитов покупателя; их расходы на ИИ — только в этот лимит и отдельной серией на дашборде." },
+      { p: "staffDailySpendRub", label: "Расходы сотрудников на тесты в сутки, ₽", t: "number", hint: "Владелец, оператор и маркетолог тестируют без лимитов покупателя; их расходы на сервисы текста, иллюстраций и озвучки — только в этот лимит и отдельной серией на дашборде." },
     ],
   },
   {
@@ -97,7 +97,7 @@ const SECTIONS: { key: SettingKey; title: string; note?: string; fields: Field[]
   },
   {
     key: "gpu",
-    title: "GPU-сервер (Qwen)",
+    title: "Сервер иллюстраций (GPU)",
     note: "Сервер с видеокартой арендуется по часам. По требованию — включается при задачах и выключается после простоя.",
     fields: [
       { p: "mode", label: "Режим", t: "select", options: [["on_demand", "По требованию"], ["schedule", "По расписанию в пик"], ["always", "Всегда включён"]] },
@@ -111,12 +111,13 @@ const SECTIONS: { key: SettingKey; title: string; note?: string; fields: Field[]
   },
   {
     key: "ai",
-    title: "ИИ-провайдеры",
+    title: "Сервисы текста, иллюстраций и озвучки",
+    note: "Демо — без внешних сервисов: шаблоны текста и SVG-картинки. Технический код варианта — серым под списком.",
     fields: [
-      { p: "text", label: "Текст сказки", t: "select", options: [["demo", "Демо (шаблоны)"], ["yandexgpt", "YandexGPT"]] },
-      { p: "image", label: "Иллюстрации", t: "select", options: [["demo", "Демо (SVG)"], ["qwen", "Qwen-Image-Edit на своём GPU"], ["kandinsky", "Kandinsky 5.0 на своём GPU"]] },
-      { p: "tts", label: "Озвучка", t: "select", options: [["demo", "Демо"], ["speechkit", "Yandex SpeechKit"], ["salutespeech", "SaluteSpeech"]] },
-      { p: "foreignImage", label: "Зарубежные модели", t: "bool", disabled: true, hint: "Выключено: нужно отдельное согласие и уведомление Роскомнадзора о трансграничной передаче." },
+      { p: "text", label: "Сервис текста", t: "select", code: true, options: [["demo", "Демо (шаблоны)"], ["yandexgpt", "Облачный сервис текста Яндекса"]] },
+      { p: "image", label: "Сервер иллюстраций", t: "select", code: true, options: [["demo", "Демо (SVG)"], ["qwen", "Свой GPU-сервер — основной вариант"], ["kandinsky", "Свой GPU-сервер — запасной вариант"]] },
+      { p: "tts", label: "Сервис озвучки", t: "select", code: true, options: [["demo", "Демо"], ["speechkit", "Синтез речи Яндекса"], ["salutespeech", "Синтез речи Сбера"]] },
+      { p: "foreignImage", label: "Зарубежные сервисы иллюстраций", t: "bool", disabled: true, hint: "Выключено: нужно отдельное согласие и уведомление Роскомнадзора о трансграничной передаче." },
     ],
   },
   {
@@ -154,7 +155,7 @@ const SECTIONS: { key: SettingKey; title: string; note?: string; fields: Field[]
       { p: "ownVoiceBuilds", label: "Сборок своим голосом", t: "number" },
       { p: "shareDays", label: "Ссылка «Поделиться», дней", t: "number" },
       { p: "voicePurgeDays", label: "Удалять записи голоса через, дней после выдачи", t: "number" },
-      { p: "i2v", label: "Оживление картинок моделью (GPU)", t: "select", options: [["off", "Выключено"], ["wan", "Wan image-to-video (задел)"]], hint: "Нужен эндпоинт /v1/i2v на GPU-сервере; пока не реализован." },
+      { p: "i2v", label: "Оживление картинок на GPU-сервере", t: "select", code: true, options: [["off", "Выключено"], ["wan", "Оживление на своём GPU (задел)"]], hint: "Нужен эндпоинт /v1/i2v на GPU-сервере; пока не реализован." },
     ],
   },
   {
@@ -266,7 +267,7 @@ export default async function Page({ searchParams }: { searchParams: Promise<{ e
     <>
       <h1 style={{ fontSize: "var(--fs-xl)" }}>Настройки</h1>
       {sp.error && !sp.sec && <p className="error" role="alert">Не сохранено: {sp.error}</p>}
-      <p className="muted">Ключи сервисов (платежи, СДЭК, ИИ, боты) задаются в файле .env на сервере — здесь то, что меняется без программиста.</p>
+      <p className="muted">Ключи сервисов (платежи, СДЭК, текст и иллюстрации, боты) задаются в файле .env на сервере — здесь то, что меняется без программиста.</p>
       {SECTIONS.map((sec) => {
         const values = s[sec.key];
         const bools = sec.fields.filter((f) => f.t === "bool").map((f) => f.p);
@@ -292,6 +293,8 @@ export default async function Page({ searchParams }: { searchParams: Promise<{ e
                   return (
                     <label key={f.p} className="field"><span>{f.label}</span>
                       <select className="select" name={`f.${f.p}`} defaultValue={String(v)}>{f.options.map(([k, l]) => <option key={k} value={k}>{l}</option>)}</select>
+                      {f.code && <small className="muted">код: <code className="tech-id">{String(v)}</code></small>}
+                      {f.hint && <small>{f.hint}</small>}
                     </label>
                   );
                 return (

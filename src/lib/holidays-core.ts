@@ -442,11 +442,14 @@ export function upcomingBirthdays(heroes: HeroBirthday[], now: Date = new Date()
   return out.sort((a, b) => a.daysLeft - b.daysLeft || a.name.localeCompare(b.name, "ru"));
 }
 
+/** За сколько дней до дня рождения героя напоминаем (письмо/мессенджер, правило hero_birthday): за месяц. */
+export const BIRTHDAY_REMINDER_DAYS = 30;
+
 /**
  * Кому напомнить о дне рождения героя: за daysBefore дней (по Москве), с окном graceDays — если в нужный день
  * сообщение не ушло (лимит «1 в сутки»), уйдёт в следующие дни. subjectId — одно напоминание на героя (по имени) в год.
  */
-export function birthdayReminders(heroes: HeroBirthday[], now: Date = new Date(), daysBefore = 21, graceDays = 2, lead: LeadTimes = DEFAULT_LEAD) {
+export function birthdayReminders(heroes: HeroBirthday[], now: Date = new Date(), daysBefore = BIRTHDAY_REMINDER_DAYS, graceDays = 2, lead: LeadTimes = DEFAULT_LEAD) {
   return upcomingBirthdays(heroes.filter((h) => h.userId), now, daysBefore, lead)
     .filter((b) => b.daysLeft <= daysBefore && b.daysLeft >= daysBefore - graceDays)
     .map((b) => ({ ...b, subjectId: `hero-bday:${b.userId}:${b.name.toLowerCase()}:${partsOf(b.date).y}` }));

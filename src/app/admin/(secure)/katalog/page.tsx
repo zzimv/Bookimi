@@ -116,7 +116,7 @@ export default async function Page({ searchParams }: { searchParams: Promise<{ e
               <label className="check"><input type="checkbox" name="isActive" defaultChecked={s.isActive} /> показывать</label>
             </div>
             <label className="field"><span>Ссылка на обложку (из хранилища)</span><input className="input" name="coverUrl" defaultValue={s.coverUrl ?? ""} /></label>
-            <label className="field"><span>Указания для ИИ (шаблон сюжета)</span><textarea className="textarea" name="textTemplate" defaultValue={s.textTemplate} /></label>
+            <label className="field"><span>Указания для сервиса текста (шаблон сюжета)</span><textarea className="textarea" name="textTemplate" defaultValue={s.textTemplate} /></label>
             <button className="btn btn--primary btn--sm">Сохранить сюжет</button>
           </form>
         </details>

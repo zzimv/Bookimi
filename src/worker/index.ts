@@ -64,7 +64,7 @@ async function main() {
         await runFull(j.data.bookId, j.data.orderId);
       } catch (e) {
         await fail(j.data.bookId, e);
-        await alertOwner("Ошибка генерации оплаченной книги", `Книга ${j.data.bookId}: ${(e as Error).message}`);
+        await alertOwner("Ошибка подготовки оплаченной книги", `Книга ${j.data.bookId}: ${(e as Error).message}`);
         throw e;
       }
     }

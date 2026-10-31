@@ -280,7 +280,7 @@ async function spendAlerts() {
     const key = `spend-alert-${new Date().toISOString().slice(0, 10)}-${pct}`;
     if (await db.auditLog.findFirst({ where: { action: key } })) continue;
     await db.auditLog.create({ data: { action: key, entity: "alert" } });
-    await alertOwner(`Расходы на генерацию: ${pct}% лимита`, `Сегодня потрачено ${spent} ₽ из ${limits.dailySpendRub} ₽.`).catch(() => {});
+    await alertOwner(`Расходы на подготовку книг: ${pct}% лимита`, `Сегодня потрачено ${spent} ₽ из ${limits.dailySpendRub} ₽.`).catch(() => {});
   }
 }
 

@@ -114,7 +114,7 @@ const GENDER: Record<AudienceKey, [string, string]> = {
   PET: ["Мальчик", "Девочка"],
 };
 const FALLBACK_SLUG: Record<AudienceKey, string> = { CHILD: "imya-i-zvyozdnyj-drakonchik", TEEN: "stazher-orbity", ADULT: "nasha-istoriya", PET: "moj-chelovek" };
-/** Подсказка под полями свободного текста: имена в ИИ не уходят (src/lib/gen/redact.ts). */
+/** Подсказка под полями свободного текста: имена во внешние сервисы не уходят (src/lib/gen/redact.ts). */
 const NAMES_HINT = "Имена здесь не нужны — мы подставим их сами";
 const HERO_WORD: Record<AudienceKey, string> = { CHILD: "Ваш ребёнок", TEEN: "Ваш герой", ADULT: "Ваш герой", PET: "Ваш питомец" };
 const HUMAN_ROLES = ["mom", "dad", "grandma", "grandpa"];
@@ -672,7 +672,7 @@ export function QuizWizard({
             <section>
               <h1 ref={h1} tabIndex={-1}>{aud === "PET" ? "Кто герой книги?" : "Герои книги"}</h1>
               <p className="muted">
-                {photoEnabled ? "Загрузите фото — сразу проверим и обрежем до портрета, а нейросеть нарисует героя похожим. Или опишите словами." : "Опишите героя — иллюстрации нарисуем по описанию."}
+                {photoEnabled ? "Загрузите фото — сразу проверим и обрежем до портрета, а иллюстрации нарисуем по фото в выбранном стиле, и герой узнаётся. Лучше всего — фото в анфас, с улыбкой, чтобы были хорошо видны глаза. Или опишите словами." : "Опишите героя — иллюстрации нарисуем по описанию."}
               </p>
               <fieldset className="hero-card" data-hero="main">
                 <legend>{aud === "PET" ? "Питомец" : "Главный герой"}</legend>
@@ -1073,7 +1073,7 @@ export function QuizWizard({
           <aside className="quiz__preview" aria-label="Обложка, пример">
             <Cover theme={story?.coverTheme ?? ""} title={coverTitle} sample={sampleUrl({ ...previewLook, style, mood: a.mood })} name={named ? (coverTitle.includes(a.hero.name!.trim()) ? "" : coverName) : /ваш/i.test(coverTitle) ? "" : coverName} eager />
             <p className="small muted">
-              Обложка-пример: меняется по вашим ответам. {(a.hero.photoIds?.length ?? 0) > 0 ? "По вашему фото нейросеть нарисует героя похожим — на шаге превью." : aud === "PET" ? "По фото питомца нейросеть нарисует ещё точнее." : "По фото нейросеть нарисует героя ещё точнее."}
+              Обложка-пример: меняется по вашим ответам. {(a.hero.photoIds?.length ?? 0) > 0 ? "По вашему фото нарисуем героя похожим — на шаге превью." : aud === "PET" ? "По фото питомца нарисуем ещё точнее." : "По фото нарисуем героя ещё точнее."}
             </p>
           </aside>
         )}

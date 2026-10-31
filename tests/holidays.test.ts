@@ -22,6 +22,7 @@ import {
   upcomingBirthdays,
   upcomingHolidays,
   type Holiday,
+  BIRTHDAY_REMINDER_DAYS,
 } from "../src/lib/holidays-core";
 import { buildHolidayCards } from "../src/lib/holidays";
 import { canSendTrigger, DEFAULT_RULES, TRIGGER_EVENTS } from "../src/lib/triggers";
@@ -189,20 +190,24 @@ describe("дни рождения героев", () => {
     expect(fmtDay(list[0].deadline)).toBe("5 ноября");
     expect(upcomingBirthdays(heroes, msk("2026-10-29"), 366).at(-1)!.name).toBe("Дед");
   });
-  it("триггер: ровно за 21 день (окно 2 дня), один раз на героя в год", () => {
-    const at21 = birthdayReminders(heroes, msk("2026-10-29"));
-    expect(at21.map((b) => b.subjectId)).toEqual(["hero-bday:u1:маша:2026"]);
-    expect(birthdayReminders(heroes, msk("2026-10-31")).map((b) => b.name)).toEqual(["Маша"]); // 19 дней — ещё в окне
-    expect(birthdayReminders(heroes, msk("2026-11-01"))).toEqual([]);
-    expect(birthdayReminders(heroes, msk("2026-10-28"))).toEqual([]);
-    expect(birthdayReminders([{ name: "Без аккаунта", birthDate: "2019-11-19" }], msk("2026-10-29"))).toEqual([]);
-    // через границу года: Дед — 10 января, напоминание 20 декабря
-    expect(birthdayReminders(heroes, msk("2026-12-20")).map((b) => b.subjectId)).toEqual(["hero-bday:u3:дед:2027"]);
+  it("триггер: ровно за месяц — 30 дней (окно 2 дня), один раз на героя в год", () => {
+    expect(BIRTHDAY_REMINDER_DAYS).toBe(30);
+    const at30 = birthdayReminders(heroes, msk("2026-10-20"));
+    expect(at30.map((b) => b.subjectId)).toEqual(["hero-bday:u1:маша:2026"]);
+    expect(birthdayReminders(heroes, msk("2026-10-22")).map((b) => b.name)).toEqual(["Маша"]); // 28 дней — ещё в окне
+    expect(birthdayReminders(heroes, msk("2026-10-23"))).toEqual([]);
+    expect(birthdayReminders(heroes, msk("2026-10-19"))).toEqual([]);
+    expect(birthdayReminders(heroes, msk("2026-10-29"))).toEqual([]); // 21 день — старое правило больше не срабатывает
+    expect(birthdayReminders([{ name: "Без аккаунта", birthDate: "2019-11-19" }], msk("2026-10-20"))).toEqual([]);
+    // через границу года: Дед — 10 января, напоминание 11 декабря
+    expect(birthdayReminders(heroes, msk("2026-12-11")).map((b) => b.subjectId)).toEqual(["hero-bday:u3:дед:2027"]);
   });
   it("правило в DEFAULT_RULES, только с согласием, не чаще раза в сутки", () => {
     const r = DEFAULT_RULES.find((x) => x.event === "hero_birthday")!;
     expect(r).toBeTruthy();
-    expect(TRIGGER_EVENTS.hero_birthday).toMatch(/21 день/);
+    expect(TRIGGER_EVENTS.hero_birthday).toMatch(/За месяц \(30 дней\)/);
+    expect(r.name).toMatch(/через месяц/);
+    expect(r.template).toMatch(/через месяц/i);
     expect(r.template).toMatch(/\{deadline\}/);
     const rule = { isMarketing: true };
     expect(canSendTrigger(rule, { marketingOk: true }, false)).toBe(true);

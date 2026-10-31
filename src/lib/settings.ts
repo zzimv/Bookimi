@@ -51,7 +51,7 @@ export const DEFAULTS = {
     /** Бесплатных сказок в сутки с одного IP (IPv4 — по подсети /24): защита от сброса cookie устройства. */
     textsPerIp: 10,
     /**
-     * Сотрудники (владелец, оператор, маркетолог) тестируют без лимитов покупателя, но их расходы на ИИ —
+     * Сотрудники (владелец, оператор, маркетолог) тестируют без лимитов покупателя, но их расходы на сервисы текста и иллюстраций —
      * отдельный суточный лимит, ₽; в лимит покупателей (dailySpendRub) не входят.
      */
     staffDailySpendRub: 1000,
@@ -272,7 +272,7 @@ export async function getReadiness() {
     { key: "seller", ok: sellerIsComplete(s.seller), label: "Реквизиты продавца (ФИО, ИНН)", disabled: "Приём оплаты выключен", href: "/admin/nastrojki#seller" },
     { key: "payments", ok: paymentConfigured, label: "Способ оплаты (СБП-QR или перевод)", disabled: "Кнопка оплаты неактивна, превью работает", href: "/admin/nastrojki#payments" },
     { key: "photo", ok: s.flags.photoUploadEnabled, label: "Приём фото включён (после проверки согласий юристом)", disabled: "Иллюстрации только по описанию", href: "/admin/nastrojki#flags" },
-    { key: "ai", ok: s.ai.text !== "demo" && s.ai.image !== "demo", label: "ИИ-провайдеры подключены", disabled: "Работает демо-генерация", href: "/admin/nastrojki#ai" },
+    { key: "ai", ok: s.ai.text !== "demo" && s.ai.image !== "demo", label: "Сервисы текста и иллюстраций подключены", disabled: "Работает демо-режим (шаблоны и SVG)", href: "/admin/nastrojki#ai" },
     { key: "printHouse", ok: printHouse, label: "Типография: email или API", disabled: "Заказы в печать передаются вручную", href: "/admin/nastrojki#print" },
     { key: "pickup", ok: pickup, label: "Адрес самовывоза в типографии", disabled: "Вариант «Отправлю сам» скрыт", href: "/admin/nastrojki#print" },
     { key: "cdek", ok: Boolean(process.env.CDEK_CLIENT_ID), label: "Ключи СДЭК", disabled: "Доставка считается по тарифам из настроек", href: "/admin/nastrojki#shipping" },

@@ -257,7 +257,7 @@ export async function dashboardCharts(f: Filters, now = new Date()) {
     })),
   );
 
-  // Расходы ИИ по дням против суточного лимита (30 дней): покупатели — против лимита, тесты сотрудников — отдельной серией
+  // Расходы на сервисы по дням против суточного лимита (30 дней): покупатели — против лимита, тесты сотрудников — отдельной серией
   const costs = await db.generationCost.findMany({ where: { createdAt: { gte: series30From } }, select: { createdAt: true, costKopecks: true, staff: true } });
   const spend = dailySeries(costs.filter((c) => !c.staff).map((c) => ({ at: c.createdAt, value: c.costKopecks / 100 })), 30, now).map((d) => ({ ...d, value: Math.round(d.value) }));
   const staffSpend = dailySeries(costs.filter((c) => c.staff).map((c) => ({ at: c.createdAt, value: c.costKopecks / 100 })), 30, now).map((d) => ({ ...d, value: Math.round(d.value) }));

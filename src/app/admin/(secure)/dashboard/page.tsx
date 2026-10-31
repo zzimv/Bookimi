@@ -25,7 +25,7 @@ export default async function Page({ searchParams }: { searchParams: Promise<Rec
   const spendPanel = (
     <section className="panel">
       <ColumnChart
-        title="Расходы на ИИ по дням"
+        title="Расходы на сервисы по дням"
         sub="30 дней"
         unit="₽"
         bars={c.spend.map((s, i) => ({ label: dayLabel(s.day), value: s.value, extra: c.staffSpend[i]?.value ?? 0 }))}
@@ -149,7 +149,7 @@ export default async function Page({ searchParams }: { searchParams: Promise<Rec
           <b>Юнит-экономика</b>
           <table className="tbl" style={{ marginTop: 8 }}>
             <tbody>
-              <tr><td>Генерация (ИИ, GPU)</td><td>{fmt(d.unit.genRub)}</td></tr>
+              <tr><td>Подготовка книги (текст, иллюстрации, GPU)</td><td>{fmt(d.unit.genRub)}</td></tr>
               <tr><td>Печать (себестоимость из настроек типографии)</td><td>{fmt(d.unit.printCost)}</td></tr>
               <tr><td>Доставка</td><td>{fmt(d.unit.shipRub)}</td></tr>
               <tr><td><b>Маржа</b></td><td><b>{fmt(d.unit.margin)}</b></td></tr>
@@ -161,12 +161,12 @@ export default async function Page({ searchParams }: { searchParams: Promise<Rec
           <b>Операции</b>
           <table className="tbl" style={{ marginTop: 8 }}>
             <tbody>
-              <tr><td>Очередь генерации</td><td>{d.ops.genQueue}</td></tr>
+              <tr><td>Очередь подготовки книг</td><td>{d.ops.genQueue}</td></tr>
               <tr><td>Переводы на подтверждении</td><td>{d.ops.transfers}</td></tr>
               <tr><td>Задержки печати</td><td>{d.ops.printDelays}</td></tr>
               <tr><td>Отзывы на модерации</td><td>{d.ops.reviews}</td></tr>
               <tr><td>Открытые обращения</td><td>{d.ops.tickets}</td></tr>
-              <tr><td>Генерация сегодня</td><td>{d.ops.spentToday} ₽ из {d.ops.dailyLimit} ₽</td></tr>
+              <tr><td>Расходы на подготовку книг сегодня</td><td>{d.ops.spentToday} ₽ из {d.ops.dailyLimit} ₽</td></tr>
             </tbody>
           </table>
         </section>
@@ -186,7 +186,7 @@ export default async function Page({ searchParams }: { searchParams: Promise<Rec
           <small className="muted">Замеров: {d.vitals.n}</small>
         </section>
         <section className="panel">
-          <Progress title="Генерация сегодня" value={d.ops.spentToday} max={d.ops.dailyLimit} />
+          <Progress title="Расходы на подготовку книг сегодня" value={d.ops.spentToday} max={d.ops.dailyLimit} />
           <p className="small muted" style={{ marginTop: 8 }}>Расход за период: {fmt(d.unit.genRub)}. По дням — на графике выше.</p>
         </section>
       </div>

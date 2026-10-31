@@ -5,7 +5,7 @@
 import { db } from "./db";
 import { hmac } from "./crypto";
 import { notifySafe, alertOwner } from "./notify";
-import { birthdayReminders, fmtDay } from "./holidays-core";
+import { birthdayReminders, fmtDay, BIRTHDAY_REMINDER_DAYS } from "./holidays-core";
 import { declineName, guessGender, isFeminine, type Case } from "./declension";
 import { caseAfter } from "../content/title";
 import { getLeadTimes } from "./holidays";
@@ -15,8 +15,8 @@ export const TRIGGER_EVENTS = {
   preview_abandoned: "Превью готово, но заказа нет",
   pdf_only: "Куплен только PDF — предложить печать с зачётом",
   delivered: "Книга доставлена — отзыв и «Приведи друга»",
-  birthday: "За 3 недели до дня рождения ребёнка (старое правило — то же, что «героя»)",
-  hero_birthday: "За 21 день до дня рождения сохранённого героя (любая аудитория)",
+  birthday: "За месяц (30 дней) до дня рождения ребёнка (старое правило — то же, что «героя»)",
+  hero_birthday: "За месяц (30 дней) до дня рождения сохранённого героя (любая аудитория)",
 } as const;
 export type TriggerEvent = keyof typeof TRIGGER_EVENTS;
 
@@ -28,10 +28,10 @@ export const DEFAULT_RULES: { name: string; event: TriggerEvent; delayMinutes: n
   { name: "Только PDF → печать", event: "pdf_only", delayMinutes: 1440, template: "Хотите книгу «{title}» в твёрдой обложке? Стоимость PDF зачтём — вы доплатите только разницу: {link}" },
   { name: "После доставки: отзыв и друг", event: "delivered", delayMinutes: 4320, template: "Как вам книга? Будем благодарны за отзыв: {review}. А друзья по вашей ссылке получат −10%: {ref}" },
   {
-    name: "День рождения героя через 21 день",
+    name: "День рождения героя через месяц",
     event: "hero_birthday",
     delayMinutes: 0,
-    template: "{date} — день рождения у {name}. Новая книга, где {name} — {hero_role}, станет тёплым подарком. Печатную успеем, если заказать до {deadline}: {link}",
+    template: "Ровно через месяц, {date}, день рождения у {name}. Новая книга, где {name} — {hero_role}, станет тёплым подарком. Печатную успеем, если заказать до {deadline}: {link}",
   },
 ];
 
@@ -109,14 +109,14 @@ async function candidates(event: TriggerEvent, delayMinutes: number): Promise<Ca
     }
     case "birthday":
     case "hero_birthday": {
-      // Сохранённые герои (кабинет → «Мои герои»): за 21 день по Москве, окно 2 дня на случай лимита «1 в сутки»
+      // Сохранённые герои (кабинет → «Мои герои»): за месяц (BIRTHDAY_REMINDER_DAYS = 30) по Москве, окно 2 дня на случай лимита «1 в сутки»
       const heroes = await db.hero.findMany({
         where: { role: "main", birthDate: { not: null }, userId: { not: null }, user: { deletedAt: null, marketingOk: true } },
         select: { id: true, userId: true, name: true, birthDate: true, gender: true },
         orderBy: { createdAt: "desc" },
         take: 5000,
       });
-      const list = birthdayReminders(heroes.map((h) => ({ id: h.id, userId: h.userId, name: h.name, birthDate: h.birthDate! })), new Date(), 21, 2, await getLeadTimes());
+      const list = birthdayReminders(heroes.map((h) => ({ id: h.id, userId: h.userId, name: h.name, birthDate: h.birthDate! })), new Date(), BIRTHDAY_REMINDER_DAYS, 2, await getLeadTimes());
       const genderOf = new Map(heroes.map((h) => [h.id, h.gender ?? ""]));
       return list.map((b) => ({
         userId: b.userId!,

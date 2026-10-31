@@ -152,7 +152,7 @@ export default async function Page({ params, searchParams }: { params: Promise<{
                 <form action={regenerateAction} className="row" style={{ marginTop: 6 }}>
                   {hid("orderId", o.id)}{hid("bookId", book.id)}{hid("index", String(p.index))}
                   <span className="small">{p.index === 0 ? "Обложка" : `Разворот ${p.index}`}</span>
-                  <button className="link-btn">Перегенерировать</button>
+                  <button className="link-btn">Подготовить заново</button>
                 </form>
               </div>
             )))}

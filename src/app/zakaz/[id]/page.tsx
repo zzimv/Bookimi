@@ -21,7 +21,7 @@ const COPY_STATUS: Record<string, string> = {
   PREVIEW_READY: "превью готово",
   FULL_QUEUED: "рисуем книгу",
   FULL_READY: "книга готова",
-  FAILED: "повторяем генерацию",
+  FAILED: "готовим заново",
 };
 
 export const metadata: Metadata = { title: "Заказ", robots: { index: false } };

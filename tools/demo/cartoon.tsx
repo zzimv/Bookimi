@@ -423,7 +423,7 @@ export function CartoonPlayer({ book }: { book: DBook }) {
       </div>
       <p className="small muted" style={{ margin: "8px 0 0" }} data-cartoon-voice>{mode}.</p>
       <p className="small demo-note" style={{ margin: "8px 0 0" }}>
-        Демо: мультфильм играет прямо в браузере. На сайте — MP4 1080×1080 и 9:16 с диктором SpeechKit или вашим голосом, музыкой и ссылкой «Поделиться».
+        Демо: мультфильм играет прямо в браузере. На сайте — MP4 1080×1080 и 9:16 с диктором или вашим голосом, музыкой и ссылкой «Поделиться».
       </p>
       <div className="row" style={{ marginTop: 10 }}>
         {c.ownVoice ? (

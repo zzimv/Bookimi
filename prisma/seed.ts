@@ -82,6 +82,12 @@ async function main() {
         data: { name: r.name, event: r.event, condition: {}, delayMinutes: r.delayMinutes, channel: "preferred", template: r.template, promoPercent: r.promoPercent, isMarketing: true, isActive: !old },
       });
     }
+    // rev 07: напоминание о дне рождения — за месяц, а не за 21 день. Правило с нетронутыми текстами обновляем.
+    const bday = DEFAULT_RULES.find((r) => r.event === "hero_birthday")!;
+    await db.triggerRule.updateMany({
+      where: { event: "hero_birthday", name: "День рождения героя через 21 день" },
+      data: { name: bday.name, template: bday.template },
+    });
   }
 
   // Стили картинок: все живые из профилей; промпты — в коде (src/content/art), в БД — название и включение.

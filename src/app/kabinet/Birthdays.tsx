@@ -3,6 +3,9 @@
 import Link from "next/link";
 import { fmtDay, plural, type BirthdayCalc } from "@/lib/holidays-core";
 
+/** Подсказка под списком — в тон правилу hero_birthday (BIRTHDAY_REMINDER_DAYS = 30). */
+export const BIRTHDAY_HINT = "За месяц до дня рождения напомним письмом или в мессенджере — если вы подписаны на рассылку.";
+
 export function HeroBirthdays({ list, hrefFor, title = "Ближайшие дни рождения ваших героев" }: { list: BirthdayCalc[]; hrefFor: (b: BirthdayCalc) => string; title?: string }) {
   if (!list.length) return null;
   return (
@@ -30,6 +33,7 @@ export function HeroBirthdays({ list, hrefFor, title = "Ближайшие дн�
           </li>
         ))}
       </ul>
+      <p className="small muted">{BIRTHDAY_HINT}</p>
     </section>
   );
 }

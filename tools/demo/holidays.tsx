@@ -124,7 +124,7 @@ export async function DemoGeroi() {
             <Link className="btn btn--primary btn--sm" href="/sozdat">Новая книга с этим героем</Link>
           </div>
         ))}
-        {heroes.length === 0 && <p className="muted">Пока пусто — герой появится после первой анкеты. Укажите дату рождения, и мы напомним о празднике.</p>}
+        {heroes.length === 0 && <p className="muted">Пока пусто — герой появится после первой анкеты. Укажите дату рождения — за месяц до праздника напомним.</p>}
       </div>
     </>
   );

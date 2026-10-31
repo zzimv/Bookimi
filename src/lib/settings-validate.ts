@@ -73,7 +73,7 @@ const SCHEMAS: Partial<Record<SettingKey, z.ZodTypeAny>> = {
     .passthrough(),
   limits: z
     .object({
-      dailySpendRub: num("Расходы на генерацию в сутки", 0, 1_000_000),
+      dailySpendRub: num("Расходы на подготовку книг в сутки", 0, 1_000_000),
       staffDailySpendRub: num("Расходы сотрудников в сутки", 0, 1_000_000),
       previewsPerContact: num("Превью в сутки на контакт", 1, 100),
       textsPerDevice: num("Сказок в сутки с устройства", 1, 100),

@@ -317,7 +317,7 @@ export function pageUrl(b: DBook, index: number, opts: { full?: boolean } = {}) 
       mood: b.mood || null,
       hero: { ...heroLook(a), kind },
       extras,
-      caption: "демо-иллюстрация · на сайте её рисует нейросеть",
+      caption: "демо-иллюстрация · на сайте рисуем по фото в выбранном стиле",
       title: index === 0 ? b.text?.title : undefined,
       ...(crowdOn ? { crowd: crowdLooks(g.members, g.adults, { kind: plot!.audience === "TEEN" ? "teen" : "child", age: heroAge(a) }), crowdLayout: plot!.spreads[idx - 1]?.text.includes("{ПЕРЕКЛИЧКА}") ? ("photo" as const) : ("around" as const) } : {}),
     });
@@ -353,7 +353,7 @@ function startJob(b: DBook, kind: JobKind) {
   };
   if (kind === "preview" && !b.paidFull && spentTodayRub() >= DEFAULTS.limits.dailySpendRub) {
     b.error = "limit";
-    log(`Алерт владельцу: лимит расходов на генерацию исчерпан (${spentTodayRub()} ₽ из ${DEFAULTS.limits.dailySpendRub} ₽). Превью ждут в очереди.`);
+    log(`Алерт владельцу: лимит расходов на подготовку книг исчерпан (${spentTodayRub()} ₽ из ${DEFAULTS.limits.dailySpendRub} ₽). Превью ждут в очереди.`);
     return;
   }
   b.error = null;

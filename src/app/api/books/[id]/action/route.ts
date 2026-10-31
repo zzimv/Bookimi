@@ -36,7 +36,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   if (!b) return err("Некорректный запрос");
   const { book } = own;
   const anon = await anonId();
-  // Сотрудник тестирует свою книгу: без лимитов покупателя; расходы ИИ — в свой суточный лимит (src/lib/staff.ts)
+  // Сотрудник тестирует свою книгу: без лимитов покупателя; расходы на сервисы — в свой суточный лимит (src/lib/staff.ts)
   const staff = isStaff(own.user?.role);
 
   switch (b.action) {
