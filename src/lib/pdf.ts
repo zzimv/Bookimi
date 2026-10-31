@@ -6,6 +6,7 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { spreadHtml, SPREAD_PDF_CSS } from "./spread-markup";
+import { normalizeName } from "./declension";
 
 export interface BookPageData {
   title: string;
@@ -51,7 +52,7 @@ export function fonts() {
 /** Подписи книги по аудитории: последняя страница, задняя обложка, возрастная маркировка. */
 export function bookWording(b: Pick<BookPageData, "heroName" | "audience" | "heroGender">) {
   const girl = b.heroGender === "girl";
-  const name = b.heroName;
+  const name = normalizeName(b.heroName);
   switch (b.audience) {
     case "PET":
       return { madeFor: `Эта книга — о ${girl ? "любимице" : "любимце"} по кличке ${name}.`, back: `История, в которой ${name} — ${girl ? "главная героиня" : "главный герой"}.`, rating: "0+" };

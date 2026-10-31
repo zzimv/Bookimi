@@ -1,6 +1,7 @@
 import { db } from "@/lib/db";
 import { requireAdmin } from "@/lib/admin";
 import { reviewAction } from "../../actions";
+import { normalizeSignature } from "@/lib/names";
 
 export default async function Page() {
   await requireAdmin("reviews");
@@ -13,7 +14,7 @@ export default async function Page() {
       {reviews.map((r) => (
         <div className="panel" key={r.id}>
           <div className="row" style={{ justifyContent: "space-between" }}>
-            <span><b>{r.authorName}</b> <span className="review__stars">{"★".repeat(r.rating)}</span></span>
+            <span><b>{normalizeSignature(r.authorName)}</b> <span className="review__stars">{"★".repeat(r.rating)}</span></span>
             <span className={`badge ${r.status === "pending" ? "badge--gold" : r.status === "rejected" ? "badge--red" : ""}`}>{r.status === "pending" ? "на модерации" : r.status === "approved" ? "опубликован" : "отклонён"}</span>
           </div>
           <p>{r.text}</p>

@@ -4,7 +4,7 @@ import { db } from "@/lib/db";
 import { userOrLogin } from "@/lib/auth";
 import { signedUrl } from "@/lib/storage";
 import { cfg } from "@/lib/settings";
-import { declineName } from "@/lib/declension";
+import { declineName, normalizeName } from "@/lib/declension";
 import { CopyField } from "./Forms";
 import { nextOccasion } from "./occasion";
 import { HeroBirthdays } from "./Birthdays";
@@ -58,7 +58,7 @@ export default async function Page() {
       return n;
     }
   };
-  for (const h of heroes) bdays.set(h.name, { name: h.name, nameGen: gen(h.name, h.gender), date: h.birthDate! });
+  for (const h of heroes) bdays.set(normalizeName(h.name), { name: normalizeName(h.name), nameGen: gen(h.name, h.gender), date: h.birthDate! });
   const past: string[] = [];
   for (const b of books) {
     const p = b.params as { hero?: { birthDate?: string }; occasion?: { key?: string } } | null;

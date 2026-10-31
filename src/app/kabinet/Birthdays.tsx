@@ -2,6 +2,7 @@
 // Данные — upcomingBirthdays (holidays-core) по сохранённым героям; компонент без БД, работает и в демо-стенде.
 import Link from "next/link";
 import { fmtDay, plural, type BirthdayCalc } from "@/lib/holidays-core";
+import { normalizeName } from "@/lib/declension";
 
 /** Подсказка под списком — в тон правилу hero_birthday (BIRTHDAY_REMINDER_DAYS = 30). */
 export const BIRTHDAY_HINT = "За месяц до дня рождения напомним письмом или в мессенджере — если вы подписаны на рассылку.";
@@ -20,7 +21,7 @@ export function HeroBirthdays({ list, hrefFor, title = "Ближайшие дн�
             </span>
             <div className="bdays__who">
               <b>
-                {b.name}
+                {normalizeName(b.name)}
                 {b.turns ? ` — исполнится ${b.turns} ${plural(b.turns, "год", "года", "лет")}` : ""}
               </b>
               <span>

@@ -166,8 +166,8 @@ export function OtpForm({
               <span>
                 Как к вам обращаться <span className="muted small">— необязательно</span>
               </span>
-              <input className="input ym-disable-keys" name="first-name" autoComplete="given-name" maxLength={40} value={firstName} aria-invalid={checkFirstName(firstName) === false ? true : undefined} onChange={(e) => setFirstName(typeFirstName(e.target.value))} placeholder="Анна" />
-              <small>Так поздороваемся в кабинете и подставим имя получателя при оформлении. Буквы, пробел или дефис.</small>
+              <input className="input ym-disable-keys" name="first-name" autoComplete="given-name" maxLength={40} value={firstName} aria-invalid={checkFirstName(firstName) === false ? true : undefined} onChange={(e) => setFirstName(typeFirstName(e.target.value))} onBlur={() => { const n = checkFirstName(firstName); if (n) setFirstName(n); }} placeholder="Анна" />
+              <small>Так поздороваемся в кабинете и подставим имя получателя при оформлении. Буквы, пробел, дефис или апостроф.</small>
             </label>
           )}
           {withConsent &&

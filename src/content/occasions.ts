@@ -99,7 +99,7 @@ export const GENERIC_HOOKS: Record<string, OccasionHook> = {
   },
   "den-otca": {
     opening: "В октябре есть день, когда весь мир говорит папам спасибо.",
-    closing: "С Днём отца, {ЛАСКОВО.им}! Ты наш самый надёжный герой.",
+    closing: "С Днём отца, {ЛАСКОВО.им}! Ты {Р:наш самый надёжный герой|наша самая надёжная героиня}.",
     openingScene: "an autumn morning, a handmade card on the table",
     closingScene: "a warm family moment in autumn, a handmade card",
   },

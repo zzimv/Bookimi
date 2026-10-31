@@ -20,7 +20,7 @@ import { moodsFor } from "../../src/content/moods";
 import { moodSwatch } from "../../src/lib/mood-swatch";
 import { ruDate } from "../../src/lib/pricing";
 import { METHOD_TITLES } from "../../src/lib/shipping";
-import { declineName } from "../../src/lib/declension";
+import { declineName, normalizeName } from "../../src/lib/declension";
 import { canAcceptPayments, DEFAULTS } from "../../src/lib/settings";
 import { FORMATS } from "../../src/lib/catalog-defaults";
 import { bookAudience, bookById, bulkState, cartoonOf, catalogForPricing, demoPrefill, heroAccOf, journeyOf, markPaid, orderById, pageUrl, pdfPaidFor, S, SHIP_METHODS } from "./api";
@@ -250,7 +250,7 @@ export async function KabinetHome() {
       try {
         gen = declineName(h.name, "род", h.gender);
       } catch {}
-      bdays.set(h.name, { name: h.name, nameGen: gen, date: bd });
+      bdays.set(h.name, { name: normalizeName(h.name), nameGen: gen, date: bd });
     }
   }
   const hint = nextOccasion({ birthdays: [...bdays.values()], pastOccasions: past });
@@ -305,7 +305,7 @@ export async function KabinetHome() {
             const title = b.text?.title ?? "Сказка сочиняется";
             const [label, cls] = STATUS[b.status] ?? [b.status, ""];
             const ol = orderLine.get(b.id)?.split("|");
-            const hero = b.params.hero.name;
+            const hero = normalizeName(b.params.hero.name ?? "");
             return (
               <article key={b.id} className="shelf__book">
                 <Link href={b.paidFull ? `/kabinet/kniga/${b.id}` : `/kniga/${b.id}`} className="cover shelf__cover" aria-label={`Открыть «${title}»`}>

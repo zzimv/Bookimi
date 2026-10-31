@@ -4,6 +4,7 @@ import { userOrLogin } from "@/lib/auth";
 import { upcomingBirthdays } from "@/lib/holidays-core";
 import { getLeadTimes } from "@/lib/holidays";
 import { HeroBirthdays } from "../Birthdays";
+import { normalizeName } from "@/lib/declension";
 
 export default async function Page() {
   const user = await userOrLogin();
@@ -23,7 +24,7 @@ export default async function Page() {
       <div className="cards">
         {uniq.map((h) => (
           <div className="panel" key={h.id}>
-            <h3>{h.name}{h.nickname ? ` (${h.nickname})` : ""}</h3>
+            <h3>{normalizeName(h.name)}{h.nickname ? ` (${normalizeName(h.nickname)})` : ""}</h3>
             <p className="small muted">{h.gender === "girl" ? "Девочка" : "Мальчик"}{h.ageGroup ? `, ${h.ageGroup} лет` : ""}{h.interests.length ? ` · ${h.interests.join(", ")}` : ""}</p>
             <Link className="btn btn--primary btn--sm" href={`/sozdat?geroj=${h.id}`}>Новая книга с этим героем</Link>
           </div>

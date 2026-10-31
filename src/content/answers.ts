@@ -5,14 +5,14 @@
 
 import { z } from "zod";
 import "../lib/zod-ru";
-import { normalizeName } from "../lib/declension";
+import { zName, zNameOpt } from "../lib/names";
 import { EXTRA_ROLES, GROUP_ADULT_ROLES, GROUP_MAX_LIMIT, HERO_KIND_BY_AUDIENCE, type HeroKind } from "./types";
 import type { AudienceKey } from "./profiles";
 
 const str = (max: number) => z.string().trim().max(max);
-/** Имя: всегда с заглавной буквы («маша» → «Маша»), склоняется отдельно в declension.ts. */
-const nameStr = (max: number, msg = "Укажите имя") => z.string().trim().max(max).min(1, msg).transform(normalizeName);
-const nameOpt = (max: number) => z.string().trim().max(max).optional().default("").transform(normalizeName);
+/** Имя: всегда с заглавной буквы («маша» → «Маша»), склоняется отдельно в declension.ts. Нормализация — src/lib/names.ts. */
+const nameStr = (max: number, msg = "Укажите имя") => zName(max, msg);
+const nameOpt = (max: number) => zNameOpt(max, "free");
 
 /** Российский мобильный → +7XXXXXXXXXX. Принимает «8 (912) 345-67-89», «+7 912 3456789», «9123456789». */
 export function normalizePhone(raw: string): string | null {
@@ -48,7 +48,8 @@ const Gender = z.preprocess(
 
 export const ExtraV2 = z.object({
   role: z.enum(EXTRA_ROLES),
-  name: nameStr(40),
+  /** «Свой вариант» («Робот Бип-2») — можно цифры. */
+  name: zName(40, "Укажите имя", "free"),
   /** Грамматический род для {Рn:…}; если пусто — по роли или по имени (guessGender). n — средний (облако, солнце). */
   gender: z.enum(["boy", "girl", "n"]).optional(),
   description: str(200).optional().default(""),
@@ -102,7 +103,8 @@ export const AnswersV2 = z.preprocess(
     /** id сегмента из SEGMENTS; пусто — определить по возрасту/виду. */
     segment: str(40).default(""),
     hero: z.object({
-      name: nameStr(30),
+      /** Имя или кличка питомца (можно цифры: «Бусинка-2»). */
+      name: zName(30, "Укажите имя", "free"),
       nickname: nameOpt(30),
       gender: Gender,
       ageGroup: z.enum(["2-3", "4-5", "6-7", "8-9"]).optional(),

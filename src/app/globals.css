@@ -391,7 +391,8 @@ body:has(.flow-nav) .cookie, body:has(.sticky-cta) .cookie { bottom: calc(92px +
 /* ───────── Формы ───────── */
 .field { display: grid; gap: 6px; margin-bottom: 16px; }
 .field > span, .label { font-weight: 700; font-size: var(--fs-sm); }
-.field small, .hint, .names-hint { color: var(--ink-soft); font-size: var(--fs-sm); }
+.field small, .hint, .names-hint, .name-hint { color: var(--ink-soft); font-size: var(--fs-sm); }
+.name-hint { display: block; margin-top: 4px; }
 .input, .select, .textarea {
   width: 100%; min-height: 48px; padding: 10px 14px; border: 1.5px solid var(--line); border-radius: var(--r-ui);
   background: var(--surface); font: 500 var(--fs-base)/1.4 var(--font-body); color: var(--ink);

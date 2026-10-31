@@ -9,6 +9,7 @@ import { signedUrl } from "@/lib/storage";
 import { ORDER_STATUS } from "@/lib/labels";
 import { METHOD_TITLES } from "@/lib/shipping";
 import { npdMode } from "@/lib/npd";
+import { normalizeName } from "@/lib/names";
 import {
   attachReceiptAction, confirmTransferAction, refundAction, regenerateAction, reprintAction, sendToPrintAction, setStatusAction,
 } from "../../../actions";
@@ -55,7 +56,7 @@ export default async function Page({ params, searchParams }: { params: Promise<{
         </section>
         <section className="panel">
           <b>Покупатель и доставка</b>
-          <p className="small">{o.contactName}<br />{o.contactPhone} · {o.contactEmail ?? o.user.email}</p>
+          <p className="small">{normalizeName(o.contactName ?? "")}<br />{o.contactPhone} · {o.contactEmail ?? o.user.email}</p>
           {o.shipment && (
             <p className="small">
               {METHOD_TITLES[o.shipment.method as keyof typeof METHOD_TITLES]}

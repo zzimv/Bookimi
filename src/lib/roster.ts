@@ -1,6 +1,7 @@
 // Список группы (детсад, класс): быстрый ввод — вставить имена списком, пол угадывается по имени
 // (Саша, Женя, Валя… — спрашиваем), проверка пустых, повторов и длины. Безопасно для клиента.
-import { guessGender } from "./declension";
+import { guessGender, normalizeName } from "./declension";
+import { nameError } from "./names";
 
 export type RosterGender = "boy" | "girl";
 
@@ -33,14 +34,12 @@ export function guessChildGender(name: string): RosterGender | null {
   return guessGender(first);
 }
 
-const cap = (w: string) => (w ? w[0].toUpperCase() + w.slice(1) : w);
-
 /** Пометка пола в строке: «Аня (ж)», «Женя м», «Саша — девочка». */
 const MARK = /(?:\s+|\s*[([—–-]\s*)(м|ж|мальчик|девочка|мал\.?|дев\.?)\s*[)\]]?\s*$/i;
 
 /**
  * Разбор вставленного списка: по строкам, запятым или «;». Номера («1.», «2)»), маркеры («-», «•») и лишние пробелы
- * убираются, первая буква — заглавная. Пол — из пометки «(м)/(ж)» или по имени.
+ * убираются, регистр — normalizeName («МАША» → «Маша»). Пол — из пометки «(м)/(ж)» или по имени.
  */
 export function parseNames(text: string): RosterItem[] {
   const parts = text
@@ -56,7 +55,8 @@ export function parseNames(text: string): RosterItem[] {
       gender = /^(м|мал)/i.test(m[1]) ? "boy" : "girl";
       name = raw.slice(0, raw.length - m[0].length).trim();
     }
-    name = name.split(" ").map(cap).join(" ");
+    // Единая нормализация имён: «МАША» → «Маша», «анна-мария» → «Анна-Мария», «саша к.» → «Саша К.»
+    name = normalizeName(name);
     const g = gender ?? guessChildGender(name) ?? undefined;
     return { name, gender: g, ambiguous: !gender && !g };
   });
@@ -64,7 +64,7 @@ export function parseNames(text: string): RosterItem[] {
 
 export interface RosterIssue {
   index: number;
-  kind: "empty" | "long" | "duplicate" | "gender" | "hero";
+  kind: "empty" | "long" | "duplicate" | "gender" | "hero" | "chars";
   message: string;
 }
 
@@ -80,10 +80,11 @@ export function rosterIssues(members: { name: string; gender?: string }[], opts:
     const n = norm(m.name ?? "");
     if (!n) return out.push({ index: i, kind: "empty", message: `Строка ${i + 1}: впишите имя или уберите строку` });
     if (m.name.trim().length > 30) out.push({ index: i, kind: "long", message: `«${m.name.slice(0, 30)}…» — не длиннее 30 символов` });
-    if (hero && n === hero) out.push({ index: i, kind: "hero", message: `${m.name} — это имя героя книги. Если это другой ребёнок, добавьте первую букву фамилии: «${cap(m.name.trim())} К.»` });
-    else if (seen.has(n)) out.push({ index: i, kind: "duplicate", message: `${m.name} — уже есть в списке. Чтобы различать детей, добавьте букву фамилии: «${cap(m.name.trim())} К.»` });
+    if (hero && n === hero) out.push({ index: i, kind: "hero", message: `${normalizeName(m.name)} — это имя героя книги. Если это другой ребёнок, добавьте первую букву фамилии: «${normalizeName(m.name.trim())} К.»` });
+    else if (seen.has(n)) out.push({ index: i, kind: "duplicate", message: `${normalizeName(m.name)} — уже есть в списке. Чтобы различать детей, добавьте букву фамилии: «${normalizeName(m.name.trim())} К.»` });
     seen.set(n, i);
-    if (!m.gender) out.push({ index: i, kind: "gender", message: `${m.name}: мальчик или девочка?` });
+    if (nameError(m.name, "person")) out.push({ index: i, kind: "chars", message: `Строка ${i + 1}: в имени только буквы, пробел, дефис, апостроф или точка инициала` });
+    if (!m.gender) out.push({ index: i, kind: "gender", message: `${normalizeName(m.name)}: мальчик или девочка?` });
   });
   if (opts.max !== undefined && members.length > opts.max) out.push({ index: opts.max, kind: "long", message: `В этой книге — до ${opts.max} детей кроме героя` });
   return out;

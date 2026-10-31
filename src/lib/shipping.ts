@@ -5,6 +5,7 @@ import { findCity, normalizeCity, searchCities, type City } from "./cities";
 import { tableQuote } from "./ship-zones";
 import type { Pvz } from "./pvz";
 import type { DeliveryAddress } from "./delivery";
+import { normalizeName } from "./names";
 
 export type ShipMethod = "pickup" | "cdek_pvz" | "cdek_courier" | "pochta" | "yandex";
 
@@ -253,5 +254,5 @@ export function cdekOrderInput(order: {
   const sh = order.shipment;
   if (!sh || (sh.method !== "cdek_pvz" && sh.method !== "cdek_courier")) return null;
   const address = { ...(sh.address as ShipAddress), pvzCode: sh.pvzCode ?? (sh.address as ShipAddress).pvzCode, cityCode: sh.cityCode ?? (sh.address as ShipAddress).cityCode };
-  return { code: order.publicCode, method: sh.method, name: order.contactName ?? "", phone: order.contactPhone ?? "", address, books: order.books } as Parameters<typeof createCdekOrder>[0];
+  return { code: order.publicCode, method: sh.method, name: normalizeName(order.contactName ?? ""), phone: order.contactPhone ?? "", address, books: order.books } as Parameters<typeof createCdekOrder>[0];
 }

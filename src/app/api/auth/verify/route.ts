@@ -1,7 +1,7 @@
 import { z } from "zod";
 import "@/lib/zod-ru";
 import { cookies } from "next/headers";
-import { anonId, cleanFirstName, normalizeTarget, verifyOtp } from "@/lib/auth";
+import { anonId, cleanFirstName, FIRST_NAME_ERROR, normalizeTarget, verifyOtp } from "@/lib/auth";
 import { attachAnonConsents, hasConsent } from "@/lib/consent";
 import { body, deviceKey, err, json, throttle } from "@/lib/api";
 import { subjectHash } from "@/lib/crypto";
@@ -29,7 +29,7 @@ export async function POST(req: Request) {
   );
   if (!b || !(b.email || b.target)) return err("Введите код");
   const firstName = cleanFirstName(b.firstName);
-  if (firstName === false) return err("Имя: до 40 символов — буквы, пробел или дефис");
+  if (firstName === false) return err(FIRST_NAME_ERROR);
   // Согласие на обработку ПДн — один раз: если уже дано (с этого устройства или в аккаунте), повторно не требуем.
   // Проверяем до кода, чтобы не «сжечь» его. Сотрудникам согласие покупателя не нужно.
   const anon = await anonId();

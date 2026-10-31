@@ -15,7 +15,9 @@ import {
   ADULT_AGES, AGE_GROUPS, AUDIENCE_EXTRA_ROLES, CLOTHES, dedicationsFor, EXTRA_ROLE_LABELS, FUR, HAIR, HAIR_ADULT, HAIRSTYLE, INTERESTS, occasionChips, SKIN, TEEN_INTERESTS,
   type QuizAnswers,
 } from "@/lib/quiz";
-import { fillTags } from "@/lib/declension";
+import { fillTags, normalizeName } from "@/lib/declension";
+import { NameHint } from "./NameHint";
+import { nameError } from "@/lib/names";
 import { occasionWord } from "@/content/occasions";
 import { titleForCatalog, titleTemplate } from "@/content/title";
 import { sampleUrl } from "@/lib/obrazec";
@@ -308,7 +310,7 @@ export function QuizWizard({
 
   const story = stories.find((s) => s.slug === a.story.slug && s.audience === aud) ?? null;
   const fill = useMemo(() => {
-    const h = { name: a.hero.name || "Имя", nickname: a.hero.nickname || a.hero.name || "Имя", gender: a.hero.gender };
+    const h = { name: normalizeName(a.hero.name ?? "") || "Имя", nickname: normalizeName(a.hero.nickname || a.hero.name || "") || "Имя", gender: a.hero.gender };
     return (t: string) => fillTags(t, { hero: h, extras: a.extras.map((e) => ({ name: e.name || e.what || "…", gender: e.gender })), occasion: occasionWord(a.occasion.key, a.occasion.custom) ?? (a.occasion.custom || "особенный день") });
   }, [a.hero, a.extras, a.occasion.key, a.occasion.custom]);
 
@@ -404,7 +406,7 @@ export function QuizWizard({
   // До ввода имени — «Ваш ребёнок и …» (как в каталоге), а не «Имя и …»
   const named = Boolean(a.hero.name?.trim());
   const coverTitle = story ? fill(named ? titleTemplate(story.title) : titleForCatalog(story.title, aud)) : own ? a.story.ideaChoice?.title || "Своя история" : "";
-  const coverName = a.hero.name?.trim() || HERO_WORD[aud];
+  const coverName = normalizeName(a.hero.name ?? "") || HERO_WORD[aud];
   const mode = (k: string): Mode => modes[k] ?? (photoEnabled ? "photo" : "describe");
 
   function chooseAudience(next: AudienceKey) {
@@ -429,6 +431,8 @@ export function QuizWizard({
   function validate(s: FlowStep): string {
     if (s === "heroes") {
       if (!a.hero.name?.trim()) return aud === "PET" ? "Как зовут питомца?" : "Как зовут героя?";
+      const badName = nameError(a.hero.name, "free") ?? nameError(a.hero.nickname, "free") ?? a.extras.map((e) => nameError(e.name, "free")).find(Boolean);
+      if (badName) return badName;
       if (aud === "PET" && !a.pet.species) return "Кто это: собака или кошка?";
       if (!a.hero.gender) return aud === "PET" ? "Мальчик или девочка?" : `Выберите: ${GENDER[aud][0].toLowerCase()} или ${GENDER[aud][1].toLowerCase()}`;
       if (aud === "CHILD" && !a.hero.ageGroup && !a.hero.birthDate) return "Укажите возраст или дату рождения";
@@ -685,7 +689,8 @@ export function QuizWizard({
                 <div className="grid2">
                   <label className="field">
                     <span>{aud === "PET" ? "Кличка" : "Имя"} <span className="req">*</span></span>
-                    <input className="input input--lg ym-disable-keys" name="hero-name" autoComplete="off" value={a.hero.name ?? ""} maxLength={30} onChange={(e) => hero({ name: e.target.value })} placeholder={aud === "PET" ? "Например, Пушок" : aud === "ADULT" ? "Например, Анна" : "Например, Марк"} />
+                    <input className="input input--lg ym-disable-keys" name="hero-name" autoComplete="off" value={a.hero.name ?? ""} maxLength={30} onChange={(e) => hero({ name: e.target.value })} onBlur={() => hero({ name: normalizeName(a.hero.name ?? "") })} placeholder={aud === "PET" ? "Например, Пушок" : aud === "ADULT" ? "Например, Анна" : "Например, Марк"} />
+                    <NameHint value={a.hero.name} onFix={(v) => hero({ name: v })} />
                   </label>
                   {aud === "PET" && (
                     <div>
@@ -775,7 +780,8 @@ export function QuizWizard({
                     )}
                     <label className="field">
                       <span>{e.role === "pet" ? "Кличка" : e.role === "custom" || e.role === "toy" ? "Как зовут (если есть имя)" : "Имя"}{e.role !== "custom" && <span className="req"> *</span>}</span>
-                      <input className="input ym-disable-keys" name={`extra-name-${i}`} autoComplete="off" maxLength={30} value={e.name} onChange={(ev) => setExtra(i, { name: ev.target.value })} placeholder={e.role === "custom" ? "Например, Дуб Дубыч" : e.role === "mom" ? "Например, мама Оля" : "Например, Аня"} />
+                      <input className="input ym-disable-keys" name={`extra-name-${i}`} autoComplete="off" maxLength={30} value={e.name} onChange={(ev) => setExtra(i, { name: ev.target.value })} onBlur={() => setExtra(i, { name: normalizeName(e.name) })} placeholder={e.role === "custom" ? "Например, Дуб Дубыч" : e.role === "mom" ? "Например, мама Оля" : "Например, Аня"} />
+                      <NameHint value={e.name} onFix={(v) => setExtra(i, { name: v })} />
                     </label>
                     {!HUMAN_ROLES.includes(e.role) && (
                       <Chips name={`extra-gender-${i}`} label="Род" items={extraGenders(e.role)} value={(e.gender ?? "") as "boy"} onChange={(v) => setExtra(i, { gender: (v || undefined) as Extra["gender"] })} />
@@ -909,8 +915,9 @@ export function QuizWizard({
               {aud !== "TEEN" && (
                 <label className="field">
                   <span>Как ласково зовут дома</span>
-                  <input className="input ym-disable-keys" name="hero-nickname" autoComplete="off" value={a.hero.nickname ?? ""} maxLength={30} onChange={(e) => hero({ nickname: e.target.value })} placeholder={aud === "PET" ? "Например, Пушистик" : aud === "ADULT" ? "Например, Анечка" : "Например, Марусик"} />
+                  <input className="input ym-disable-keys" name="hero-nickname" autoComplete="off" value={a.hero.nickname ?? ""} maxLength={30} onChange={(e) => hero({ nickname: e.target.value })} onBlur={() => hero({ nickname: normalizeName(a.hero.nickname ?? "") })} placeholder={aud === "PET" ? "Например, Пушистик" : aud === "ADULT" ? "Например, Анечка" : "Например, Марусик"} />
                   <small>Необязательно. Так герой будет звучать в тёплых местах книги</small>
+                  <NameHint value={a.hero.nickname} onFix={(v) => hero({ nickname: v })} />
                 </label>
               )}
               {aud === "CHILD" && (
@@ -988,7 +995,7 @@ export function QuizWizard({
                           <div className="grid2">
                             <label className="field">
                               <span>{EXTRA_ROLE_LABELS[e.role] ?? e.role} — имя <span className="req">*</span></span>
-                              <input className="input ym-disable-keys" name={`partner-name-${i}`} autoComplete="off" maxLength={30} value={e.name} onChange={(ev) => setExtra(i, { name: ev.target.value })} placeholder="Например, Илья" />
+                              <input className="input ym-disable-keys" name={`partner-name-${i}`} autoComplete="off" maxLength={30} value={e.name} onChange={(ev) => setExtra(i, { name: ev.target.value })} onBlur={() => setExtra(i, { name: normalizeName(e.name) })} placeholder="Например, Илья" />
                             </label>
                             {!HUMAN_ROLES.includes(e.role) && (
                               <div>
@@ -1071,7 +1078,7 @@ export function QuizWizard({
 
         {withPreview && (
           <aside className="quiz__preview" aria-label="Обложка, пример">
-            <Cover theme={story?.coverTheme ?? ""} title={coverTitle} sample={sampleUrl({ ...previewLook, style, mood: a.mood })} name={named ? (coverTitle.includes(a.hero.name!.trim()) ? "" : coverName) : /ваш/i.test(coverTitle) ? "" : coverName} eager />
+            <Cover theme={story?.coverTheme ?? ""} title={coverTitle} sample={sampleUrl({ ...previewLook, style, mood: a.mood })} name={named ? (coverTitle.includes(coverName) ? "" : coverName) : /ваш/i.test(coverTitle) ? "" : coverName} eager />
             <p className="small muted">
               Обложка-пример: меняется по вашим ответам. {(a.hero.photoIds?.length ?? 0) > 0 ? "По вашему фото нарисуем героя похожим — на шаге превью." : aud === "PET" ? "По фото питомца нарисуем ещё точнее." : "По фото нарисуем героя ещё точнее."}
             </p>

@@ -2,12 +2,12 @@
 import "server-only";
 import type { Order, Shipment } from "@prisma/client";
 import { db } from "@/lib/db";
-import { declineName } from "@/lib/declension";
+import { declineName, normalizeName } from "@/lib/declension";
 import type { JourneyOrder } from "./journey";
 
 export function heroOf(params: unknown): { name?: string; gender?: string } {
   const h = (params as { hero?: { name?: unknown; gender?: unknown } } | null)?.hero;
-  return { name: typeof h?.name === "string" && h.name.trim() ? h.name.trim() : undefined, gender: typeof h?.gender === "string" ? h.gender : undefined };
+  return { name: typeof h?.name === "string" && h.name.trim() ? normalizeName(h.name) : undefined, gender: typeof h?.gender === "string" ? h.gender : undefined };
 }
 
 export function heroAcc(params: unknown): string | null {

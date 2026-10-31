@@ -16,7 +16,7 @@ import { mood as moodById } from "../../content/registry";
 import { artStyle, extraDrawKind } from "../../content/art/index";
 import { HERO_KIND_BY_AUDIENCE, type DemoLook, type HeroKind } from "../../content/types";
 import type { ExtraV2T } from "../../content/answers";
-import { guessGender } from "../declension";
+import { guessGender, normalizeName } from "../declension";
 import { getFile, putFile, deleteFile } from "../storage";
 import { renderPdf, type BookPageData } from "../pdf";
 import { ttsProvider } from "./tts";
@@ -304,7 +304,7 @@ export async function bookPdfData(bookId: string, orderCode?: string): Promise<B
   return {
     title: text.title,
     dedication: dedicationText(a),
-    heroName: a.hero.name,
+    heroName: normalizeName(a.hero.name),
     audience: a.audience,
     heroGender: a.hero.gender,
     cover: await img(cover?.imageKey ?? null),

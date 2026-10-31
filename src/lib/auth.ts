@@ -5,6 +5,8 @@ import type { Role, User } from "@prisma/client";
 import { db } from "./db";
 import { hmac, otpCode, sha256, token } from "./crypto";
 import { hit, pickClientIp } from "./limits";
+import { checkFirstName, FIRST_NAME_ERROR } from "./first-name";
+export { FIRST_NAME_ERROR };
 
 export const SESSION_COOKIE = "bk_session";
 export const ANON_COOKIE = "bk_anon";
@@ -71,10 +73,8 @@ export async function requestOtp(raw: string): Promise<{ ok: true; demoCode?: st
 
 /** «Как к вам обращаться»: до 40 символов — буквы, пробел, дефис (апостроф для «Д'Артаньян» не берём). Пусто — null. */
 export function cleanFirstName(raw: string | null | undefined): string | null | false {
-  const v = (raw ?? "").trim().replace(/\s+/g, " ");
-  if (!v) return null;
-  if (v.length > 40 || !/^[\p{L}]+(?:[ -][\p{L}]+)*$/u.test(v)) return false;
-  return v;
+  // Та же проверка и нормализация, что в форме: «анна» → «Анна» (src/lib/first-name.ts → normalizeName)
+  return checkFirstName(raw);
 }
 
 export async function verifyOtp(raw: string, code: string, opts: { referral?: string; device?: string; firstName?: string | null } = {}) {

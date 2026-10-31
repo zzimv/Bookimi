@@ -1,5 +1,6 @@
 import { getApprovedReviews, getPriceTable, rub } from "@/lib/catalog";
 import { JsonLd } from "./Layout";
+import { normalizeSignature } from "@/lib/names";
 
 export async function PriceSection() {
   const rows = await getPriceTable();
@@ -52,7 +53,7 @@ export async function Reviews() {
                 {"★".repeat(r.rating)}
               </div>
               <blockquote style={{ margin: "8px 0" }}>{r.text}</blockquote>
-              <figcaption className="small muted">{r.authorName}</figcaption>
+              <figcaption className="small muted">{normalizeSignature(r.authorName)}</figcaption>
             </figure>
           ))}
         </div>

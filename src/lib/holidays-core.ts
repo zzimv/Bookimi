@@ -3,6 +3,7 @@
 // Список праздников хранится в настройке `holidays` (таблица Setting, JSON) — см. src/lib/holidays.ts.
 import { z } from "zod";
 import "./zod-ru";
+import { normalizeName } from "./declension";
 
 /** Правило даты: каждый год (день-месяц), разовая дата, N-й день недели месяца, «всегда» (дни рождения). */
 export type HolidayRule =
@@ -437,7 +438,7 @@ export function upcomingBirthdays(heroes: HeroBirthday[], now: Date = new Date()
     if (daysLeft > withinDays) continue;
     const turns = p.y > 1900 && p.y <= ty ? partsOf(date).y - p.y : null;
     const deadline = orderDeadline(date, null, lead);
-    out.push({ id: h.id, userId: h.userId, name: h.name.trim(), gender: h.gender, date, daysLeft, turns: turns && turns > 0 ? turns : null, deadline, printOk: today <= deadline });
+    out.push({ id: h.id, userId: h.userId, name: normalizeName(h.name), gender: h.gender, date, daysLeft, turns: turns && turns > 0 ? turns : null, deadline, printOk: today <= deadline });
   }
   return out.sort((a, b) => a.daysLeft - b.daysLeft || a.name.localeCompare(b.name, "ru"));
 }

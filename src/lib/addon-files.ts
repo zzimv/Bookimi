@@ -6,6 +6,7 @@
 import { esc, fonts, uri, type BookPageData } from "./pdf";
 import { calendarYear, holidayLine, transferLine, WEEKDAYS_RU } from "./calendar";
 import { plainSpread } from "./spread-markup";
+import { normalizeName } from "./declension";
 
 export const BLEED_MM = 3;
 const SAFE = 5;
@@ -150,7 +151,7 @@ function poster(key: string, a: AddonArt, spec: AddonFileSpec) {
     // В стиле книги: иллюстрация во весь лист, название — плашкой снизу, крупно и контрастно
     return page(`${pic(spread(a, 1), 0, 0, W, H)}<div style="position:absolute;left:0;right:0;bottom:0;height:${110 + B}mm;background:linear-gradient(transparent,rgba(10,16,30,.92) 55%)"></div>
       <h1 style="position:absolute;left:${B + 18}mm;right:${B + 18}mm;bottom:${B + 34}mm;color:#fff;font-size:44pt;line-height:1.02;text-transform:uppercase;letter-spacing:.02em">${esc(a.title)}</h1>
-      <p style="position:absolute;left:${B + 18}mm;bottom:${B + 20}mm;color:#9fe3ff;font-size:12pt;letter-spacing:.25em">${esc(a.heroName.toUpperCase())} · ГЛАВНЫЙ ГЕРОЙ</p>${code}`);
+      <p style="position:absolute;left:${B + 18}mm;bottom:${B + 20}mm;color:#9fe3ff;font-size:12pt;letter-spacing:.25em">${esc(a.heroName.toUpperCase())} · ${a.heroGender === "girl" ? "ГЛАВНАЯ ГЕРОИНЯ" : "ГЛАВНЫЙ ГЕРОЙ"}</p>${code}`);
   }
   if (key === "pet-poster") {
     return page(`<div style="position:absolute;inset:0;background:${CREAM}"></div>${pic(a.cover, 0, 0, W, H * 0.74)}
@@ -177,11 +178,12 @@ function stickerSet(key: string, a: AddonArt): Sticker[] {
   const x0 = B + SAFE + 2;
   const teen = key === "teen-stickers";
   const pet = key.startsWith("pet");
+  const girl = a.heroGender === "girl";
   const words = teen
-    ? [a.heroName, "Главный герой", "Не спойлерить!", "Сюжет — мой", "Глава 13 скоро"]
+    ? [a.heroName, girl ? "Главная героиня" : "Главный герой", "Не спойлерить!", "Сюжет — мой", "Глава 13 скоро"]
     : pet
-      ? [a.heroName, a.pet?.species === "cat" ? "Мяу!" : "Гав!", `Лучший ${petWord(a) === "кошка" || petWord(a) === "собака" ? "друг" : petWord(a)}`, "Я тут главный", "Обнимашки"]
-      : [a.heroName, "Я — герой сказки!", "Ура!", "Смелость", "Мечтай"];
+      ? [a.heroName, a.pet?.species === "cat" ? "Мяу!" : "Гав!", `Лучший ${petWord(a) === "кошка" || petWord(a) === "собака" ? "друг" : petWord(a)}`, girl ? "Я тут главная" : "Я тут главный", "Обнимашки"]
+      : [a.heroName, girl ? "Я — героиня сказки!" : "Я — герой сказки!", "Ура!", "Смелость", "Мечтай"];
   const colors = teen ? ["#111827", "#7c3aed", "#ef4444", "#0ea5e9", "#f59e0b"] : ["#1e4d3b", "#f59e0b", "#ef6f6c", "#3b82f6", "#8b5cf6"];
   const list: Sticker[] = [
     { x: x0, y: B + SAFE + 2, w: 62, h: 62, r: 31, img: a.cover },
@@ -355,8 +357,10 @@ function boxLabel(a: AddonArt): string[] {
 }
 
 /** HTML файла допа (PDF). Неизвестный доп или PNG-файл — null. */
-export function addonHtml(key: string, spec: AddonFileSpec, a: AddonArt): AddonHtml | null {
+export function addonHtml(key: string, spec: AddonFileSpec, art: AddonArt): AddonHtml | null {
   if (spec.type !== "pdf") return null;
+  // Имя на допах — всегда с заглавной (старые книги могли сохранить «маша»)
+  const a: AddonArt = { ...art, heroName: normalizeName(art.heroName) };
   const k = spec.kind;
   let pages: string[];
   if (["poster", "teen-poster", "adult-print", "pet-poster"].includes(key)) pages = [poster(key, a, spec)];
@@ -377,7 +381,8 @@ export function addonHtml(key: string, spec: AddonFileSpec, a: AddonArt): AddonH
 // ───────── обои (PNG, sharp) ─────────
 const svgEsc = (s: string) => s.replace(/[<>&"]/g, (c) => ({ "<": "&lt;", ">": "&gt;", "&": "&amp;", '"': "&quot;" })[c]!);
 
-export async function wallpaperPng(a: AddonArt, w: number, h: number): Promise<Buffer> {
+export async function wallpaperPng(art: AddonArt, w: number, h: number): Promise<Buffer> {
+  const a: AddonArt = { ...art, heroName: normalizeName(art.heroName) };
   const sharp = (await import("sharp")).default;
   const phone = h > w;
   const src = phone ? a.cover : spread(a, 1);

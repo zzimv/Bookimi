@@ -6,7 +6,7 @@ import { db } from "./db";
 import { hmac } from "./crypto";
 import { notifySafe, alertOwner } from "./notify";
 import { birthdayReminders, fmtDay, BIRTHDAY_REMINDER_DAYS } from "./holidays-core";
-import { declineName, guessGender, isFeminine, type Case } from "./declension";
+import { declineName, guessGender, isFeminine, prepositionFor, type Case } from "./declension";
 import { caseAfter } from "../content/title";
 import { getLeadTimes } from "./holidays";
 
@@ -139,7 +139,6 @@ export const bookWord = (audience?: string) => (audience === "CHILD" ? "сказ
 export function fill(t: string, vars: Record<string, string>) {
   const gender = vars.gender || (vars.name ? guessGender(vars.name) : "");
   const word = bookWord(vars.audience);
-  const vowel = /^[аеёиоуыэюяaeiou]/i;
   const tpl = t
     .replace(/(^|[.!?]\s+)Сказка про \{name\}/g, "$1{Book} про {name}")
     .replace(/— главный герой(?![а-яё])/g, "— {hero_role}");
@@ -154,8 +153,8 @@ export function fill(t: string, vars: Record<string, string>) {
       const prev = prefix.trim().replace(/[^А-Яа-яЁё]/g, "");
       const cs = c ?? (caseAfter(prev) as Case);
       const n = declineName(vars.name, cs, gender);
-      // «о Ане» → «об Ане»
-      const fixed = /^о$/i.test(prev) && vowel.test(n) ? prefix.replace(/о(\s+)$/i, (x, sp: string) => (x[0] === "О" ? "Об" : "об") + sp) : prefix;
+      // «о Ане» → «об Ане», «с Львом» → «со Львом»
+      const fixed = /^(о|об|с|со|к|ко)$/i.test(prev) ? prefix.replace(/(о|об|с|со|к|ко)(\s+)$/i, (_x, p: string, sp: string) => prepositionFor(p, n) + sp) : prefix;
       return fixed + n;
     }
     return prefix + (vars[k] ?? extra[k] ?? "");

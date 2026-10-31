@@ -17,6 +17,7 @@ import { addPromo, bookById, confirmTransfer, mskDay, orderById, pageUrl, resetL
 import { AUDIENCE_PAGES } from "../../src/lib/storefront";
 import { SHELF } from "../../src/lib/shelf";
 import { NotFoundError } from "./router";
+import { normalizeName } from "../../src/lib/names";
 
 const NAV = [
   { href: "/admin", label: "Главная" },
@@ -267,7 +268,7 @@ export function AdminOrders() {
               {S.orders.map((o) => (
                 <tr key={o.id}>
                   <td><Link href={`/admin/zakazy/${o.id}`}><b>{o.publicCode}</b></Link><br /><small className="muted">{new Date(o.createdAt).toLocaleString("ru-RU", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}</small></td>
-                  <td>{o.contactName || o.contactEmail}</td>
+                  <td>{normalizeName(o.contactName ?? "") || o.contactEmail}</td>
                   <td>{o.whoPrints === "self" ? "PDF" : "БУКИМИ"}</td>
                   <td className="num">{fmt(o.totalRub)}</td>
                   <td><span className={`badge ${o.status === "AWAITING_CONFIRMATION" ? "badge--gold" : ""}`}>{ORDER_STATUS[o.status]}</span>{o.shipment?.trackNumber && <><br /><small>трек {o.shipment.trackNumber}</small></>}</td>
@@ -325,7 +326,7 @@ export function AdminOrder({ id }: { id: string }) {
         </section>
         <section className="panel">
           <b>Покупатель и доставка</b>
-          <p className="small">{o.contactName}<br />{o.contactPhone} · {o.contactEmail}</p>
+          <p className="small">{normalizeName(o.contactName ?? "")}<br />{o.contactPhone} · {o.contactEmail}</p>
           {o.shipment && (
             <p className="small">
               {METHOD_TITLES[o.shipment.method as keyof typeof METHOD_TITLES]}
@@ -401,7 +402,7 @@ export function AdminTransfers() {
               <tr key={o.id}>
                 <td><Link href={`/admin/zakazy/${o.id}`}><b>{o.publicCode}</b></Link></td>
                 <td><b>{o.totalRub.toLocaleString("ru-RU")} ₽</b></td>
-                <td>{o.contactName || o.contactEmail}</td>
+                <td>{normalizeName(o.contactName ?? "") || o.contactEmail}</td>
                 <td>{o.status === "AWAITING_CONFIRMATION" ? <span className="badge badge--gold">нажал «Я оплатил»</span> : "ещё не отметил"}</td>
                 <td>{new Date(o.createdAt).toLocaleString("ru-RU", { timeZone: "Europe/Moscow" })}</td>
                 <td><button className="btn btn--primary btn--sm" data-demo="confirm" onClick={() => confirmTransfer(o.id)}>Деньги пришли</button></td>

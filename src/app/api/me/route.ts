@@ -3,7 +3,8 @@ import "@/lib/zod-ru";
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { body, err, json } from "@/lib/api";
-import { cleanFirstName, currentUser, logout } from "@/lib/auth";
+import { zRecipientName } from "@/lib/names";
+import { cleanFirstName, currentUser, FIRST_NAME_ERROR, logout } from "@/lib/auth";
 import { deleteAccount } from "@/lib/account";
 import { deleteFile } from "@/lib/storage";
 import { DOC_VERSION } from "@/lib/legal";
@@ -37,7 +38,7 @@ const Input = z.discriminatedUnion("action", [
     action: z.literal("address"),
     id: z.string().max(40),
     patch: z.object({
-      name: z.string().trim().max(80).optional(),
+      name: zRecipientName(80).optional(),
       phone: z.string().trim().max(20).optional(),
       street: z.string().trim().max(160).optional(),
       flat: z.string().trim().max(20).optional(),
@@ -57,7 +58,7 @@ export async function POST(req: Request) {
   if (!b) return err("Некорректный запрос");
   if (b.action === "name") {
     const firstName = cleanFirstName(b.firstName);
-    if (firstName === false) return err("Имя: до 40 символов — буквы, пробел или дефис");
+    if (firstName === false) return err(FIRST_NAME_ERROR);
     await db.user.update({ where: { id: user.id }, data: { firstName } });
     return json({ ok: true, firstName });
   }

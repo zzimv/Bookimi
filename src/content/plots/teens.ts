@@ -108,7 +108,7 @@ export const TEEN_PLOTS: Plot[] = [
         closingScene: "a decorated New Year fir tree with warm lights, the pixel cat keychain hanging on a branch",
       },
       default: {
-        opening: "Это случилось как раз перед важным днём — {ПОВОД}. Никто не ждал от него приключений. Особенно сам{Р:|а} {Р:герой|героиня}.",
+        opening: "Это случилось как раз перед важным днём: совсем скоро — {ПОВОД}. Никто не ждал от этого дня приключений. Особенно сам{Р:|а} {Р:герой|героиня}.",
         closing: "«Достижение получено: {ПОВОД}, — мигнул брелок. — Редкое. Поздравляем, {ЛАСКОВО.им}!»",
       },
     },
@@ -203,7 +203,7 @@ export const TEEN_PLOTS: Plot[] = [
         closingScene: "the silver robot standing proudly next to a decorated New Year tree in the museum lobby",
       },
       default: {
-        opening: "Это дело случилось как раз накануне важного дня — {ПОВОД}.",
+        opening: "Это дело случилось как раз накануне важного дня: совсем скоро — {ПОВОД}.",
         closing: "Внизу страницы сыщик приписал{Р:|а}: «{ПОВОД} — отметить. Это не улика, это приказ». Поздравляем, {ЛАСКОВО.им}!",
       },
     },
@@ -501,7 +501,7 @@ export const TEEN_PLOTS: Plot[] = [
         closingScene: "a New Year fir tree with warm lights, snowy mountains glowing on the unfolded map",
       },
       default: {
-        opening: "Всё случилось накануне важного дня — {ПОВОД}.",
+        opening: "Всё случилось накануне важного дня: совсем скоро — {ПОВОД}.",
         closing: "А на обороте карты кто-то приписал: «Поздравляем — {ПОВОД}! Дальше — только твоя дорога, {ЛАСКОВО.им}».",
       },
     },
@@ -578,7 +578,7 @@ export const TEEN_PLOTS: Plot[] = [
         scene: "a night city panorama, pigeons on wires, neighbors chatting on benches below glowing windows, a tram ringing as it passes under the teen's lit window",
       },
       {
-        text: "Тут и сказу конец, а нам — слово молвить,\nСлово молвить без шуток, по-честному.\nПодвиги ведь не в будильниках, не в пирогах.\nПодвиг — когда трудно, а ты всё равно шутишь.\nКогда друзья идут к тебе, потому что с тобой тепло.\nКогда просишь помощи — и не стесняешься.\nМы гордимся тобой, {ЛАСКОВО.им},\nИ не за подвиги вовсе —\nА за то, что ты такой, какой есть.\nИ мы всегда рядом.",
+        text: "Тут и сказу конец, а нам — слово молвить,\nСлово молвить без шуток, по-честному.\nПодвиги ведь не в будильниках, не в пирогах.\nПодвиг — когда трудно, а ты всё равно шутишь.\nКогда друзья идут к тебе, потому что с тобой тепло.\nКогда просишь помощи — и не стесняешься.\nМы гордимся тобой, {ЛАСКОВО.им},\nИ не за подвиги вовсе —\nА за то, что ты {Р:такой|такая}, {Р:какой|какая} есть.\nИ мы всегда рядом.",
         scene: "the teen on a rooftop at night overlooking the glowing city, the striped cat curled beside, a calm and warm moment under the stars",
       },
     ],
@@ -614,7 +614,7 @@ export const TEEN_PLOTS: Plot[] = [
         closingScene: "yellow mimosa on the festive table next to the pie",
       },
       default: {
-        opening: "Дело было накануне дня особенного — {ПОВОД}.",
+        opening: "Дело было накануне дня особенного: вот-вот — {ПОВОД}.",
         closing: "Поздравляем, {ЛАСКОВО.им}: {ПОВОД}! Славься, сила богатырская, на долгие лета!",
       },
     },

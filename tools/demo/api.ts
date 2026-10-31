@@ -29,6 +29,7 @@ import { dedicationText, groupOf } from "../../src/lib/gen/text";
 import { cartoonScript, type Cue } from "../../src/lib/gen/cartoon-script";
 import { plainSpread } from "../../src/lib/spread-markup";
 import { checkFirstName, FIRST_NAME_ERROR } from "../../src/lib/first-name";
+import { fullNameError, normalizeName } from "../../src/lib/names";
 
 // ───────── хранилище ─────────
 export interface DBook {
@@ -932,6 +933,7 @@ async function handle(method: string, path: string, q: URLSearchParams, body: un
         const patch = (b0?.patch ?? {}) as Record<string, string>;
         const clean = Object.fromEntries(Object.entries(patch).filter(([k]) => ["name", "phone", "street", "flat", "comment", "postalCode"].includes(k)).map(([k, v]) => [k, String(v ?? "").trim().slice(0, 200)]));
         if (clean.phone && !normalizePhone(clean.phone)) return err("Проверьте телефон: +7 9XX XXX-XX-XX");
+        if (clean.name !== undefined) clean.name = normalizeName(clean.name);
         list[i] = { ...list[i], ...clean };
       }
       S.addresses = list;
@@ -1023,12 +1025,16 @@ async function handle(method: string, path: string, q: URLSearchParams, body: un
     const input = b0 as unknown as CheckoutInput;
     const book = bookById(input.bookId);
     if (!book) return err("Не найдено", 404);
+    // Как схема Checkout на сайте (zRecipientName): «анна петрова» → «Анна Петрова»
+    input.contact = { ...input.contact, name: normalizeName(input.contact?.name ?? "") };
     if (input.whoPrints === "bookimi") {
       if (!input.shipping) return err("Выберите доставку");
       input.shipping.address = cleanAddress(input.shipping.method, input.shipping.address ?? { city: "" });
       const bad = addressError(input.shipping.method, input.shipping.address);
       if (bad) return err(bad);
-      if (!input.contact.name || !input.contact.phone) return err("Укажите имя и телефон получателя");
+      const badName = fullNameError(input.contact.name);
+      if (badName) return err(badName);
+      if (!input.contact.phone) return err("Укажите телефон получателя");
       if (input.shipping.method === "cdek_pvz") {
         const a = input.shipping.address;
         const point = demoPvz(a.city, a.region).find((p) => p.code === a.pvzCode);

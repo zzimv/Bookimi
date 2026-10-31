@@ -611,7 +611,7 @@ d("исправления по отчёту 30.10: БД", async () => {
     const u = await user("phone");
     const b = await book(u.id, { status: "FULL_READY", paidFull: true });
     await login(u.id);
-    const body = { bookId: b.id, whoPrints: "bookimi", formatKey: "std-hard", addons: [], shipping: { method: "cdek_courier", address: { city: "Москва", street: "Тверская, 1" } }, contact: { name: "Анна", phone: "abc" } };
+    const body = { bookId: b.id, whoPrints: "bookimi", formatKey: "std-hard", addons: [], shipping: { method: "cdek_courier", address: { city: "Москва", street: "Тверская, 1" } }, contact: { name: "Анна Петрова", phone: "abc" } };
     const res = await checkout.POST(new Request("http://localhost/api/checkout", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) }));
     expect(res.status).toBe(400);
     expect(((await res.json()) as { error: string }).error).toMatch(/Телефон получателя/);

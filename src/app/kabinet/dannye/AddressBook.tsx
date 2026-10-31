@@ -5,6 +5,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { api } from "@/lib/client";
 import { addressLine, type SavedAddress } from "@/lib/delivery";
+import { normalizeName } from "@/lib/names";
 
 const METHOD: Record<string, string> = { pickup: "Самовывоз", cdek_pvz: "СДЭК — пункт выдачи", cdek_courier: "СДЭК — курьером", pochta: "Почта России", yandex: "Яндекс Доставка" };
 
@@ -35,7 +36,7 @@ export function AddressBook({ addresses }: { addresses: SavedAddress[] }) {
           {edit === a.id ? (
             <div style={{ width: "100%" }}>
               <div className="grid2">
-                <label className="field"><span>Получатель</span><input className="input" value={form.name ?? ""} onChange={(e) => setForm({ ...form, name: e.target.value })} /></label>
+                <label className="field"><span>Получатель</span><input className="input" value={form.name ?? ""} onChange={(e) => setForm({ ...form, name: e.target.value })} onBlur={() => setForm({ ...form, name: normalizeName(form.name ?? "") })} /></label>
                 <label className="field"><span>Телефон</span><input className="input" inputMode="tel" value={form.phone ?? ""} onChange={(e) => setForm({ ...form, phone: e.target.value })} /></label>
                 {courier(a.method) && <label className="field"><span>Улица и дом</span><input className="input" value={form.street ?? ""} onChange={(e) => setForm({ ...form, street: e.target.value })} /></label>}
                 {courier(a.method) && <label className="field"><span>Квартира или офис</span><input className="input" value={form.flat ?? ""} onChange={(e) => setForm({ ...form, flat: e.target.value })} /></label>}
@@ -51,7 +52,7 @@ export function AddressBook({ addresses }: { addresses: SavedAddress[] }) {
           ) : (
             <>
               <header>
-                <b style={{ color: "var(--ink)", fontSize: 15 }}>{a.name || "Без имени"}{a.phone ? `, ${a.phone}` : ""}</b>
+                <b style={{ color: "var(--ink)", fontSize: 15 }}>{normalizeName(a.name) || "Без имени"}{a.phone ? `, ${a.phone}` : ""}</b>
                 <span className="badge">{METHOD[a.method] ?? a.method}</span>
               </header>
               <p className="small" style={{ margin: "4px 0 8px" }}>{addressLine(a) || a.city}</p>

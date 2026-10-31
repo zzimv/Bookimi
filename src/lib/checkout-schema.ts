@@ -1,6 +1,7 @@
 import { z } from "zod";
 import "./zod-ru";
 import { ShipAddressSchema } from "./delivery";
+import { zRecipientName } from "./names";
 
 export const Checkout = z.object({
   bookId: z.string().uuid(),
@@ -21,5 +22,5 @@ export const Checkout = z.object({
   addonsOnly: z.boolean().optional(),
   /** «Книга для каждого в группе» — одна книга на каждого ребёнка (src/lib/bulk.ts). */
   bulk: z.boolean().optional(),
-  contact: z.object({ name: z.string().trim().max(80).default(""), phone: z.string().trim().max(20).optional(), email: z.string().trim().max(120).optional() }).default({ name: "" }),
+  contact: z.object({ name: zRecipientName(80), phone: z.string().trim().max(20).optional(), email: z.string().trim().max(120).optional() }).default({ name: "" }),
 });

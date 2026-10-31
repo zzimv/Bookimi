@@ -2,6 +2,7 @@ import Link from "next/link";
 import { db } from "@/lib/db";
 import { requireAdmin } from "@/lib/admin";
 import { confirmTransferAction } from "../../actions";
+import { normalizeName } from "@/lib/names";
 
 export default async function Page() {
   await requireAdmin("transfers");
@@ -18,7 +19,7 @@ export default async function Page() {
               <tr key={o.id}>
                 <td><Link href={`/admin/zakazy/${o.id}`}><b>{o.publicCode}</b></Link></td>
                 <td><b>{o.totalRub.toLocaleString("ru-RU")} ₽</b></td>
-                <td>{o.contactName}</td>
+                <td>{normalizeName(o.contactName ?? "")}</td>
                 <td>{o.status === "AWAITING_CONFIRMATION" ? <span className="badge badge--gold">нажал «Я оплатил»</span> : "ещё не отметил"}</td>
                 <td>{o.createdAt.toLocaleString("ru-RU", { timeZone: "Europe/Moscow" })}</td>
                 <td><form action={confirmTransferAction}><input type="hidden" name="orderId" value={o.id} /><button className="btn btn--primary btn--sm">Деньги пришли</button></form></td>

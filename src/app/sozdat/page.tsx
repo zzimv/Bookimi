@@ -10,6 +10,7 @@ import { audienceFromParam, SVOYA_IDEYA } from "@/lib/storefront";
 import { moodSwatch } from "@/lib/mood-swatch";
 import { MOODS } from "@/content/moods";
 import { plotBySlug, sectionPlot } from "@/content/registry";
+import { normalizeName } from "@/lib/declension";
 
 export const metadata: Metadata = { title: "Создать книгу", robots: { index: false } };
 export const dynamic = "force-dynamic";
@@ -82,7 +83,7 @@ export default async function Page({ searchParams }: { searchParams: Promise<Rec
     const user = await currentUser();
     const h = user ? await db.hero.findFirst({ where: { id: sp.geroj, userId: user.id, role: "main" } }) : null;
     if (h) {
-      initial.hero = { name: h.name, nickname: h.nickname ?? "", gender: h.gender ?? undefined, ageGroup: h.ageGroup ?? undefined, birthDate: h.birthDate?.toISOString().slice(0, 10) ?? "" };
+      initial.hero = { name: normalizeName(h.name), nickname: normalizeName(h.nickname ?? ""), gender: h.gender ?? undefined, ageGroup: h.ageGroup ?? undefined, birthDate: h.birthDate?.toISOString().slice(0, 10) ?? "" };
       initial.appearance = h.appearance;
       initial.interests = h.interests;
     }

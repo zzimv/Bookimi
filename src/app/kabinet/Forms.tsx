@@ -3,6 +3,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { api } from "@/lib/client";
 import { checkFirstName, FIRST_NAME_ERROR, typeFirstName } from "@/lib/first-name";
+import { normalizeSignature } from "@/lib/names";
 
 export function CopyField({ value, label }: { value: string; label: string }) {
   const [ok, setOk] = useState(false);
@@ -73,6 +74,7 @@ export function NameForm({ initial }: { initial: string }) {
     if (name === false) return setMsg(FIRST_NAME_ERROR);
     try {
       await api("/api/me", { action: "name", firstName: name ?? "" });
+      if (name) setV(name);
       setMsg(v.trim() ? "Сохранили." : "Имя убрали.");
       router.refresh();
     } catch (e) {
@@ -82,9 +84,9 @@ export function NameForm({ initial }: { initial: string }) {
   return (
     <form className="panel" onSubmit={(e) => { e.preventDefault(); save(); }}>
       <b>Как к вам обращаться</b>
-      <p className="small muted">Так поздороваемся в кабинете и подставим получателя при оформлении. Необязательно; буквы, пробел или дефис.</p>
+      <p className="small muted">Так поздороваемся в кабинете и подставим получателя при оформлении. Необязательно; буквы, пробел, дефис или апостроф.</p>
       <div className="row">
-        <input className="input" name="first-name" autoComplete="given-name" maxLength={40} value={v} onChange={(e) => setV(typeFirstName(e.target.value))} placeholder="Анна" style={{ flex: "1 1 200px", maxWidth: 320 }} />
+        <input className="input" name="first-name" autoComplete="given-name" maxLength={40} value={v} onChange={(e) => setV(typeFirstName(e.target.value))} onBlur={() => { const n = checkFirstName(v); if (n) setV(n); }} placeholder="Анна" style={{ flex: "1 1 200px", maxWidth: 320 }} />
         <button className="btn btn--ghost btn--sm">Сохранить</button>
       </div>
       {msg && <p className="small ok">{msg}</p>}
@@ -190,10 +192,10 @@ export function ReviewForm({ orderId }: { orderId?: string }) {
   return (
     <div className="panel">
       <div className="chips">{[5, 4, 3, 2, 1].map((r) => <button key={r} className="chip" aria-pressed={rating === r} onClick={() => setRating(r)}>{"★".repeat(r)}</button>)}</div>
-      <label className="field"><span>Как подписать отзыв</span><input className="input" placeholder="Например, Ольга, мама Вари" value={name} onChange={(e) => setName(e.target.value)} /></label>
+      <label className="field"><span>Как подписать отзыв</span><input className="input" placeholder="Например, Ольга, мама Вари" value={name} onChange={(e) => setName(e.target.value)} onBlur={() => setName(normalizeSignature(name))} /></label>
       <label className="field"><span>Отзыв</span><textarea className="textarea" value={text} maxLength={2000} onChange={(e) => setText(e.target.value)} /></label>
       <p className="small muted">Отправляя отзыв, вы разрешаете опубликовать его на сайте с этой подписью.</p>
-      <button className="btn btn--primary" disabled={text.length < 10 || name.length < 2} onClick={async () => { try { await api("/api/reviews", { rating, text, authorName: name, orderId }); setOk(true); } catch (e) { setError((e as Error).message); } }}>Отправить отзыв</button>
+      <button className="btn btn--primary" disabled={text.length < 10 || name.length < 2} onClick={async () => { try { await api("/api/reviews", { rating, text, authorName: normalizeSignature(name), orderId }); setOk(true); } catch (e) { setError((e as Error).message); } }}>Отправить отзыв</button>
       {error && <p className="error">{error}</p>}
     </div>
   );

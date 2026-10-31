@@ -7,6 +7,7 @@ import { db } from "@/lib/db";
 import { addressError, cleanAddress } from "@/lib/delivery";
 import { cdekCityCode, cdekPoints, hasCdek } from "@/lib/shipping";
 import { normalizePhone } from "@/lib/quiz";
+import { fullNameError } from "@/lib/names";
 
 export async function POST(req: Request) {
   const t = await throttle("checkout", 10, 60_000);
@@ -23,12 +24,14 @@ export async function POST(req: Request) {
     const addr = cleanAddress(b.shipping.method, b.shipping.address);
     const bad = addressError(b.shipping.method, addr, { pvzListAvailable: hasCdek() });
     if (bad) return err(bad);
-    if (!b.contact.name || !b.contact.phone) return err("Укажите имя и телефон получателя");
+    if (!b.contact.phone) return err("Укажите телефон получателя");
+    // «Имя и фамилия» для курьера и типографии: два слова, с заглавных (схема уже нормализовала: «анна петрова» → «Анна Петрова»)
+    const badName = fullNameError(b.contact.name);
+    if (badName) return err(badName);
     // Телефон получателя — для курьера и типографии: только мобильный, приводим к +7XXXXXXXXXX
     const phone = normalizePhone(b.contact.phone);
     if (!phone) return err("Телефон получателя: мобильный номер +7 9XX XXX-XX-XX");
     b.contact.phone = phone;
-    if (b.contact.name.length < 2 || /[<>{}\[\]\\/@]|https?:/i.test(b.contact.name)) return err("Имя получателя: только имя и фамилия, без ссылок и спецсимволов");
     // Пункт выдачи сверяем со списком СДЭК и берём его адрес оттуда (не со слов браузера)
     if (b.shipping.method === "cdek_pvz" && hasCdek()) {
       try {

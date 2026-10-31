@@ -1,6 +1,6 @@
 // Мини-zod для демо-стенда: только то, что использует src/content/answers.ts (≈2 КБ вместо ≈58 КБ).
 // Поведение то же для анкеты: trim/max/min/email, default/optional, enum, object (лишние ключи отбрасываются),
-// array, preprocess, transform с addIssue. Сервер сайта по-прежнему проверяет настоящим zod.
+// array, preprocess, transform/superRefine с addIssue, pipe. Сервер сайта по-прежнему проверяет настоящим zod.
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
 type Issue = { message: string; path: (string | number)[] };
@@ -40,6 +40,18 @@ class Schema {
       if (issues.length) throw new Fail(issues);
       return out;
     });
+  }
+  superRefine(fn: (v: any, ctx: { addIssue: (i: { message: string }) => void }) => void): any {
+    return new Schema((v, p) => {
+      const issues: Issue[] = [];
+      const out = this._parse(v, p);
+      fn(out, { addIssue: (i) => issues.push({ message: i.message, path: p }) });
+      if (issues.length) throw new Fail(issues);
+      return out;
+    });
+  }
+  pipe(next: Schema): any {
+    return new Schema((v, p) => next._parse(this._parse(v, p), p));
   }
 }
 const fail = (message: string, path: (string | number)[]): never => {
@@ -132,6 +144,7 @@ export const z = {
 export namespace z {
   export type infer<T> = any;
   export type ZodTypeAny = any;
+  export type RefinementCtx = any;
 }
 export type ZodTypeAny = any;
 export default z;

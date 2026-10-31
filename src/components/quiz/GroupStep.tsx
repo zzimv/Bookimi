@@ -7,6 +7,7 @@ import { addWithLimit, parseNames, rosterIssues, adultGender, guessChildGender }
 import { bulkPct, nextTier, type BulkTier } from "@/lib/bulk";
 import type { AudienceKey } from "@/content/profiles";
 import { PhotoSlot, type ConsentState, type PhotoView } from "./PhotoSlot";
+import { normalizeName } from "@/lib/declension";
 
 export interface QuizGroup {
   min: number;
@@ -103,7 +104,7 @@ export function GroupStep(p: {
           return (
             <li key={i} className={`roster__row ${bad ? "roster__row--bad" : ""}`} data-member={i}>
               <div className="roster__main">
-                <input className="input input--sm ym-disable-keys" aria-label={`Имя ${i + 1}`} name={`member-name-${i}`} maxLength={30} value={m.name} onChange={(e) => setM(i, { name: e.target.value, gender: m.gender ?? guessChildGender(e.target.value) ?? undefined })} />
+                <input className="input input--sm ym-disable-keys" aria-label={`Имя ${i + 1}`} name={`member-name-${i}`} maxLength={30} value={m.name} onChange={(e) => setM(i, { name: e.target.value, gender: m.gender ?? guessChildGender(e.target.value) ?? undefined })} onBlur={() => setM(i, { name: normalizeName(m.name) })} />
                 <div className="seg" role="group" aria-label="Пол">
                   <button type="button" aria-pressed={m.gender === "boy"} className={!m.gender ? "seg--ask" : ""} onClick={() => setM(i, { gender: "boy" })}>М</button>
                   <button type="button" aria-pressed={m.gender === "girl"} className={!m.gender ? "seg--ask" : ""} onClick={() => setM(i, { gender: "girl" })}>Ж</button>
@@ -154,7 +155,7 @@ export function GroupStep(p: {
           <p className="small muted">Как к ним обращаются дети: «Мария Ивановна». До {p.group.adultsMax}.</p>
           {p.adults.map((x, i) => (
             <div className="adult-row" key={i} data-adult={i}>
-              <input className="input input--sm ym-disable-keys" name={`adult-name-${i}`} maxLength={60} value={x.name} placeholder="Имя и отчество" onChange={(e) => setA(i, { name: e.target.value, gender: adultGender(e.target.value) })} />
+              <input className="input input--sm ym-disable-keys" name={`adult-name-${i}`} maxLength={60} value={x.name} placeholder="Имя и отчество" onChange={(e) => setA(i, { name: e.target.value, gender: adultGender(e.target.value) })} onBlur={() => setA(i, { name: normalizeName(x.name) })} />
               <button type="button" className="icon-btn" aria-label="Убрать взрослого" onClick={() => p.onChange(kids, p.adults.filter((_, j) => j !== i))}>×</button>
               <div className="chips chips--sm">
                 {p.group.adultRoles.map((r) => (

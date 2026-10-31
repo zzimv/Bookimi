@@ -5,6 +5,7 @@ import { body, err, json, throttle } from "@/lib/api";
 import { currentUser } from "@/lib/auth";
 import { checkText } from "@/lib/moderation";
 import { track } from "@/lib/events";
+import { normalizeSignature } from "@/lib/names";
 
 // Отзыв покупателя — только после оплаченного заказа, публикуется после модерации.
 export async function POST(req: Request) {
@@ -12,7 +13,7 @@ export async function POST(req: Request) {
   if (t) return t;
   const user = await currentUser();
   if (!user) return err("Войдите", 401);
-  const b = await body(req, z.object({ rating: z.number().int().min(1).max(5), text: z.string().trim().min(10).max(2000), authorName: z.string().trim().min(2).max(80), orderId: z.string().uuid().optional() }));
+  const b = await body(req, z.object({ rating: z.number().int().min(1).max(5), text: z.string().trim().min(10).max(2000), authorName: z.string().max(160).transform(normalizeSignature).pipe(z.string().min(2).max(80)), orderId: z.string().uuid().optional() }));
   if (!b) return err("Заполните отзыв");
   if (checkText(b.text + " " + b.authorName)) return err("Уберите недопустимые слова или ссылки");
   // Один отзыв на заказ: указанный заказ или последний оплаченный без отзыва

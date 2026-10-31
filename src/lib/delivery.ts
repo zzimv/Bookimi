@@ -2,6 +2,7 @@
 // Чистый модуль: используется в checkout-схеме, на сервере (заказ, кабинет) и в демо.
 import { z } from "zod";
 import "./zod-ru";
+import { normalizeName, zRecipientName } from "./names";
 
 // Без .extend()/.positive(): тот же модуль собирается в демо с мини-zod (tools/demo/shims/zod.ts)
 const addressShape = {
@@ -25,7 +26,8 @@ export const SavedAddressSchema = z.object({
   id: z.string().max(40),
   savedAt: z.string().max(40),
   method: z.string().max(20),
-  name: z.string().trim().max(80).default(""),
+  /** Получатель — нормализуется и при чтении старых записей («анна петрова» → «Анна Петрова»). */
+  name: zRecipientName(80),
   phone: z.string().trim().max(20).default(""),
 });
 export type SavedAddress = z.infer<typeof SavedAddressSchema>;
@@ -114,7 +116,7 @@ export function pickPrefill(input: {
   const profileName = input.profile?.name?.trim() ?? "";
   const profilePhone = input.profile?.phone?.trim() ?? "";
   const fallbackContact = {
-    name: profileName || input.draft?.name?.trim() || "",
+    name: normalizeName(profileName || input.draft?.name?.trim() || ""),
     phone: profilePhone || input.draft?.phone?.trim() || "",
   };
   const fallbackSource: Prefill["source"] = profileName || profilePhone ? "profile" : input.draft?.name || input.draft?.phone ? "draft" : "none";
@@ -123,7 +125,7 @@ export function pickPrefill(input: {
     const clean = cleanAddress(ok ? method : "cdek_courier", address);
     // Способ недоступен — переносим только город, пункт/улицу не угадываем
     const addr = ok ? clean : { city: clean.city, ...(clean.cityCode ? { cityCode: clean.cityCode } : {}), ...(clean.region ? { region: clean.region } : {}) };
-    return { source, method: ok ? method : undefined, address: addr, contact: { name: contact.name || fallbackContact.name, phone: contact.phone || fallbackContact.phone } };
+    return { source, method: ok ? method : undefined, address: addr, contact: { name: normalizeName(contact.name || fallbackContact.name), phone: contact.phone || fallbackContact.phone } };
   };
 
   const saved = input.saved?.[0];

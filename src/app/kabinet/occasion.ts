@@ -1,6 +1,7 @@
 // «Следующий повод» для кабинета: ближайший день рождения героя, Новый год или праздник,
 // под который покупатель уже делал книгу. Чистая функция — без БД, тестируется.
 import { mskToday, orderDeadline } from "@/lib/holidays-core";
+import { declineName, guessGender } from "@/lib/declension";
 
 export interface OccasionHint {
   key: string;
@@ -80,7 +81,8 @@ export function nextOccasion(opts: {
     const days = Math.ceil((next.getTime() - now.getTime()) / DAY);
     if (days < 0 || days > 60) continue;
     const deadline = printDeadline(next);
-    const who = b.nameGen ?? b.name;
+    // «день рождения Маши»: родительный падеж (без готовой формы — склоняем здесь)
+    const who = b.nameGen ?? declineName(b.name, "род", guessGender(b.name));
     out.push({
       key: "den-rozhdeniya",
       title: `День рождения ${who}`,

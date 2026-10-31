@@ -82,7 +82,7 @@ export const PET_PLOTS: Plot[] = [
         scene: "the dog proudly carrying a bunch of keys in its mouth to the surprised owner, cushions scattered around the room",
       },
       {
-        text: "А сюрприз, оказывается, был для меня! В большой коробке лежала новая мягкая лежанка, а в парке нас ждали мячик и самая длинная прогулка в моей жизни. — Ты мой герой, {ЛАСКОВО.им}, — сказал мой человек. Я {Р:сделал|сделала} вид, что мне всё равно. Но хвост меня выдал.",
+        text: "А сюрприз, оказывается, был для меня! В большой коробке лежала новая мягкая лежанка, а в парке нас ждали мячик и самая длинная прогулка в моей жизни. — Ты {Р:мой герой|моя героиня}, {ЛАСКОВО.им}, — сказал мой человек. Я {Р:сделал|сделала} вид, что мне всё равно. Но хвост меня выдал.",
         scene: "the dog in a sunny park with a new ball, the owner kneeling to hug the dog, a cozy new pet bed with a bow visible at home",
       },
       {

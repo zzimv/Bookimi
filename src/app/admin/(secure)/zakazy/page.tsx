@@ -3,6 +3,7 @@ import type { OrderStatus } from "@prisma/client";
 import { db } from "@/lib/db";
 import { requireAdmin } from "@/lib/admin";
 import { ORDER_STATUS } from "@/lib/labels";
+import { normalizeName } from "@/lib/names";
 
 
 export default async function Page({ searchParams }: { searchParams: Promise<{ status?: string; q?: string }> }) {
@@ -35,7 +36,7 @@ export default async function Page({ searchParams }: { searchParams: Promise<{ s
             {orders.map((o) => (
               <tr key={o.id}>
                 <td><Link href={`/admin/zakazy/${o.id}`}>{o.publicCode}</Link></td>
-                <td>{o.contactName ?? ""}<br /><small className="muted">{o.user.email ?? o.user.phone}</small></td>
+                <td>{normalizeName(o.contactName ?? "")}<br /><small className="muted">{o.user.email ?? o.user.phone}</small></td>
                 <td>{o.whoPrints === "self" ? "PDF" : "БУКИМИ"}</td>
                 <td>{o.totalRub.toLocaleString("ru-RU")} ₽</td>
                 <td><span className={`badge ${o.status === "AWAITING_CONFIRMATION" ? "badge--gold" : o.status === "REFUNDED" || o.status === "CANCELLED" ? "badge--red" : ""}`}>{ORDER_STATUS[o.status]}</span></td>

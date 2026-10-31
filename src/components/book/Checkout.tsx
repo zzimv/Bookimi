@@ -5,6 +5,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { api, goal, rub } from "@/lib/client";
 import { toggleAddon } from "@/lib/pricing";
 import { addressError, cleanAddress, type Prefill } from "@/lib/delivery";
+import { fullNameError, normalizeName } from "@/lib/names";
 import { CityInput } from "./CityInput";
 import { PvzPicker } from "./PvzPicker";
 import { AddonThumb } from "./AddonThumb";
@@ -94,7 +95,7 @@ export function Checkout(props: {
   const pre = props.prefill;
   const [method, setMethod] = useState(pre?.method && props.methods.some((m) => m.key === pre.method) ? pre.method : defaultMethod);
   const [addr, setAddr] = useState<Addr>({ ...EMPTY_ADDR, ...pre?.address });
-  const [contact, setContact] = useState({ ...props.contact, name: pre?.contact.name || props.contact.name, phone: pre?.contact.phone || props.contact.phone });
+  const [contact, setContact] = useState({ ...props.contact, name: normalizeName(pre?.contact.name || props.contact.name || ""), phone: pre?.contact.phone || props.contact.phone });
   const [saveAddress, setSaveAddress] = useState(true);
   const [prefilled, setPrefilled] = useState(pre?.source === "saved" || pre?.source === "order");
   const [promo, setPromo] = useState("");
@@ -157,7 +158,7 @@ export function Checkout(props: {
   async function order() {
     setError("");
     if (who === "bookimi") {
-      const bad = addressError(method, cleanAddress(method, addr)) ?? (!contact.name.trim() || !contact.phone.trim() ? "Укажите имя и телефон получателя" : null);
+      const bad = addressError(method, cleanAddress(method, addr)) ?? fullNameError(contact.name) ?? (!contact.phone.trim() ? "Укажите телефон получателя" : null);
       if (bad) {
         setError(bad);
         return;
@@ -381,7 +382,7 @@ export function Checkout(props: {
             )}
             <h2 style={{ fontSize: "var(--fs-lg)", marginTop: 8 }}>Получатель</h2>
             <div className="grid2">
-              <label className="field"><span>Имя и фамилия <span className="req">*</span></span><input className="input ym-disable-keys" value={contact.name} onChange={(e) => setContact({ ...contact, name: e.target.value })} /></label>
+              <label className="field"><span>Имя и фамилия <span className="req">*</span></span><input className="input ym-disable-keys" name="recipient-name" autoComplete="name" value={contact.name} aria-invalid={who === "bookimi" && contact.name.trim() && fullNameError(contact.name) ? true : undefined} onChange={(e) => setContact({ ...contact, name: e.target.value })} onBlur={() => setContact({ ...contact, name: normalizeName(contact.name) })} placeholder="Анна Петрова" /><small>Имя и фамилия — так курьер и пункт выдачи найдут посылку</small></label>
               <label className="field"><span>Телефон <span className="req">*</span></span><input className="input ym-disable-keys" inputMode="tel" autoComplete="tel" value={contact.phone} onChange={(e) => setContact({ ...contact, phone: e.target.value })} /></label>
             </div>
             <label className="check">

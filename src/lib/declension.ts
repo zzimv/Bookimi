@@ -59,22 +59,61 @@ function cap(src: string, out: string) {
   return src[0] === src[0].toUpperCase() ? out[0].toUpperCase() + out.slice(1) : out;
 }
 
-/** Имя с заглавной буквы в каждой части: «маша» → «Маша», «ЕВА» → «Ева», «анна-мария» → «Анна-Мария»,
- *  «мария ивановна» → «Мария Ивановна». Внутренние заглавные у смешанного регистра сохраняем («МакСим» — как ввели). */
+/** Частицы в составе имени — со строчной, если не первое слово: «Ибрагим оглы», «Людвиг ван Бетховен», «Анна де Вер». */
+const NAME_PARTICLES = new Set(["де", "ди", "да", "дю", "дель", "делла", "ле", "ла", "фон", "ван", "дер", "цу", "ибн", "бин", "бинт", "оглы", "кызы", "улы", "de", "di", "da", "du", "del", "della", "le", "la", "von", "van", "der", "zu", "ibn", "bin", "bint"]);
+/** Смешанный регистр, который сохраняем как ввели: «McDonald», «LeBron», «МакСим», «DeShawn» (заглавная — вторая или позже). */
+const KEEP_MIXED = /^\p{Lu}\p{Ll}+\p{Lu}\p{Ll}*$/u;
+
+function capWord(part: string, first: boolean): string {
+  if (!part) return part;
+  if (KEEP_MIXED.test(part)) return part;
+  const low = part.toLowerCase();
+  if (!first && NAME_PARTICLES.has(low)) return low;
+  // Mc + заглавная: «mcdonald» → «McDonald»
+  if (/^mc\p{L}{2,}$/u.test(low)) return "Mc" + low[2].toUpperCase() + low.slice(3);
+  // O'/D'/Д' + заглавная: «o'brien» → «O'Brien», «д'артаньян» → «Д'Артаньян»; прочие апострофы — без заглавной после
+  const ap = low.match(/^(\p{L})'(\p{L}.*)$/u);
+  if (ap) return ap[1].toUpperCase() + "'" + ap[2][0].toUpperCase() + ap[2].slice(1);
+  return low[0].toUpperCase() + low.slice(1);
+}
+
+/**
+ * Единая точка нормализации имён (герой, ласковое имя, доп. герои, дети и взрослые группы, «Как к вам обращаться»,
+ * получатель заказа, адресная книга): пробелы схлопываются, дефисы и апострофы — к одному виду, каждая часть
+ * через пробел или дефис — с заглавной: «маша» → «Маша», «ЕВА» → «Ева», «анна-мария» → «Анна-Мария»,
+ * «мария ивановна» → «Мария Ивановна», «ибрагим оглы» → «Ибрагим оглы», «o'brien» → «O'Brien», «саша к.» → «Саша К.».
+ * Смешанный регистр с заглавной внутри сохраняем («McDonald», «МакСим»); «мАША» → «Маша».
+ */
 export function normalizeName(name: string): string {
-  const n = (name ?? "").replace(/\s+/g, " ").trim();
+  const n = (name ?? "")
+    .normalize("NFC")
+    .replace(/[‘’ʼʹ`´]/g, "'")
+    .replace(/[‐‑‒–—−]/g, "-")
+    .replace(/\s+/g, " ")
+    .replace(/ ?- ?/g, "-")
+    .replace(/-{2,}/g, "-")
+    .trim()
+    .replace(/^[-' ]+|[-' ]+$/g, "");
   if (!n) return n;
+  let first = true;
   return n
     .split(/([ -])/)
     .map((part) => {
       if (part === " " || part === "-" || !part) return part;
-      const lower = part.toLowerCase();
-      const allSame = part === lower || part === part.toUpperCase();
-      const body = allSame ? lower : part;
-      return body[0].toUpperCase() + body.slice(1);
+      const out = capWord(part, first);
+      first = false;
+      return out;
     })
     .join("");
 }
+
+/** Имя латиницей (без кириллицы): склоняем как несклоняемое — без русских окончаний («Anna», не «Annaу»). */
+export const isLatinName = (name: string) => /[A-Za-z]/.test(name) && !/[А-Яа-яЁё]/.test(name);
+
+/** Клички и слова с ударным окончанием после шипящей — творительный «-ом»: Малышом, Ежом, Карандашом. */
+const STRESSED_HUSH = new Set(["малыш", "черныш", "крепыш", "голыш", "камыш", "кругляш", "мураш", "барыш", "кураж", "карандаш", "шалаш", "лаваш", "беляш", "ёж", "еж", "чиж", "уж", "ёрш", "ерш", "грач", "силач", "богач", "трюкач", "калач", "кулич", "мяч", "ключ", "рогач", "лихач", "хрыч", "сыч", "морж", "стриж"]);
+/** «Ё» уходит при переносе ударения на окончание: Ёж → Ежа, Ёрш → Ерша. */
+const YO_SHIFT: Record<string, string> = { ёж: "Еж", ёрш: "Ерш" };
 
 /** Отчества с ударным «-и́ч»: творительный на «-ом» (Ильичом, Кузьмичом). Остальные -ович/-евич/-ич — «-ем». */
 const STRESSED_ICH = new Set(["ильич", "лукич", "кузьмич", "фомич"]);
@@ -82,21 +121,27 @@ const STRESSED_ICH = new Set(["ильич", "лукич", "кузьмич", "ф�
 export function declineName(name: string, c: Case, gender: Gender): string {
   const n = normalizeName(name);
   if (!n || c === "им") return n;
-  // Двойные имена: «Анна-Мария»
-  if (n.includes("-")) return n.split("-").map((p) => declineName(p, c, gender)).join("-");
+  // Латиница — как ввели, без русских окончаний (в анкете подсказываем написать по-русски)
+  if (isLatinName(n)) return n;
   if (n.includes(" ")) {
-    // Имя + отчество склоняются оба («Марии Ивановне», «Ивану Петровичу»); фамилия и прочее — как есть
+    // Имя + отчество склоняются оба («Марии Ивановне», «Ивану Петровичу»); фамилия, частицы и инициалы — как есть
     const [first, ...rest] = n.split(/\s+/);
     return [declineName(first, c, gender), ...rest.map((w) => (isPatronymic(w) ? declineName(w, c, FEM_PATRONYMIC.test(w) ? "girl" : "boy") : w))].join(" ");
   }
+  // Двойные имена: «Анна-Мария», «Жан-Поль»
+  if (n.includes("-")) return n.split("-").map((p) => declineName(p, c, gender)).join("-");
+  // Инициал или сокращение с точкой («К.») и имена с апострофом — не склоняем
+  if (/[.']/.test(n) || n.length < 2) return n;
   const low = n.toLowerCase();
   const stem = n.slice(0, -1);
   const stem2 = n.slice(0, -2);
 
-  // -ия: Мария, Наталия, Илия
+  // -ия: Мария, Наталия, Илия, Ия, Лия
   if (low.endsWith("ия")) {
     return { род: stem + "и", дат: stem + "и", вин: stem + "ю", тв: stem + "ей", пр: stem + "и" }[c];
   }
+  // Иностранные на гласную + «а»: Франсуа, Гоа — не склоняются
+  if (/[аоуэеиыю]а$/.test(low)) return n;
   // -а / -я: Маша, Лиза, Илья, Ваня, Никита (и мужские, и женские склоняются одинаково)
   if (low.endsWith("а") || low.endsWith("я")) {
     const soft = low.endsWith("я");
@@ -122,19 +167,21 @@ export function declineName(name: string, c: Case, gender: Gender): string {
   if (low === "лев") return cap(n, { род: "льва", дат: "льву", вин: "льва", тв: "львом", пр: "льве" }[c]);
   if (low === "павел") return cap(n, { род: "павла", дат: "павлу", вин: "павла", тв: "павлом", пр: "павле" }[c]);
   if (low === "пётр" || low === "петр") return cap(n, { род: "петра", дат: "петру", вин: "петра", тв: "петром", пр: "петре" }[c]);
-  // Беглое «о/ё» в кличках: Пушок → Пушка, Дружок → Дружка, Уголёк → Уголька
-  if (low.length >= 5 && /[бвгджзклмнпрстфхцчшщ]ок$/.test(low)) {
-    const s2 = n.slice(0, -2) + "к";
-    return { род: s2 + "а", дат: s2 + "у", вин: s2 + "а", тв: s2 + "ом", пр: s2 + "е" }[c];
-  }
-  if (low.length >= 5 && /[бвгджзклмнпрстфх]ёк$/.test(low)) {
-    const s2 = n.slice(0, -2) + "ьк";
-    return { род: s2 + "а", дат: s2 + "у", вин: s2 + "а", тв: s2 + "ом", пр: s2 + "е" }[c];
-  }
-  // Согласная: Марк, Иван, Глеб, Миша-нет; шипящие — «-ем» в творительном (Святослав-ом, но Игнат-ом).
-  // Под ударением после шипящей — «-ом»: отчества Ильич, Лукич, Кузьмич, Фомич → Ильичом (но Петровичем, Сергеевичем)
-  const tv = HUSHING.test(low) && !STRESSED_ICH.has(low.replace(/ё/g, "е")) ? "ем" : "ом";
-  return { род: n + "а", дат: n + "у", вин: n + "а", тв: n + tv, пр: n + "е" }[c];
+  const masc = (s: string, tv = "ом") => ({ род: s + "а", дат: s + "у", вин: s + "а", тв: s + tv, пр: s + "е" })[c as Exclude<Case, "им">];
+  // Беглое «е» в уменьшительных кличках: Пушочек → Пушочка, Дружочек → Дружочка, Цветочек → Цветочка
+  if (low.length >= 6 && /[оеё][чш]ек$/.test(low)) return masc(n.slice(0, -2) + "к");
+  // Беглое «о»: Котёнок → Котёнка, Мышонок → Мышонка
+  if (low.length >= 6 && /[оё]нок$/.test(low)) return masc(n.slice(0, -2) + "к");
+  // Беглое «о/ё» в кличках: Пушок → Пушка, Дружок → Дружка, Колобок → Колобка, Уголёк → Уголька
+  if (low.length >= 5 && /[бвгджзклмнпрстфхцчшщ]ок$/.test(low)) return masc(n.slice(0, -2) + "к");
+  if (low.length >= 5 && /[бвгджзклмнпрстфх]ёк$/.test(low)) return masc(n.slice(0, -2) + "ьк");
+  // Ёж → Ежа, Ежом; Ёрш → Ерша
+  if (YO_SHIFT[low]) return masc(cap(n, YO_SHIFT[low]), "ом");
+  // Согласная: Марк, Иван, Глеб. После шипящей и «ц» творительный «-ем» (Игнатьевич-ем), под ударением — «-ом»:
+  // отчества Ильич, Лукич, Кузьмич, Фомич → Ильичом; клички Малыш, Черныш, Чиж, Карандаш → Малышом.
+  const plain = low.replace(/ё/g, "е");
+  const stressed = STRESSED_ICH.has(plain) || STRESSED_HUSH.has(low) || STRESSED_HUSH.has(plain);
+  return masc(n, HUSHING.test(low) && !stressed ? "ем" : "ом");
 }
 
 export interface HeroNames {
@@ -154,7 +201,7 @@ export function fillNames(text: string, hero: HeroNames, extras: { key: string; 
     out = out.replace(re, (_, c: Case) => declineName(e.name, c, e.gender));
   }
   // Метка без падежа — именительный
-  return out.replace(/\{ГЕРОЙ\}/g, hero.name).replace(/\{ЛАСКОВО\}/g, hero.nickname || hero.name);
+  return out.replace(/\{ГЕРОЙ\}/g, normalizeName(hero.name)).replace(/\{ЛАСКОВО\}/g, normalizeName(hero.nickname || hero.name));
 }
 
 /** Выбор формы из «м|ж» или «м|ж|ср» по роду. Без формы среднего рода — мужская. */
@@ -226,26 +273,28 @@ const CLOSE = "\u0002";
 const mark = (v: string) => (v ? OPEN + v + CLOSE : "");
 
 /** «о» → «об» перед а, о, у, э, и, ы (перед е, ё, ю, я — «о»: «о Юле», «о Яне»). */
-const OB_BEFORE = /^[аоуэиы]/i;
+const OB_BEFORE = /^[аоуэиыaouei]/i;
 /** «с» → «со» перед стечением согласных: «со Львом», «со Всеволодом», «со Святославом», «со Стасом», «со Звездой». */
 const SO_BEFORE = /^(?:[сзшжщ][бвгджзйклмнпрстфхцчшщ]|вс|вз|вт|льв|мн)/i;
 /** «к» → «ко» — только «ко Всеволоду», «ко Мне»-подобные стечения. */
 const KO_BEFORE = /^(?:вс|мн)/i;
 
+/** Предлог перед значением по норме: «о» → «об Ане», «с» → «со Львом», «к» → «ко Всеволоду». Регистр предлога сохраняется. */
+export function prepositionFor(prep: string, value: string): string {
+  const low = prep.toLowerCase();
+  const up = prep[0] !== prep[0].toLowerCase();
+  let want = low;
+  if (low === "о" || low === "об") want = OB_BEFORE.test(value) ? "об" : "о";
+  else if (low === "с" || low === "со") want = SO_BEFORE.test(value) ? "со" : "с";
+  else if (low === "к" || low === "ко") want = KO_BEFORE.test(value) ? "ко" : "к";
+  else return prep;
+  return up ? want[0].toUpperCase() + want.slice(1) : want;
+}
+
 function fixPrepositions(text: string) {
   return text.replace(
     new RegExp(`(?<![А-Яа-яЁё])(об|обо|о|со|с|ко|к) ${OPEN}([^${CLOSE}]*)${CLOSE}`, "gi"),
-    (m, prep: string, value: string) => {
-      const low = prep.toLowerCase();
-      const up = prep[0] !== prep[0].toLowerCase();
-      let want = low;
-      if (low === "о" || low === "об") want = OB_BEFORE.test(value) ? "об" : "о";
-      else if (low === "с" || low === "со") want = SO_BEFORE.test(value) ? "со" : "с";
-      else if (low === "к" || low === "ко") want = KO_BEFORE.test(value) ? "ко" : "к";
-      else return m;
-      const p = up ? want[0].toUpperCase() + want.slice(1) : want;
-      return `${p} ${OPEN}${value}${CLOSE}`;
-    },
+    (m, prep: string, value: string) => (prep.toLowerCase() === "обо" ? m : `${prepositionFor(prep, value)} ${OPEN}${value}${CLOSE}`),
   );
 }
 
@@ -379,7 +428,7 @@ export function fillTags(text: string, ctx: TagContext) {
   out = out.replace(/\{Р([1-3]):([^}]*)\}/g, (_, n: string, forms: string) => pickForm(forms, extras[Number(n) - 1]?.gender));
   out = out.replace(/\{МН:([^|}]*)\|([^}]*)\}/g, (_, one: string, many: string) => (extras.length > 1 ? many : one));
   out = out.replace(/\{ДОПЫ\.(им|род|дат|вин|тв|пр)\}/g, (_, c: Case) => mark(joinRu(extras.map((e) => declineName(e.name, c, e.gender)))));
-  out = out.replace(/\{ДОПЫ\}/g, () => mark(joinRu(extras.map((e) => e.name))));
+  out = out.replace(/\{ДОПЫ\}/g, () => mark(joinRu(extras.map((e) => normalizeName(e.name)))));
   out = out.replace(/\{ПОВОД(?:\.(им|род|дат|вин|тв|пр))?\}/g, (_, c?: Case) => mark(occasionForm(ctx.occasion, c ?? "им")));
   out = out.replace(/\{ВОЗРАСТ\}/g, () => mark(ctx.age ? ageLabel(ctx.age) : ""));
   out = out.replace(/\{(ГЕРОЙ|ЛАСКОВО)(?:\.(им|род|дат|вин|тв|пр))?\}/g, (_, who: string, c?: Case) =>
@@ -420,7 +469,7 @@ function fillGroup(text: string, ctx: TagContext): string {
   out = out.replace(/\{РД(\d+):([^}]*)\}/g, (_, n: string, forms: string) => pick3(forms, slot(Number(n))));
   out = out.replace(/\{РВ(\d)?:([^}]*)\}/g, (_, n: string | undefined, forms: string) => pickForm(forms, adults[Number(n ?? 1) - 1]?.gender ?? guessGender(adults[Number(n ?? 1) - 1]?.name ?? "")));
   out = out.replace(/\{МН_ГРУППЫ:([^}]*)\}/g, (_, forms: string) => pick3(forms, members));
-  out = out.replace(/\{ПЕРЕКЛИЧКА\}/g, () => mark(rosterLine(ctx.hero.name, members.map((p) => p.name))));
+  out = out.replace(/\{ПЕРЕКЛИЧКА\}/g, () => mark(rosterLine(normalizeName(ctx.hero.name), members.map((p) => normalizeName(p.name)))));
   out = out.replace(/\{ДРУГ(\d+)(?:\.(им|род|дат|вин|тв|пр))?\}/g, (_, n: string, c?: Case) => mark(joinRu(slot(Number(n)).map((p) => dec(p, c ?? "им")))));
   out = out.replace(/\{ВОСПИТАТЕЛЬ(\d)?(?:\.(им|род|дат|вин|тв|пр))?\}/g, (_, n: string | undefined, c?: Case) => {
     const a = adults[Number(n ?? 1) - 1];

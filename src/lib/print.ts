@@ -7,6 +7,7 @@ import { sendEmail } from "./notify";
 import { audit, setStatus } from "./orders";
 import { METHOD_TITLES } from "./shipping";
 import { addonFileSpecs, printAddonKinds } from "./addon-files";
+import { normalizeName } from "./names";
 
 const WEEK = 7 * 86400; // максимальный срок подписанной ссылки S3
 
@@ -84,7 +85,7 @@ export async function sendToPrint(orderId: string, operatorId?: string, opts: { 
     ...(addonLinks.length ? ["", "Файлы допов:", ...addonLinks] : []),
     "",
     `Отправление: ${ship ? METHOD_TITLES[ship.method as keyof typeof METHOD_TITLES] ?? ship.method : "—"}`,
-    ship?.method === "pickup" ? "Покупатель заберёт сам." : `Получатель: ${order.contactName}, ${order.contactPhone}`,
+    ship?.method === "pickup" ? "Покупатель заберёт сам." : `Получатель: ${normalizeName(order.contactName ?? "")}, ${order.contactPhone}`,
     addr ? `Адрес: ${addressLine(addr)}` : "",
     "",
     "Требования: блок — мелованная 150–170 г/м², вылеты 3 мм; обложка — ламинация. Упакуйте и передайте в службу доставки.",
@@ -97,7 +98,7 @@ export async function sendToPrint(orderId: string, operatorId?: string, opts: { 
     const r = await fetch(ph.apiUrl, {
       method: "POST",
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${process.env.PRINT_API_KEY ?? ""}` },
-      body: JSON.stringify({ order: order.publicCode, format, qty, extras, files: links, shipment: ship, recipient: { name: order.contactName, phone: order.contactPhone } }),
+      body: JSON.stringify({ order: order.publicCode, format, qty, extras, files: links, shipment: ship, recipient: { name: normalizeName(order.contactName ?? ""), phone: order.contactPhone } }),
     });
     if (!r.ok) throw new Error(`Типография API ${r.status}`);
     externalId = ((await r.json()) as { id?: string }).id;
