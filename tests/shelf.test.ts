@@ -8,6 +8,13 @@ import { PLOTS } from "../src/content/registry";
 const q = (href: string) => Object.fromEntries(new URLSearchParams(href.split("?")[1] ?? ""));
 const byId = (id: string) => SHELF.find((s) => s.id === id)!;
 const clone = (): SoonSettings => structuredClone(DEFAULTS.storefront.soon);
+/** Отметки «скоро» как на макете 30.10 — для проверки механизма (по умолчанию теперь всё открыто). */
+const mockup = (): SoonSettings => {
+  const s = clone();
+  s.TEEN = s.ADULT = s.PET = true;
+  for (const id of ["babushka", "mama", "papa", "pitomec", "dedushka", "lyubimomu", "podruge"]) s.shelf[id] = true;
+  return s;
+};
 
 describe("полка на главной (rev 06)", () => {
   it("книги и порядок — как на макете, обложки с правильной грамматикой", () => {
@@ -54,17 +61,17 @@ describe("полка на главной (rev 06)", () => {
     }
   });
 
-  it("«скоро» по умолчанию — как на макете", () => {
+  it("по умолчанию «скоро» нет: все аудитории и книги полки открыты", () => {
     const soon = DEFAULTS.storefront.soon;
-    expect(soonAudiences(soon)).toEqual(["TEEN", "ADULT", "PET"]);
-    const marked = shelfLinks(soon).filter((s) => s.soon).map((s) => s.id);
-    expect(marked).toEqual(["babushka", "mama", "papa", "pitomec", "dedushka", "lyubimomu", "podruge"]);
+    expect(soonAudiences(soon)).toEqual([]);
+    expect(shelfLinks(soon).filter((s) => s.soon)).toEqual([]);
+    expect(shelfLinks(mockup()).filter((s) => s.soon).map((s) => s.id)).toEqual(["babushka", "mama", "papa", "pitomec", "dedushka", "lyubimomu", "podruge"]);
     // В настройках есть отметка для каждой книги полки — иначе её не выключить в админке
     expect(Object.keys(soon.shelf).sort()).toEqual(SHELF.map((s) => s.id).sort());
   });
 
   it("книга «скоро» ведёт к примерам (без анкеты), снятая отметка — в анкету", () => {
-    const soon = clone();
+    const soon = mockup();
     const mama = shelfLinks(soon).find((s) => s.id === "mama")!;
     expect(mama.to).toBe("/skazki?dlya=vzroslym&segment=adult-parent");
     expect(mama.to).not.toMatch(/sozdat/);
@@ -75,7 +82,7 @@ describe("полка на главной (rev 06)", () => {
   });
 
   it("аудитории «скоро» снимаются в настройках; плашка без сбора почты", () => {
-    const soon = clone();
+    const soon = mockup();
     soon.ADULT = false;
     soon.TEEN = false;
     expect(soonAudiences(soon)).toEqual(["PET"]);

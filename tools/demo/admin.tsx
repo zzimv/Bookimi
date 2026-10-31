@@ -598,7 +598,7 @@ function SoonSettings() {
           </label>
         ))}
       </div>
-      <button type="button" className="btn btn--ghost btn--sm" data-demo="soon-reset" onClick={() => { setSoon(undefined); setMsg("Как на макете: подростки, взрослые и питомцы — скоро."); }}>Как на макете</button>
+      <button type="button" className="btn btn--ghost btn--sm" data-demo="soon-reset" onClick={() => { setSoon(undefined); setMsg("Сброшено: все разделы открыты."); }}>Сбросить</button>
       {msg && <p className="ok small">{msg}</p>}
     </section>
   );
