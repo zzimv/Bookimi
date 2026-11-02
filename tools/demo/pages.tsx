@@ -23,7 +23,11 @@ import { METHOD_TITLES } from "../../src/lib/shipping";
 import { declineName, normalizeName } from "../../src/lib/declension";
 import { canAcceptPayments, DEFAULTS } from "../../src/lib/settings";
 import { FORMATS } from "../../src/lib/catalog-defaults";
-import { bookAudience, bookById, bulkState, cartoonOf, catalogForPricing, demoPrefill, heroAccOf, journeyOf, markPaid, orderById, pageUrl, pdfPaidFor, S, SHIP_METHODS } from "./api";
+import { bonusInfo, bookAudience, bookById, bulkState, cartoonOf, catalogForPricing, demoPrefill, heroAccOf, journeyOf, markPaid, orderById, ordersAwaitingReview, pageUrl, pdfPaidFor, reviewOf, S, SHIP_METHODS } from "./api";
+import { DemoFullBook } from "./fullbook";
+import { canChangeOrder, CHANGE_LOCKED_TEXT, SUPPORT_HREF } from "../../src/lib/order-change";
+import { bonusWord } from "../../src/lib/bonuses";
+import { ReviewForm } from "../../src/app/kabinet/Forms";
 import { NotFoundError, RedirectError } from "./router";
 import { HeroBirthdays } from "../../src/app/kabinet/Birthdays";
 import { demoBirthdays } from "./holidays";
@@ -55,11 +59,26 @@ export async function KnigaPage({ id }: { id: string }) {
   );
 }
 
+/** /kniga/[id] в демо: путь книги сайта + для режима админа — «Показать всю книгу (для админа)». */
+export async function KnigaDemo({ id }: { id: string }) {
+  const b = bookById(id);
+  return (
+    <>
+      {await KnigaPage({ id })}
+      {b && S.adminMode && b.text && <DemoFullBook book={b} />}
+    </>
+  );
+}
+
 // ───────── /kniga/[id]/kupit ─────────
-export async function KupitPage({ id, who, pechat, bulk }: { id: string; who?: string; pechat?: string; bulk?: string }) {
+export async function KupitPage({ id, who, pechat, bulk, izmenit, chto }: { id: string; who?: string; pechat?: string; bulk?: string; izmenit?: string; chto?: string }) {
   const b = bookById(id);
   if (!b) throw new NotFoundError();
-  const user = needUser(`/kniga/${id}/kupit${who ? `?who=${who}` : pechat ? "?pechat=1" : ""}`);
+  const user = needUser(`/kniga/${id}/kupit${izmenit ? `?izmenit=${izmenit}${chto ? `&chto=${chto}` : ""}` : who ? `?who=${who}` : pechat ? "?pechat=1" : ""}`);
+  // «Изменить заказ» / «Изменить адрес доставки»: тот же экран оформления с выбором из заказа
+  const eo = izmenit ? orderById(izmenit) : null;
+  if (izmenit && (!eo || !canChangeOrder(eo).ok)) throw new RedirectError(`/zakaz/${izmenit}`);
+  const ei = eo?.input;
   if (!["PREVIEW_READY", "FULL_QUEUED", "FULL_READY"].includes(b.status)) throw new RedirectError(`/kniga/${id}`);
   const { formats, addons } = catalogForPricing(bookAudience(b));
   const full = FORMATS.filter((f) => formats.some((x) => x.key === f.key));
@@ -81,8 +100,29 @@ export async function KupitPage({ id, who, pechat, bulk }: { id: string; who?: s
         contact={{ name: user.name ?? "", phone: user.phone ?? "", email: user.email ?? "" }}
         pdfPaid={pdfPaidFor(id)}
         prefill={demoPrefill([...SHIP_METHODS])}
-        bulk={bs?.available ? { ...bs, initialOn: bulk === "1" } : null}
+        bulk={!eo && bs?.available ? { ...bs, initialOn: bulk === "1" } : null}
         audience={AnswersV2.safeParse(b.params).data?.audience ?? "CHILD"}
+        previewUrls={b.pages.filter((i) => i > 0).map((i) => pageUrl(b, i))}
+        heroName={normalizeName(b.params.hero.name ?? "")}
+        bookTitle={b.text?.title ?? ""}
+        cartoonSoon={!DEFAULTS.cartoon.enabled}
+        bonus={eo ? null : { balance: bonusInfo().balance, maxSharePct: DEFAULTS.bonus.maxSharePct }}
+        edit={
+          eo
+            ? {
+                orderId: eo.id,
+                publicCode: eo.publicCode,
+                formatKey: ei?.formatKey ?? eo.items.find((i) => i.kind === "format")?.refKey,
+                addons: ei?.addons ?? eo.items.filter((i) => i.kind === "addon").map((i) => i.refKey),
+                method: ei?.shipping?.method ?? eo.shipment?.method,
+                address: (ei?.shipping?.address ?? eo.shipment?.address) as never,
+                contact: { name: eo.contactName, phone: eo.contactPhone },
+                promo: eo.promo,
+                useBonus: (eo.bonusRub ?? 0) > 0,
+                focus: chto === "dostavka" ? "delivery" : undefined,
+              }
+            : null
+        }
       />
     </div>
   );
@@ -135,10 +175,13 @@ export async function ZakazPage({ id }: { id: string }) {
             {order.pdfCreditRub > 0 && <tr><td>Зачёт PDF</td><td style={{ textAlign: "right" }}>−{order.pdfCreditRub} ₽</td></tr>}
             {order.discountRub > 0 && <tr><td>Скидка</td><td style={{ textAlign: "right" }}>−{order.discountRub} ₽</td></tr>}
             {print && <tr><td>Доставка: {ship ? METHOD_TITLES[ship.method as keyof typeof METHOD_TITLES] : ""}</td><td style={{ textAlign: "right" }}>{order.shippingRub} ₽</td></tr>}
+            {(order.bonusRub ?? 0) > 0 && <tr data-bonus-line><td>Оплачено бонусами</td><td style={{ textAlign: "right" }}>−{order.bonusRub} ₽</td></tr>}
             <tr><td><b>Итого</b></td><td style={{ textAlign: "right" }}><b>{order.totalRub.toLocaleString("ru-RU")} ₽</b></td></tr>
           </tbody>
         </table>
       </div>
+
+      {print && <OrderChangeBox order={order} />}
 
       {(order.bookIds?.length ?? 0) > 1 && (
         <div className="panel" style={{ marginTop: 16 }} data-order-copies>
@@ -174,6 +217,8 @@ export async function ZakazPage({ id }: { id: string }) {
         </div>
       )}
 
+      {order.status === "DELIVERED" && !reviewOf(order.id) && <ReviewAsk orderId={order.id} />}
+
       {!pending && order.status !== "CANCELLED" && order.status !== "REFUNDED" && (
         <div className="panel" style={{ marginTop: 16 }}>
           <h2 style={{ fontSize: "var(--fs-lg)" }}>Как идёт заказ</h2>
@@ -188,7 +233,7 @@ export async function ZakazPage({ id }: { id: string }) {
           {order.receipt && <p className="small">Чек: <a href="/demo-receipt">открыть</a> <span className="muted">(в демо — не фискальный)</span></p>}
           <div className="row" style={{ marginTop: 12 }}>
             {bookId && !fresh && <Link className="btn btn--primary btn--sm" href={`/kabinet/kniga/${bookId}`}>Открыть книгу в кабинете</Link>}
-            {order.status === "DELIVERED" && <Link className="btn btn--ghost btn--sm" href="/kabinet/otzyv">Рассказать, как вам книга</Link>}
+            {order.status === "DELIVERED" && reviewOf(order.id) && <span className="small muted">Спасибо за отзыв!</span>}
           </div>
           {print && order.status !== "DELIVERED" && (
             <p className="muted-panel small demo-note" style={{ marginTop: 12 }}>
@@ -198,6 +243,54 @@ export async function ZakazPage({ id }: { id: string }) {
         </div>
       )}
     </div>
+  );
+}
+
+/** Просьба об отзыве после получения: «+300 бонусов» (rev 10). */
+function ReviewAsk({ orderId, compact }: { orderId: string; compact?: boolean }) {
+  const r = DEFAULTS.bonus;
+  return (
+    <aside className="review-ask" data-review-ask={orderId} style={{ marginTop: 16 }}>
+      <span className="review-ask__icon" aria-hidden="true">★</span>
+      <div>
+        <b>{compact ? "Книга у вас — как она вам?" : "Как вам книга? Расскажите — это займёт минуту"}</b>
+        <p className="small" style={{ margin: "4px 0 0" }}>{r.enabled ? <>За отзыв начислим <b>{bonusWord(r.reviewRub)}</b> — спишете при следующем заказе (1 бонус = 1 ₽).</> : "Нам важна каждая деталь."}</p>
+      </div>
+      <Link className="btn btn--gold btn--sm" href={`/kabinet/otzyv?zakaz=${orderId}`}>Оставить отзыв</Link>
+    </aside>
+  );
+}
+
+/** «Изменить заказ» и «Изменить адрес доставки» — пока заказ не оплачен (как на макете владелицы); после оплаты —
+ * «Заказ оплачен — изменения через поддержку». */
+function OrderChangeBox({ order }: { order: NonNullable<ReturnType<typeof orderById>> }) {
+  const can = canChangeOrder(order);
+  const hist = order.changes ?? [];
+  const locked = Boolean(order.paidAt) && !["DELIVERED", "CANCELLED", "REFUNDED"].includes(order.status);
+  if (!can.ok && !locked) return null;
+  return (
+    <section className="panel order-change" style={{ marginTop: 16 }} data-order-change={can.ok ? "open" : "locked"}>
+      {can.ok ? (
+        <>
+          <div className="row">
+            <Link className="btn btn--ghost btn--sm" data-change="contents" href={`/kniga/${order.bookId}/kupit?izmenit=${order.id}`}>Изменить заказ</Link>
+            <Link className="btn btn--ghost btn--sm" data-change="delivery" href={`/kniga/${order.bookId}/kupit?izmenit=${order.id}&chto=dostavka`}>Изменить адрес доставки</Link>
+          </div>
+          <p className="small muted" style={{ margin: "8px 0 0" }}>До оплаты можно поменять всё — формат, допы, доставку и получателя; сумма пересчитается.</p>
+          {hist.length > 0 && (
+            <ul className="order-change__hist small">
+              {hist.map((c, i) => (
+                <li key={i}><span className="muted">{new Date(c.at).toLocaleString("ru-RU", { day: "numeric", month: "long", hour: "2-digit", minute: "2-digit" })}:</span> {c.lines.join("; ")} · сумма {c.totalRub.toLocaleString("ru-RU")} ₽</li>
+              ))}
+            </ul>
+          )}
+        </>
+      ) : (
+        <p className="small order-change__lock" data-change-locked style={{ margin: 0 }}>
+          <span aria-hidden="true">🔒</span> {CHANGE_LOCKED_TEXT.replace(/поддержку$/, "")}<Link href={SUPPORT_HREF}>поддержку</Link>
+        </p>
+      )}
+    </section>
   );
 }
 
@@ -278,6 +371,9 @@ export async function KabinetHome() {
         </p>
       </header>
 
+      {ordersAwaitingReview().slice(0, 1).map((o) => <ReviewAsk key={o.id} orderId={o.id} compact />)}
+      <BonusCard />
+
       {hint && (
         <aside className="cab-hint" aria-label="Ближайший повод">
           <span className="cab-hint__icon" aria-hidden="true">
@@ -349,6 +445,48 @@ export async function KabinetHome() {
   );
 }
 
+/** Бонусный счёт в кабинете: остаток, ближайшее сгорание, история. */
+function BonusCard() {
+  const info = bonusInfo();
+  const list = S.bonus ?? [];
+  if (!list.length && !info.balance) return null;
+  return (
+    <section className="panel cab-bonus" data-bonus-balance={info.balance} aria-labelledby="bonus-h">
+      <div className="cab-bonus__top">
+        <h2 id="bonus-h" className="cab-h2" style={{ margin: 0 }}>Бонусы: {info.balance.toLocaleString("ru-RU")} ₽</h2>
+        <span className="small muted">1 бонус = 1 ₽ · оплатить можно до {info.settings.maxSharePct}% заказа</span>
+      </div>
+      {info.nextExpiry && <p className="small" style={{ margin: "6px 0 0" }}>{bonusWord(info.nextExpiry.rub)} сгорят {new Date(info.nextExpiry.at).toLocaleDateString("ru-RU", { day: "numeric", month: "long", year: "numeric" })}</p>}
+      <details className="small" style={{ marginTop: 6 }}>
+        <summary>История</summary>
+        <ul className="cab-bonus__hist">
+          {[...list].reverse().map((e, i) => (
+            <li key={i}><b className={e.amountRub > 0 ? "ok" : ""}>{e.amountRub > 0 ? "+" : "−"}{Math.abs(e.amountRub)}</b> · {e.kind === "review" ? "за отзыв" : e.kind === "spend" ? "списано" : e.kind === "revoke" ? "отзыв отклонён" : "возврат"}{(e as { note?: string }).note ? ` — ${(e as { note?: string }).note}` : ""}</li>
+          ))}
+        </ul>
+      </details>
+    </section>
+  );
+}
+
+/** /kabinet/otzyv?zakaz=… — отзыв о заказе: после получения книги — +300 бонусов. */
+export function KabinetOtzyv({ zakaz }: { zakaz?: string }) {
+  const o = zakaz ? orderById(zakaz) : ordersAwaitingReview()[0] ?? null;
+  const credit = o && o.status === "DELIVERED" && !(S.bonus ?? []).some((e) => e.kind === "review" && e.orderId === o.id) && DEFAULTS.bonus.enabled ? DEFAULTS.bonus.reviewRub : 0;
+  return (
+    <>
+      <h1 style={{ fontSize: "var(--fs-xl)" }}>Отзыв о книге</h1>
+      <p className="muted">Расскажите, как встретили книгу. Нам важна каждая деталь.{o ? ` Заказ ${o.publicCode}.` : ""}</p>
+      {o && reviewOf(o.id) ? (
+        <div className="panel review-done" data-review-done>
+          <p className="ok" style={{ margin: 0 }}>Спасибо! Отзыв появится на сайте после проверки.</p>
+          {(S.bonus ?? []).some((e) => e.kind === "review" && e.orderId === o.id) && <p className="bonus-credit" data-bonus-credit>+{(S.bonus ?? []).find((e) => e.kind === "review" && e.orderId === o.id)!.amountRub} бонусов на вашем счёте — спишите их при следующем заказе (1 бонус = 1 ₽). <Link href="/kabinet">Мой бонусный счёт →</Link></p>}
+        </div>
+      ) : <ReviewForm orderId={o?.id} initialName={S.user?.firstName ?? ""} bonusRub={credit} />}
+    </>
+  );
+}
+
 export async function KabinetBook({ id }: { id: string }) {
   const b = bookById(id);
   if (!b) throw new NotFoundError();
@@ -379,8 +517,8 @@ export async function KabinetBook({ id }: { id: string }) {
         </details>
       )}
       {b.status === "FULL_READY" && cartoonOf(b).bought && <CartoonPlayer book={b} />}
-      {b.status !== "FULL_READY" && cartoonOf(b).bought && <p className="muted-panel small">Мультфильм соберётся, как только книга будет готова.</p>}
-      <BookCabinet id={id} title={b.text?.title ?? ""} status={b.status} progress={b.progress} redrawsLeft={b.redrawsLeft} pages={pages} files={files} audioUrl={null} selfRead={false} later={later} coverUrl={b.pages.includes(0) ? pageUrl(b, 0) : null} />
+      {b.status !== "FULL_READY" && cartoonOf(b).bought && <p className="muted-panel small">«Оживление книги» соберётся, как только книга будет готова.</p>}
+      <BookCabinet heroName={normalizeName(b.params.hero.name ?? "")} cartoonSoon={!DEFAULTS.cartoon.enabled} id={id} title={b.text?.title ?? ""} status={b.status} progress={b.progress} redrawsLeft={b.redrawsLeft} pages={pages} files={files} audioUrl={null} selfRead={false} later={later} coverUrl={b.pages.includes(0) ? pageUrl(b, 0) : null} />
       <p className="small demo-note" style={{ marginTop: 16 }}>
         <Link href={`/kniga/${id}`}>Настроение иллюстраций — сменить для всей книги →</Link>
         {bought.has("audiobook") && <span className="muted"> · Аудиокнига на сайте — MP3 голосом диктора в плеере.</span>}
@@ -399,13 +537,14 @@ export async function KabinetOrders() {
       ) : (
         <div className="tbl-wrap">
           <table className="tbl tbl--cards">
-            <thead><tr><th>Заказ</th><th>Сумма</th><th>Как идёт</th></tr></thead>
+            <thead><tr><th>Заказ</th><th>Сумма</th><th>Как идёт</th><th>Изменить</th></tr></thead>
             <tbody>
               {list.map((o) => (
                 <tr key={o.id}>
                   <td data-label="Заказ"><Link href={`/zakaz/${o.id}`}><b>{o.publicCode}</b></Link><br /><small className="muted">{new Date(o.createdAt).toLocaleDateString("ru-RU")}</small></td>
                   <td data-label="Сумма">{o.totalRub.toLocaleString("ru-RU")} ₽</td>
-                  <td data-label="Как идёт" className="small">{journeyLine(journeyOf(o)) ?? "—"}</td>
+                  <td data-label="Как идёт" className="small">{journeyLine(journeyOf(o)) ?? (o.status === "PENDING_PAYMENT" ? "ждёт оплаты" : "—")}</td>
+                  <td data-label="Изменить" className="small">{canChangeOrder(o).ok ? <Link href={`/kniga/${o.bookId}/kupit?izmenit=${o.id}`} data-cab-change={o.id}>Изменить заказ</Link> : o.whoPrints === "bookimi" && o.paidAt && !["DELIVERED", "CANCELLED", "REFUNDED"].includes(o.status) ? <span className="muted">оплачен — через <Link href={SUPPORT_HREF}>поддержку</Link></span> : "—"}</td>
                 </tr>
               ))}
             </tbody>
@@ -449,11 +588,14 @@ export async function VhodPage({ next }: { next?: string }) {
       <h1>Вход в личный кабинет</h1>
       <p className="muted">Ваши книги, заказы и чеки. Вход по коду — без пароля.</p>
       <div className="panel">
-        <LoginBox next={safe} consentGiven={S.consent.pd ? true : undefined} />
+        <LoginBox next={safe} consentGiven={S.consent.pd ? true : undefined} initialName={S.user?.firstName ?? lastFirstName()} />
       </div>
     </div>
   );
 }
+
+/** «Как к вам обращаться», если уже знаем (последний вход в этом браузере). */
+const lastFirstName = () => (S.orders[0]?.contactName ?? "").split(" ")[0] || "";
 
 // ───────── заглушка для юридических и прочих страниц ─────────
 export function StubPage({ path }: { path: string }) {

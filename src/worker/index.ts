@@ -7,7 +7,7 @@ import { runTriggers } from "../lib/triggers";
 import { issueDueBonuses } from "../lib/referral";
 import { checkNpdLimit } from "../lib/orders";
 import { gpuTick } from "../lib/gen/gpu";
-import { alertOwner, notifyUser, type Template } from "../lib/notify";
+import { alertOwner, alertPaidFailure, notifyUser, type Template } from "../lib/notify";
 import { cancelUnpaid, runBatch } from "./jobs";
 import { runCartoon } from "../lib/gen/cartoon";
 import { purgeCartoonVoices } from "../lib/cartoon";
@@ -16,7 +16,9 @@ type Job<T> = { id: string; data: T }[];
 
 async function fail(bookId: string, e: unknown) {
   const msg = (e as Error).message ?? String(e);
-  await db.book.update({ where: { id: bookId }, data: { status: "FAILED", error: msg.slice(0, 300) } }).catch(() => {});
+  const book = await db.book.update({ where: { id: bookId }, data: { status: "FAILED", error: msg.slice(0, 300) }, select: { paidFull: true } }).catch(() => null);
+  // Оплаченная книга не собралась — оператору (покупатель видит «Мы уже исправляем», не «попробуйте ещё раз»)
+  if (book?.paidFull) await alertPaidFailure(bookId, msg).catch(() => {});
 }
 
 async function main() {
@@ -64,7 +66,6 @@ async function main() {
         await runFull(j.data.bookId, j.data.orderId);
       } catch (e) {
         await fail(j.data.bookId, e);
-        await alertOwner("Ошибка подготовки оплаченной книги", `Книга ${j.data.bookId}: ${(e as Error).message}`);
         throw e;
       }
     }
@@ -103,6 +104,7 @@ async function main() {
   await boss.schedule(QUEUES.npdLimitCheck, "0 9 * * *", {}, tz);
   await boss.schedule(QUEUES.gpuTick, "*/5 * * * *", {}, tz);
   await boss.schedule(QUEUES.purgeCartoonVoices, "40 3 * * *", {}, tz);
+  await boss.schedule(QUEUES.cdekTrack, "*/20 * * * *", {}, tz);
 
   // Удаление фото старше 7 дней (дублирует lifecycle бакета photos)
   await boss.work(QUEUES.purgePhotos, async () => {
@@ -131,6 +133,12 @@ async function main() {
   // Записи своего голоса для мультфильма — удалить через 30 дней после выдачи
   await boss.work(QUEUES.purgeCartoonVoices, async () => {
     await purgeCartoonVoices();
+  });
+
+  // Номера отправлений СДЭК, которые не пришли сразу после создания заказа в СДЭК
+  await boss.work(QUEUES.cdekTrack, async () => {
+    const { pollCdekTracks } = await import("../lib/print");
+    await pollCdekTracks();
   });
 
   console.error("[worker] запущен");

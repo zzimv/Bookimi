@@ -32,7 +32,7 @@ const OCCASION_PAGES: OccasionDefault[] = [
     title: "Новый год",
     h1: "Новогодняя книга с вашим ребёнком в главной роли",
     intro:
-      "Сказка о путешествии с Дедом Морозом, где ребёнок узнаёт себя на каждой странице. Чтобы успеть к празднику, закажите печать до 20 декабря: изготовление 3–5 рабочих дней плюс доставка.",
+      "Сказка о путешествии с Дедом Морозом, где ребёнок узнаёт себя на каждой странице. Чтобы успеть к празднику, закажите печать до {NY_DEADLINE}: изготовление 3–5 рабочих дней плюс доставка.",
   },
   {
     slug: "rozhdestvo",
@@ -230,8 +230,8 @@ export const ADDONS = [
   // ── Общие ──
   { key: "audiobook", kind: "DIGITAL", title: "Аудиокнига: озвучка диктором", description: "Книга голосом диктора — MP3 в кабинете и плеер на сайте.", price: 390, pct: null, print: false, audiences: ["CHILD", "TEEN", "ADULT"], supplier: "print", active: true },
   // Цены мультфильма — из настроек cartoon.priceRub / cartoon.ownVoiceRub (здесь — значения по умолчанию)
-  { key: "cartoon", kind: "DIGITAL", title: "Мультфильм по книге: 2 минуты с вашими героями и озвучкой", description: "Квадратный 1080×1080 и вертикальный 9:16 — для телевизора, сторис и коротких видео.", price: 690, pct: null, print: false, audiences: [], supplier: "print", active: true },
-  { key: "cartoon-own-voice", kind: "MODIFIER", title: "Мультфильм своим голосом: озвучите сами по готовому сценарию", description: "Запишите реплики в кабинете — мультфильм соберётся с голосом близких.", price: 400, pct: null, print: false, audiences: ["CHILD", "ADULT"], supplier: "print", active: true },
+  { key: "cartoon", kind: "DIGITAL", title: "Оживление книги: 2 минуты — иллюстрации оживают, диктор читает сказку", description: "Квадратный 1080×1080 и вертикальный 9:16 — для телевизора, сторис и коротких видео.", price: 690, pct: null, print: false, audiences: [], supplier: "print", active: true },
+  { key: "cartoon-own-voice", kind: "MODIFIER", title: "Оживление книги своим голосом: озвучите сами по готовому сценарию", description: "Запишите реплики в кабинете — ролик соберётся с голосом близких.", price: 400, pct: null, print: false, audiences: ["CHILD", "ADULT"], supplier: "print", active: true },
   { key: "second-copy", kind: "MODIFIER", title: "Второй экземпляр книги", description: "Ещё одна такая же печатная книга со скидкой.", price: null, pct: 30, print: true, audiences: [], supplier: "print", active: true },
   { key: "urgent", kind: "MODIFIER", title: "Срочное изготовление", description: "Изготовим на 2 рабочих дня быстрее.", price: 500, pct: null, print: true, audiences: [], supplier: "print", active: true },
 ] as const;
@@ -250,7 +250,7 @@ export const FAQ = [
   },
   {
     q: "Сколько ждать?",
-    a: "Превью готово за 2–5 минут. Полная книга в PDF — в течение часа после оплаты. Печать — 3–5 рабочих дней, затем доставка: СДЭК 2–7 дней, Почта России 7–14 дней. Точную дату вы увидите при оформлении.",
+    a: "Превью готово за 2–5 минут. Полная книга в PDF — в течение часа после оплаты. Печать — 3–5 рабочих дней, затем доставка: {DELIVERY}. Точную дату вы увидите при оформлении.",
   },
   {
     q: "Что происходит с фотографиями?",

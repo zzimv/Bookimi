@@ -70,6 +70,9 @@ class EditReq(BaseModel):
     cfg: float = 4.0
     seed: int = 0
     text2img: bool = False
+    # Печатный размер (300 dpi): после генерации — увеличение Real-ESRGAN (если установлен) или Lanczos
+    out_width: int | None = Field(default=None, le=6000)
+    out_height: int | None = Field(default=None, le=6000)
 
 
 @app.get("/health")
@@ -103,9 +106,35 @@ def edit(r: EditReq):
                        num_inference_steps=r.steps, generator=torch.manual_seed(r.seed)).images[0]
             if r.width and r.height and (out.width, out.height) != (r.width, r.height):
                 out = cover_resize(out, r.width, r.height)
+        if r.out_width and r.out_height and (out.width, out.height) != (r.out_width, r.out_height):
+            out = upscale(out, r.out_width, r.out_height)
     buf = io.BytesIO()
     out.save(buf, "PNG")
     return {"image": base64.b64encode(buf.getvalue()).decode(), "seconds": round(time.time() - t0, 2), "nsfw": 0.0}
+
+
+_esrgan = None
+
+
+def upscale(im, w, h):
+    """Увеличение до печатного размера: Real-ESRGAN x4 (pip install realesrgan, веса RealESRGAN_x4plus.pth рядом),
+    без него — Lanczos с лёгкой резкостью. Затем точная подгонка cover_resize."""
+    global _esrgan
+    from PIL import ImageFilter  # type: ignore
+    try:
+        if _esrgan is None:
+            from realesrgan import RealESRGANer  # type: ignore
+            from basicsr.archs.rrdbnet_arch import RRDBNet  # type: ignore
+            net = RRDBNet(num_in_ch=3, num_out_ch=3, num_feat=64, num_block=23, num_grow_ch=32, scale=4)
+            _esrgan = RealESRGANer(scale=4, model_path=os.environ.get("ESRGAN_WEIGHTS", "RealESRGAN_x4plus.pth"), model=net, half=True)
+        import numpy as np  # type: ignore
+        from PIL import Image  # type: ignore
+        arr, _ = _esrgan.enhance(np.array(im)[:, :, ::-1], outscale=max(w / im.width, h / im.height))
+        im = Image.fromarray(arr[:, :, ::-1])
+    except Exception:
+        scale = max(w / im.width, h / im.height)
+        im = im.resize((round(im.width * scale), round(im.height * scale)), resample=3).filter(ImageFilter.UnsharpMask(radius=1.2, percent=60, threshold=2))
+    return cover_resize(im, w, h)
 
 
 def side_by_side(images):

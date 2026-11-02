@@ -91,10 +91,11 @@ export async function sectionedStories(povod: string, audience?: AudienceKey, se
   return { povod, customFirst: sec.customFirst, core, fits, others: sec.strong ? others : [...others, ...rest], hidden: sec.strong ? rest : [] };
 }
 
-export function OccasionSectionsView({ sections, minPrice, soon = [] }: { sections: StorySections; minPrice: number; soon?: AudienceKey[] }) {
+/** dlya — повод одной аудитории (юбилей — взрослым, день питомца — питомцам): «Своя история» сразу с ней. */
+export function OccasionSectionsView({ sections, minPrice, soon = [], dlya }: { sections: StorySections; minPrice: number; soon?: AudienceKey[]; dlya?: AudienceKey }) {
   const { povod } = sections;
   const own = (
-    <Link key="own" href={`/sozdat?povod=${povod}`} className="own-card panel" data-own-card>
+    <Link key="own" href={`/sozdat?povod=${povod}${dlya ? `&dlya=${dlya}` : ""}`} className="own-card panel" data-own-card>
       <span className="own-icon" aria-hidden="true">✎</span>
       <span>
         <strong>Своя история</strong>

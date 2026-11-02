@@ -172,7 +172,7 @@ describe("цены мультфильма", () => {
     expect(q.totalRub).toBe(2080);
   });
   it("«своим голосом» без мультфильма — ошибка; к уже купленному мультфильму — можно", () => {
-    expect(quote({ whoPrints: "self", addons: ["cartoon-own-voice"] }, FORMATS, ADDONS).errors[0]).toMatch(/дополнение к мультфильму/);
+    expect(quote({ whoPrints: "self", addons: ["cartoon-own-voice"] }, FORMATS, ADDONS).errors[0]).toMatch(/дополнение к «Оживлению книги»/);
     const later = quote({ whoPrints: "self", addons: ["cartoon-own-voice"], addonsOnly: true, cartoonPaid: true }, FORMATS, ADDONS);
     expect(later.errors).toEqual([]);
     expect(later.totalRub).toBe(400);
@@ -266,6 +266,9 @@ d("мультфильм: БД", async () => {
   beforeAll(async () => {
     user = await db.user.create({ data: { email: `cartoon-${tag}@test.local`, referralCode: `C${tag}`.slice(0, 12).toUpperCase() } });
     book = await readyBook();
+    // «Оживление книги» по умолчанию «скоро» (enabled: false) — для проверки продаж включаем
+    const { saveSetting, DEFAULTS } = await import("@/lib/settings");
+    await saveSetting("cartoon", { ...DEFAULTS.cartoon, enabled: true });
   });
 
   afterAll(async () => {

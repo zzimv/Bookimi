@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { NextResponse } from "next/server";
 import "@/lib/zod-ru";
 import { db } from "@/lib/db";
 import { body, err, json, ownBook, throttle } from "@/lib/api";
@@ -90,7 +91,16 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       const limits = await cfg("limits");
       const contact = user.email ?? user.phone ?? user.id;
       if (!staff && !(await hit(contact, "preview", limits.previewsPerContact))) {
-        return err("Сегодня превью уже было. Новое можно сделать завтра — или купите эту книгу без ожидания.", 429);
+        // Книга переходит в аккаунт и запоминает «по фото / по описанию» — её можно оформить без превью (/kupit)
+        await db.book.update({ where: { id }, data: { ...(book.userId ? {} : { userId: user.id }), withPhoto: b.withPhoto, contact } });
+        if (!book.userId) await db.hero.updateMany({ where: { bookId: id, userId: null }, data: { userId: user.id } });
+        return NextResponse.json(
+          {
+            error: "Сегодня превью уже было — новое можно сделать завтра. А эту книгу можно оформить сразу, без превью: текст вы утвердили, иллюстрации нарисуем после оплаты.",
+            buyUrl: `/kniga/${id}/kupit`,
+          },
+          { status: 429 },
+        );
       }
       if (b.marketing) {
         await db.user.update({ where: { id: user.id }, data: { marketingOk: true } });

@@ -19,6 +19,8 @@ export const QUEUES = {
   purgeCartoonVoices: "purge-cartoon-voices",
   /** Повтор уведомлений, которые не ушли сразу (SMTP/Telegram недоступны): с нарастающей паузой. */
   sendNotification: "send-notification",
+  /** Номера отправлений СДЭК: заказ в СДЭК создан, номер (cdek_number) ещё не пришёл. */
+  cdekTrack: "cdek-track",
 } as const;
 
 const g = globalThis as unknown as { boss?: Promise<PgBoss> };

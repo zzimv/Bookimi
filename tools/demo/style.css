@@ -55,3 +55,20 @@ p.demo-note:not(.muted-panel) { padding-left: 10px; }
 
 /* Плеер мультфильма (tools/demo/cartoon.tsx) */
 .cartoon-demo__canvas { display: block; width: 100%; max-width: 560px; aspect-ratio: 1 / 1; height: auto; border-radius: 14px; background: #0b120f; cursor: pointer; }
+
+/* rev 10: «Начать заново» в полосе демо, подтверждение на странице, режим админа */
+.demo-restart { border-color: var(--gold); }
+.demo-limits[aria-pressed="true"] { background: var(--accent-bg); color: var(--white); }
+.demo-confirm { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.demo-confirm--bottom { justify-content: center; color: var(--band-ink); }
+.demo-confirm--bottom .demo-limits { min-height: 44px; }
+.demo-confirm__yes { background: var(--danger, #c0392b); color: #fff; border-color: transparent; }
+/* «Показать всю книгу (для админа)» */
+.full-book { padding-top: 16px; padding-bottom: 24px; }
+.full-book__toggle { gap: 8px; }
+.full-book__title { font-size: var(--fs-xl); margin: 12px 0 4px; }
+.full-book__pages { list-style: none; padding: 0; margin: 12px 0 0; display: grid; gap: 16px; }
+.full-book__pages li { display: grid; gap: 10px; background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-ui); padding: 10px; }
+@media (min-width: 900px) { .full-book__pages li { grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr); align-items: start; } }
+.full-book__pages img { width: 100%; height: auto; border-radius: 8px; display: block; }
+.full-book__text p { margin: 6px 0 0; }

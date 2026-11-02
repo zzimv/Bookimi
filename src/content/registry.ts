@@ -10,6 +10,7 @@ import { TEEN_PLOTS } from "./plots/teens";
 import { ADULT_PLOTS } from "./plots/adults";
 import { PET_PLOTS } from "./plots/pets";
 import { KIDS_GROUP_PLOTS, TEEN_GROUP_PLOTS } from "./plots/groups";
+import { NEWYEAR_PLOTS } from "./plots/newyear";
 import { MOODS } from "./moods";
 import { KIDS_ART_STYLES, KIDS_THEMES } from "./art/kids";
 import { TEEN_ART_STYLES, TEEN_THEMES } from "./art/teens";
@@ -52,7 +53,7 @@ import {
 
 export { TEXT_STYLES, ART_STYLES, MOODS, themesByKey, themeFor, heroDrawer, artStyle, occasionText };
 
-export const PLOTS: Plot[] = [...KIDS_PLOTS, ...KIDS_GROUP_PLOTS, ...TEEN_PLOTS, ...TEEN_GROUP_PLOTS, ...ADULT_PLOTS, ...PET_PLOTS];
+export const PLOTS: Plot[] = [...KIDS_PLOTS, ...KIDS_GROUP_PLOTS, ...TEEN_PLOTS, ...TEEN_GROUP_PLOTS, ...ADULT_PLOTS, ...PET_PLOTS, ...NEWYEAR_PLOTS];
 
 /** Минимум сюжетов по аудиториям (Definition of Done контент-агентов). */
 export const PLOT_TARGETS: Record<AudienceKey, number> = { CHILD: 9, TEEN: 5, ADULT: 5, PET: 4 };

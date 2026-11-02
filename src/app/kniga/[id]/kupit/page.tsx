@@ -4,23 +4,30 @@ import { Checkout } from "@/components/book/Checkout";
 import { ownBook } from "@/lib/api";
 import { db } from "@/lib/db";
 import { cfg, canAcceptPayments } from "@/lib/settings";
-import { catalogForPricing, pdfPaidFor } from "@/lib/orders";
+import { catalogForPricing, checkoutAllowed, pdfPaidFor } from "@/lib/orders";
 import { availableMethods, METHOD_TITLES } from "@/lib/shipping";
 import { signedUrl } from "@/lib/storage";
 import { parseAddressBook, pickPrefill } from "@/lib/delivery";
 import { bulkState } from "@/lib/bulk-server";
 import { audienceOfParams } from "@/lib/addons-core";
+import { canChangeOrder } from "@/lib/order-change";
+import { normalizeName } from "@/lib/declension";
 
 export const metadata: Metadata = { title: "Оформление", robots: { index: false } };
 export const dynamic = "force-dynamic";
 
-export default async function Page({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ who?: string; pechat?: string; "dlya-vseh"?: string }> }) {
+export default async function Page({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ who?: string; pechat?: string; "dlya-vseh"?: string; izmenit?: string; chto?: string }> }) {
   const { id } = await params;
   const sp = await searchParams;
   const own = await ownBook(id);
   if (!own) notFound();
   if (!own.user) redirect(`/vhod?next=/kniga/${id}/kupit`);
-  if (!["PREVIEW_READY", "FULL_QUEUED", "FULL_READY"].includes(own.book.status)) redirect(`/kniga/${id}`);
+  // Без превью — только если текст утверждён и дневной лимит превью исчерпан (иллюстрации — после оплаты)
+  const allowed = await checkoutAllowed(own.book, own.user);
+  if (!allowed.ok) redirect(`/kniga/${id}`);
+  // «Изменить заказ» (только до оплаты, rev 10): тот же экран с выбором из заказа
+  const eo = sp.izmenit && /^[0-9a-f-]{36}$/.test(sp.izmenit) ? await db.order.findUnique({ where: { id: sp.izmenit }, include: { items: true, shipment: true } }) : null;
+  if (sp.izmenit && (!eo || eo.userId !== own.user.id || !canChangeOrder(eo).ok)) redirect(`/zakaz/${sp.izmenit}`);
 
   // Допы — только для аудитории книги: у подростка, взрослого и питомца свои наборы (src/lib/addons-core.ts)
   const audience = audienceOfParams(own.book.params);
@@ -37,6 +44,8 @@ export default async function Page({ params, searchParams }: { params: Promise<{
   const cover = await db.bookPage.findUnique({ where: { bookId_index: { bookId: id, index: 0 } } });
   const coverUrl = cover?.previewKey ? await signedUrl("books", cover.previewKey) : null;
   const user = own.user;
+  const cartoonCfg = await cfg("cartoon");
+  const eship = eo?.shipment as { method?: string; address?: Record<string, string> | null; pvzCode?: string | null; pvzAddress?: string | null } | null | undefined;
   // Получатель и адрес «из прошлого раза»: адресная книга → последний заказ → профиль → черновик анкеты
   const lastOrder = await db.order.findFirst({
     where: { userId: user.id, shipment: { isNot: null } },
@@ -59,6 +68,11 @@ export default async function Page({ params, searchParams }: { params: Promise<{
 
   return (
     <div className="wrap" style={{ padding: "24px var(--gutter) 80px" }}>
+      {allowed.withoutPreview && (
+        <p className="muted-panel small" role="note" style={{ marginBottom: 16 }}>
+          Оформляете без превью: текст сказки вы уже утвердили. Иллюстрации нарисуем сразу после оплаты — обычно за 1–2 часа — и пришлём письмо, когда книга будет готова. Если картинка не понравится, одну страницу перерисуем бесплатно.
+        </p>
+      )}
       <Checkout
         bookId={id}
         coverUrl={coverUrl}
@@ -81,8 +95,25 @@ export default async function Page({ params, searchParams }: { params: Promise<{
         contact={{ name: user.name || user.firstName || "", phone: user.phone ?? "", email: user.email ?? "" }}
         pdfPaid={await pdfPaidFor(id, user.id)}
         prefill={prefill}
-        bulk={bulk}
+        bulk={eo ? null : bulk}
         audience={audience}
+        heroName={normalizeName((own.book.params as { hero?: { name?: string } } | null)?.hero?.name ?? "")}
+        bookTitle={(own.book.text as { title?: string } | null)?.title ?? ""}
+        cartoonSoon={!cartoonCfg.enabled}
+        edit={
+          eo
+            ? {
+                orderId: eo.id,
+                publicCode: eo.publicCode,
+                formatKey: eo.items.find((i) => i.kind === "format")?.refKey,
+                addons: eo.items.filter((i) => i.kind === "addon").map((i) => i.refKey),
+                method: eship?.method,
+                address: eship ? { ...(eship.address ?? {}), pvzCode: eship.pvzCode ?? "", pvzAddress: eship.pvzAddress ?? "" } : undefined,
+                contact: { name: eo.contactName ?? "", phone: eo.contactPhone ?? "" },
+                focus: sp.chto === "dostavka" ? "delivery" : undefined,
+              }
+            : null
+        }
       />
     </div>
   );

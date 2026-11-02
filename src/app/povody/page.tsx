@@ -1,3 +1,4 @@
+import { og } from "@/lib/og";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { Breadcrumbs, StickyCta } from "@/components/Layout";
@@ -11,6 +12,7 @@ export const metadata: Metadata = {
   title: "Книга в подарок к поводу: день рождения, Новый год, годовщина и другие",
   description: "Персональная книга к любому поводу: день рождения, Новый год, выпускной, 8 Марта, годовщина, юбилей, день питомца. Или впишем ваш собственный повод.",
   alternates: { canonical: "/povody" },
+  ...og({ title: "Книга в подарок к поводу", description: "Персональная книга к любому поводу: день рождения, Новый год, выпускной, 8 Марта, годовщина, юбилей, день питомца.", path: "/povody" }),
 };
 
 export default async function Page() {

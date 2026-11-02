@@ -1,3 +1,4 @@
+import { og } from "@/lib/og";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { db, hasDatabase } from "@/lib/db";
@@ -8,6 +9,7 @@ export const metadata: Metadata = {
   title: "Блог: идеи подарков и советы",
   description: "Как выбрать фото для персональной книги, что подарить ребёнку к празднику, как читать вместе.",
   alternates: { canonical: "/blog" },
+  ...og({ title: "Блог БУКИМИ: идеи подарков и советы", description: "Как выбрать фото для персональной книги, что подарить ребёнку к празднику, как читать вместе.", path: "/blog" }),
 };
 
 export default async function Page() {

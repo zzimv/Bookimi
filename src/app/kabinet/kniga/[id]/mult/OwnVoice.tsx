@@ -178,7 +178,7 @@ export function OwnVoice(p: {
   }
 
   async function deleteAll() {
-    if (!confirm("Удалить все ваши записи? Мультфильм, который уже собран, останется.")) return;
+    if (!confirm("Удалить все ваши записи? Ролик, который уже собран, останется.")) return;
     try {
       await api(`/api/books/${p.bookId}/cartoon`, { action: "deleteVoice" });
       setRec({});
@@ -264,12 +264,12 @@ export function OwnVoice(p: {
       {error && <p className="error">{error}</p>}
       <div className="row" style={{ marginTop: 16 }}>
         <button className="btn btn--primary" disabled={!consent || done < p.cues.length || total > p.maxTotalSec || p.buildsLeft <= 0 || p.busy} onClick={build}>
-          Собрать мультфильм с моим голосом
+          Собрать ролик с моим голосом
         </button>
-        <span className="small muted">{p.busy ? "Мультфильм сейчас собирается…" : `Можно собрать ещё ${p.buildsLeft} раз(а).`}</span>
+        <span className="small muted">{p.busy ? "Ролик сейчас собирается…" : `Можно собрать ещё ${p.buildsLeft} раз(а).`}</span>
       </div>
       <p className="small muted" style={{ marginTop: 12 }}>
-        Записи храним на серверах в России и удаляем через {p.purgeDays} дней после готовности мультфильма. Не передаём третьим лицам и не «клонируем» голос.{" "}
+        Записи храним на серверах в России и удаляем через {p.purgeDays} дней после готовности ролика. Не передаём третьим лицам и не «клонируем» голос.{" "}
         <button className="link-btn" onClick={deleteAll}>Удалить мои записи сейчас</button>
       </p>
     </>

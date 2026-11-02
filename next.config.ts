@@ -1,4 +1,5 @@
 import type { NextConfig } from "next";
+import { adminCsp } from "./src/lib/admin-host";
 
 const isProd = process.env.NODE_ENV === "production";
 
@@ -42,7 +43,14 @@ const config: NextConfig = {
   // для окружений без движков Prisma, где клиент сгенерирован как заглушка.
   typescript: { ignoreBuildErrors: process.env.SKIP_TYPECHECK === "1" },
   async headers() {
-    return [{ source: "/:path*", headers: securityHeaders }];
+    // Админка и вход (на admin-хосте открыты только они): строгая CSP без Метрики и сторонних скриптов
+    const adminHeaders = securityHeaders.map((h) => (h.key === "Content-Security-Policy" ? { ...h, value: adminCsp(isProd) } : h));
+    return [
+      { source: "/((?!admin|api/admin|vhod).*)", headers: securityHeaders },
+      { source: "/:p(admin|vhod)", headers: adminHeaders },
+      { source: "/:p(admin|vhod)/:path*", headers: adminHeaders },
+      { source: "/api/admin/:path*", headers: adminHeaders },
+    ];
   },
 };
 

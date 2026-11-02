@@ -96,6 +96,8 @@ export class YooKassaProvider implements PaymentProvider {
     return "Basic " + Buffer.from(`${process.env.PAYMENT_YOOKASSA_SHOP_ID}:${process.env.PAYMENT_YOOKASSA_SECRET_KEY}`).toString("base64");
   }
   async create(order: Order, payment: Payment) {
+    // ИП: чек 54-ФЗ формирует касса ЮKassa по объекту receipt (позиции заказа, НДС и СНО — Настройки → Налоговый режим)
+    const receipt = await yookassaReceiptFor(order);
     const r = await fetch("https://api.yookassa.ru/v3/payments", {
       method: "POST",
       headers: { Authorization: this.auth(), "Idempotence-Key": payment.idempotencyKey, "Content-Type": "application/json" },
@@ -105,9 +107,10 @@ export class YooKassaProvider implements PaymentProvider {
         confirmation: { type: "redirect", return_url: `https://${process.env.DOMAIN}/zakaz/${order.id}` },
         description: `Заказ ${order.publicCode}`,
         metadata: { orderId: order.id },
+        ...(receipt ? { receipt } : {}),
       }),
     });
-    if (!r.ok) throw new Error(`ЮKassa ${r.status}`);
+    if (!r.ok) throw new Error(`ЮKassa ${r.status}${r.status === 400 ? ": проверьте настройки чека (НДС, СНО) и контакты покупателя" : ""}`);
     const j = (await r.json()) as { id: string; confirmation: { confirmation_url: string } };
     return { view: { type: "redirect" as const, url: j.confirmation.confirmation_url }, externalId: j.id, raw: j };
   }
@@ -140,4 +143,40 @@ export class YooKassaProvider implements PaymentProvider {
     if (!j.id || !j.status || j.status === "canceled") throw new Error(`возврат не принят (статус ${j.status ?? "неизвестен"})`);
     return { id: j.id, status: j.status };
   }
+}
+
+/** Объект receipt для ЮKassa: только при режиме ИП (НПД — чеки «Мой налог», src/lib/npd.ts). */
+export async function yookassaReceiptFor(order: Order) {
+  const { cfg } = await import("./settings");
+  const tax = await cfg("tax");
+  if (tax.regime !== "ip") return null;
+  const { db } = await import("./db");
+  const { buildReceipt54 } = await import("./receipt54");
+  const items = await db.orderItem.findMany({ where: { orderId: order.id } });
+  return buildReceipt54(order, items, { vatCode: tax.vatCode ?? 1, taxSystemCode: tax.taxSystemCode ?? 0, ffd12: tax.ffd12 ?? true });
+}
+
+/**
+ * Печатная книга выдана (DELIVERED), режим ИП, оплата ЮKassa: чек зачёта предоплаты (POST /v3/receipts).
+ * Без ключей ЮKassa или при НПД — ничего. Ошибка — исключением (вызывающий сообщит владельцу).
+ */
+export async function yookassaSettlement(orderId: string) {
+  const { db } = await import("./db");
+  const order = await db.order.findUnique({ where: { id: orderId }, include: { payments: true } });
+  if (!order || order.whoPrints !== "bookimi") return null;
+  const pay = order.payments.find((p) => p.provider === "yookassa" && p.status === "succeeded");
+  if (!pay?.externalId || !process.env.PAYMENT_YOOKASSA_SHOP_ID) return null;
+  const receipt = await yookassaReceiptFor(order);
+  if (!receipt) return null;
+  const { settlementReceipt54 } = await import("./receipt54");
+  const auth = "Basic " + Buffer.from(`${process.env.PAYMENT_YOOKASSA_SHOP_ID}:${process.env.PAYMENT_YOOKASSA_SECRET_KEY}`).toString("base64");
+  const r = await fetch("https://api.yookassa.ru/v3/receipts", {
+    method: "POST",
+    headers: { Authorization: auth, "Idempotence-Key": `settle-${pay.idempotencyKey}`, "Content-Type": "application/json" },
+    body: JSON.stringify(settlementReceipt54(pay.externalId, receipt, order.totalRub)),
+  });
+  if (!r.ok) throw new Error(`ЮKassa чек зачёта ${r.status}`);
+  const j = (await r.json()) as { id?: string };
+  await db.receipt.create({ data: { orderId, regime: "54fz", externalId: j.id, amountRub: order.totalRub, status: "settlement" } });
+  return j.id ?? null;
 }

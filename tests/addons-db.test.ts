@@ -44,7 +44,7 @@ d("миграция 0008_addon_audiences", () => {
   it("база до 0008 + seed старого вида → аудитории, новые допы и правки админки сохраняются", async () => {
     const dir = "prisma/migrations";
     const names = readdirSync(dir).filter((n) => /^\d{4}_/.test(n)).sort();
-    expect(names.at(-1)).toBe("0008_addon_audiences");
+    expect(names).toContain("0008_addon_audiences"); // дальше — более поздние миграции, тест проверяет переход через 0008
     for (const n of names.filter((x) => x < "0008")) await c.query(readFileSync(join(dir, n, "migration.sql"), "utf8").replace('CREATE SCHEMA IF NOT EXISTS "public";', ""));
     for (const [i, [key, kind, title, price, pct, print]] of OLD_SEED.entries()) {
       await c.query(`INSERT INTO "Addon" ("id","key","kind","title","description","priceRub","percentOff","requiresPrint","sortOrder") VALUES (gen_random_uuid(),$1,$2,$3,$3,$4,$5,$6,$7) ON CONFLICT ("key") DO NOTHING`, [key, kind, title, price, pct, print, i]);
@@ -63,8 +63,9 @@ d("миграция 0008_addon_audiences", () => {
       expect(r.kind, a.key).toBe(a.kind);
       expect(r.requiresPrint, a.key).toBe(a.print);
       if (a.key !== "poster") {
-        expect(r.title, a.key).toBe(a.title);
-        expect(r.description, a.key).toBe(a.description);
+        // cartoon/cartoon-own-voice переименованы позже, миграцией 0010 («Оживление книги»)
+        if (!a.key.startsWith("cartoon")) expect(r.title, a.key).toBe(a.title);
+        if (!a.key.startsWith("cartoon")) expect(r.description, a.key).toBe(a.description);
         expect(r.priceRub, a.key).toBe(a.price);
       }
     }

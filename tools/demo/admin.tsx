@@ -13,7 +13,8 @@ import { METHOD_TITLES } from "../../src/lib/shipping";
 import { ADDONS, FORMATS } from "../../src/lib/catalog-defaults";
 import { audiencesLabel } from "../../src/lib/addons-core";
 import { DEFAULTS, getReadiness } from "../../src/lib/settings";
-import { addPromo, bookById, confirmTransfer, mskDay, orderById, pageUrl, resetLimits, S, setLimits, setPrices, setSoon, setStatus, spentTodayRub, STATUS_FLOW, togglePromo } from "./api";
+import { addPromo, bookById, confirmTransfer, moderateReview, mskDay, orderById, pageUrl, resetLimits, S, setDemoFlags, setLimits, setPrices, setSoon, setStatus, spentTodayRub, STATUS_FLOW, togglePromo } from "./api";
+import { DemoFullBook } from "./fullbook";
 import { AUDIENCE_PAGES } from "../../src/lib/storefront";
 import { SHELF } from "../../src/lib/shelf";
 import { NotFoundError } from "./router";
@@ -27,6 +28,7 @@ const NAV = [
   { href: "/admin/promokody", label: "Промокоды" },
   { href: "/admin/prazdniki", label: "Праздники" },
   { href: "/admin/katalog", label: "Каталог и цены" },
+  { href: "/admin/otzyvy", label: "Отзывы" },
   { href: "/admin/nastrojki", label: "Настройки" },
   { href: "/admin/zhurnal", label: "Журнал" },
 ];
@@ -40,7 +42,7 @@ export function AdminLayout({ children }: { children: unknown }) {
           <Link href="/">На сайт</Link>
         </div>
       </div>
-      <div className="demo-banner">Демо: админка открыта прямо здесь, без входа. На сайте админка открывается по отдельному адресу со входом по коду и 2FA.</div>
+      <div className="demo-banner">Демо: админка открыта прямо здесь, без входа. На сайте она живёт на отдельном адресе admin.&lt;домен&gt;, открывается только через VPN сотрудника (или с разрешённых IP), вход — по коду и 2FA.</div>
       <div className="wrap cab">
         <SideNav items={NAV} />
         <div style={{ minWidth: 0 }}>{children}</div>
@@ -320,6 +322,7 @@ export function AdminOrder({ id }: { id: string }) {
               {o.pdfCreditRub > 0 && <tr><td>Зачёт PDF</td><td>−{o.pdfCreditRub} ₽</td></tr>}
               {o.discountRub > 0 && <tr><td>Скидка {o.promo ? `(${o.promo})` : ""}</td><td>−{o.discountRub} ₽</td></tr>}
               <tr><td>Доставка</td><td>{o.shippingRub} ₽</td></tr>
+              {(o.bonusRub ?? 0) > 0 && <tr><td>Бонусами</td><td>−{o.bonusRub} ₽</td></tr>}
               <tr><td><b>Итого</b></td><td><b>{o.totalRub} ₽</b></td></tr>
             </tbody>
           </table>
@@ -344,6 +347,46 @@ export function AdminOrder({ id }: { id: string }) {
             {b.pages.slice(0, 4).map((i) => <img key={i} className="preview-img" src={pageUrl(b, i)} alt="" />)}
           </div>
         </section>
+      )}
+      {(o.changes?.length ?? 0) > 0 && (
+        <section className="panel" style={{ marginTop: 16 }} data-admin-changes>
+          <b>Изменения заказа</b>
+          <ul className="small">
+            {o.changes!.map((c, i) => (
+              <li key={i}>{new Date(c.at).toLocaleString("ru-RU")}: {c.lines.join("; ")} · сумма {c.totalRub} ₽ (до оплаты)</li>
+            ))}
+          </ul>
+        </section>
+      )}
+      {b?.text && <DemoFullBook book={b} label="Открыть всю книгу" />}
+    </>
+  );
+}
+
+/** Отзывы: модерация. Отклонить как спам — бонусы за отзыв списываются обратно (rev 10). */
+export function AdminReviews() {
+  const list = [...(S.reviews ?? [])].reverse();
+  return (
+    <>
+      <h1 style={{ fontSize: "var(--fs-xl)" }}>Отзывы</h1>
+      <p className="small muted">За отзыв о полученном заказе покупатель сразу получает {DEFAULTS.bonus.reviewRub} бонусов. Отклонённый отзыв (спам) — бонусы списываются.</p>
+      {list.length === 0 ? (
+        <p className="muted">Отзывов пока нет. Доведите заказ до «Получен» и оставьте отзыв в кабинете.</p>
+      ) : (
+        <ul className="log">
+          {list.map((r) => (
+            <li key={r.id} data-review={r.status}>
+              <b>{"★".repeat(r.rating)}</b> {r.authorName} · заказ {orderById(r.orderId)?.publicCode} · <span className="badge">{r.status === "pending" ? "на проверке" : r.status === "approved" ? "опубликован" : "отклонён"}</span>
+              <p className="small" style={{ margin: "4px 0" }}>{r.text}</p>
+              {r.status === "pending" && (
+                <div className="row">
+                  <button className="btn btn--primary btn--sm" data-review-approve onClick={() => moderateReview(r.id, "approved")}>Опубликовать</button>
+                  <button className="btn btn--ghost btn--sm" data-review-reject onClick={() => moderateReview(r.id, "rejected")}>Отклонить (спам)</button>
+                </div>
+              )}
+            </li>
+          ))}
+        </ul>
       )}
     </>
   );
@@ -555,6 +598,7 @@ export function AdminSettings() {
         {msg && <p className="ok small">{msg}</p>}
       </form>
       <SoonSettings />
+      <Rev10Settings />
       <section className="panel" style={{ marginTop: 16 }}>
         <h2 style={{ fontSize: "var(--fs-lg)" }}>Сейчас в демо</h2>
         <ul className="small">
@@ -565,6 +609,41 @@ export function AdminSettings() {
         </ul>
       </section>
     </>
+  );
+}
+
+/** rev 10: «Оживление книги» (скоро / продаётся), бонусы за отзыв, режим админа. */
+function Rev10Settings() {
+  const b = DEFAULTS.bonus;
+  const [f, setF] = useState({ reviewRub: String(b.reviewRub), maxSharePct: String(b.maxSharePct), expiryDays: String(b.expiryDays) });
+  const [msg, setMsg] = useState("");
+  return (
+    <section className="panel" style={{ marginTop: 16 }} data-rev10-settings>
+      <h2 style={{ fontSize: "var(--fs-lg)" }} id="ozhivlenie">Оживление книги</h2>
+      <label className="check">
+        <input type="checkbox" name="cartoon-enabled" checked={DEFAULTS.cartoon.enabled} onChange={(e: Event) => { setDemoFlags({ cartoonEnabled: (e.target as HTMLInputElement).checked }); setMsg((e.target as HTMLInputElement).checked ? "«Оживление книги» продаётся (690 ₽)." : "«Оживление книги» — «скоро»: видно, но не продаётся."); }} />
+        <span>Продавать «Оживление книги» (выключено — «скоро», без цены)</span>
+      </label>
+      <label className="check">
+        <input type="checkbox" name="admin-mode" checked={Boolean(S.adminMode)} onChange={(e: Event) => setDemoFlags({ adminMode: (e.target as HTMLInputElement).checked })} />
+        <span>Режим админа: на превью книги — «Показать всю книгу (для админа)»</span>
+      </label>
+      <h2 style={{ fontSize: "var(--fs-lg)", marginTop: 16 }} id="bonusy">Бонусы за отзыв</h2>
+      <form
+        className="grid3"
+        onSubmit={(e: Event) => {
+          e.preventDefault();
+          setDemoFlags({ bonusCfg: { reviewRub: Math.max(0, Number(f.reviewRub) || 0), maxSharePct: Math.min(100, Math.max(0, Number(f.maxSharePct) || 0)), expiryDays: Math.max(1, Number(f.expiryDays) || 1) } });
+          setMsg("Бонусы сохранены.");
+        }}
+      >
+        <label className="field"><span>Бонусов за отзыв</span><input className="input" type="number" min="0" name="bonus-review" value={f.reviewRub} onChange={(e: Event) => setF({ ...f, reviewRub: (e.target as HTMLInputElement).value })} /></label>
+        <label className="field"><span>Оплатить бонусами — до, % заказа</span><input className="input" type="number" min="0" max="100" name="bonus-share" value={f.maxSharePct} onChange={(e: Event) => setF({ ...f, maxSharePct: (e.target as HTMLInputElement).value })} /></label>
+        <label className="field"><span>Сгорают через, дней</span><input className="input" type="number" min="1" name="bonus-days" value={f.expiryDays} onChange={(e: Event) => setF({ ...f, expiryDays: (e.target as HTMLInputElement).value })} /></label>
+        <div><button className="btn btn--primary btn--sm" data-demo="save-bonus">Сохранить бонусы</button></div>
+      </form>
+      {msg && <p className="ok small">{msg}</p>}
+    </section>
   );
 }
 

@@ -269,3 +269,11 @@ export async function alertOwner(subject: string, text: string) {
   if (chat || !a.email) tasks.push(sendTelegram(chat, `⚠️ ${subject}\n${text}`));
   await Promise.allSettled(tasks);
 }
+
+/** Алерт о сбое оплаченной книги — один в сутки на книгу (повторы задачи не спамят). */
+export async function alertPaidFailure(bookId: string, msg: string) {
+  const key = `paid-fail-${bookId}-${new Date().toISOString().slice(0, 10)}`;
+  if (await db.auditLog.findFirst({ where: { action: key } })) return;
+  await db.auditLog.create({ data: { action: key, entity: "alert", entityId: bookId } });
+  await alertOwner("Оплаченная книга не собралась", `Книга ${bookId}: ${msg.slice(0, 300)}. Покупателю показано «Мы уже исправляем — книга будет готова, вам придёт письмо». Запустите сборку заново: админка → заказ → «Подготовить заново» у страницы, или напишите разработчику.`);
+}

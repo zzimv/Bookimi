@@ -205,6 +205,8 @@ p { margin: 0 0 1em; max-width: 66ch; }
 .burger summary::-webkit-details-marker { display: none; }
 .burger[open] summary { background: var(--sage); }
 .burger__menu { position: absolute; right: 0; top: 52px; width: min(300px, calc(100vw - 32px)); display: grid; gap: 2px; padding: 10px; background: var(--surface); border: 1.5px solid var(--line); border-radius: 16px; box-shadow: 0 24px 48px -24px rgba(0,0,0,.45); z-index: 50; }
+/* Низкий экран (360×600): меню прокручивается внутри себя и не уходит под край и «чёлку» */
+.burger__menu { max-height: calc(100dvh - 64px - env(safe-area-inset-bottom, 0px)); overflow-y: auto; overscroll-behavior: contain; -webkit-overflow-scrolling: touch; }
 .burger__menu a:not(.btn) { display: flex; align-items: center; gap: 8px; padding: 12px 12px; border-radius: 10px; color: var(--ink); text-decoration: none; font-weight: 600; }
 .burger__menu a:not(.btn):hover { background: var(--sage); }
 .burger__menu .nav__season { justify-self: start; margin: 2px 0 6px; }
@@ -365,24 +367,25 @@ html:not(.has-name) .name-slot::before { content: attr(data-ph); }
 }
 @media (min-width: 760px) { .sticky-cta { display: none; } }
 
-/* Cookie-баннер */
+/* Cookie-баннер: компактная полоса внизу. Ниже шапки с меню (z-index 20), над липкими кнопками — не перекрывает их,
+   а место под себя резервирует отступом страницы (кнопки в конце страницы видны и прокручиваются из-под полосы). */
 .cookie {
-  position: fixed; z-index: 40; left: var(--gutter); right: var(--gutter); bottom: 84px;
-  max-width: 520px; margin: 0 auto; background: var(--surface);
-  border: 1.5px solid var(--line); border-radius: var(--r-ui); padding: 18px;
-  box-shadow: 0 18px 40px -20px rgba(20, 54, 40, .5); font-size: var(--fs-sm);
+  position: fixed; z-index: 15; left: 0; right: 0; bottom: 0;
+  background: var(--surface); border-top: 1.5px solid var(--line);
+  box-shadow: 0 -10px 30px -20px rgba(20, 54, 40, .45); font-size: 13px; line-height: 1.4;
+  padding: 10px var(--gutter) calc(10px + env(safe-area-inset-bottom, 0px));
+  display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 8px 16px;
 }
-.cookie__row { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
-.cookie .btn { min-height: 44px; padding: 0 18px; font-size: var(--fs-sm); }
-@media (min-width: 760px) { .cookie { bottom: 20px; } }
-/* Над липкой панелью анкеты/книги («Дальше») и кнопкой «Создать книгу» — баннер не закрывает кнопки; на телефоне — компактный */
-body:has(.flow-nav) .cookie, body:has(.sticky-cta) .cookie { bottom: calc(92px + env(safe-area-inset-bottom, 0px)); }
-@media (min-width: 760px) { body:has(.sticky-cta):not(:has(.flow-nav)) .cookie { bottom: 20px; } }
-@media (max-width: 759px) {
-  .cookie { padding: 12px 14px; font-size: 13px; line-height: 1.4; }
-  .cookie__row { margin-top: 8px; flex-wrap: nowrap; }
-  .cookie .btn { flex: 1; min-height: 40px; padding: 0 10px; }
-}
+.cookie__text { flex: 1 1 280px; max-width: 640px; margin: 0; }
+.cookie__row { display: flex; gap: 8px; flex: 0 1 auto; }
+.cookie .btn { min-height: 40px; padding: 0 14px; font-size: 13px; }
+body:has(.cookie) { padding-bottom: 112px; }
+@media (min-width: 760px) { body:has(.cookie) { padding-bottom: 72px; } }
+/* Липкая панель анкеты/книги и «Создать книгу» на телефоне — полоса над ними, кнопки не закрыты */
+body:has(.flow-nav) .cookie, body:has(.sticky-cta) .cookie { bottom: calc(68px + env(safe-area-inset-bottom, 0px)); padding-bottom: 10px; border-bottom: 1px solid var(--line); }
+body:has(.flow-nav):has(.cookie), body:has(.sticky-cta):has(.cookie) { padding-bottom: 180px; }
+@media (min-width: 760px) { body:has(.sticky-cta):not(:has(.flow-nav)) .cookie { bottom: 0; } }
+@media (max-width: 759px) { .cookie__row { width: 100%; } .cookie .btn { flex: 1; } }
 
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { transition: none !important; animation: none !important; }
@@ -470,6 +473,7 @@ body:has(.flow-nav) .cookie, body:has(.sticky-cta) .cookie { bottom: calc(92px +
 .photo img { width: 100%; height: 100%; object-fit: cover; }
 .photo button { position: absolute; top: 4px; right: 4px; width: 26px; height: 26px; border-radius: 50%; border: 0; background: rgba(0,0,0,.6); color: #fff; cursor: pointer; }
 .drop { display: grid; place-items: center; gap: 6px; text-align: center; border: 2px dashed var(--line); border-radius: var(--r-ui); padding: 24px; cursor: pointer; background: var(--surface); }
+.drop:focus-visible { outline: 3px solid var(--forest); outline-offset: 2px; border-color: var(--forest); }
 .drop:hover { border-color: var(--forest); }
 
 /* Покупка */
@@ -1016,3 +1020,86 @@ html { scroll-behavior: smooth; }
 @media (prefers-reduced-motion: reduce) {
   .spine:hover, .facecover:hover, .spine:focus-visible, .facecover:focus-visible { transform: none; }
 }
+
+/* ───────── rev 10 ───────── */
+/* Создание книги — без большого подвала: одна строка оферта · политика (FlowLegal) */
+body:has([data-flow-page]) .footer { display: none; }
+.flow-legal { margin: 32px 0 calc(16px + env(safe-area-inset-bottom, 0px)); padding-top: 12px; border-top: 1px solid var(--line); text-align: center; font-size: 12px; line-height: 1.6; color: var(--ink-soft); max-width: none; }
+.flow-legal a { color: inherit; }
+.buy > .flow-legal { grid-column: 1 / -1; }
+.quiz .flow-legal { margin-bottom: 96px; }
+
+/* «Ваша книга … ждёт» — переносится на любой ширине, кнопка не обрезается */
+.continue-banner { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px 16px; }
+.continue-banner__text { flex: 1 1 240px; min-width: 0; overflow-wrap: anywhere; }
+.continue-banner__btn { flex: 0 0 auto; }
+
+/* Анкета: уже известное — напоминанием, не вторым вопросом */
+.quiz__known, .extra-known { margin: 0 0 14px; }
+.extra-known { padding: 10px 14px; background: var(--sage); border-radius: var(--r-ui); }
+.more.nick { margin-top: 6px; }
+.more.nick .input { margin-top: 6px; }
+.more.nick small { display: block; color: var(--ink-soft); margin-top: 4px; }
+
+/* Вход: круглые кнопки VK ID, Яндекс ID, Mail.ru, Google; вкладки «Почта / Телефон» */
+.oauth { margin-bottom: 16px; }
+.oauth__h { margin: 0 0 10px; font-size: var(--fs-sm); font-weight: 700; text-align: center; color: var(--ink-soft); }
+.oauth__row { display: flex; justify-content: center; gap: 14px; flex-wrap: wrap; }
+.oauth__btn { width: 52px; height: 52px; border-radius: 50%; border: 1px solid var(--line); display: inline-flex; align-items: center; justify-content: center; font: 800 18px/1 var(--font-head); cursor: pointer; color: #fff; background: #777; box-shadow: 0 2px 6px rgba(0, 0, 0, 0.12); transition: transform 0.12s ease; }
+.oauth__btn:hover { transform: translateY(-1px); }
+.oauth__btn:focus-visible { outline: 3px solid var(--gold); outline-offset: 2px; }
+.oauth__btn[data-p="vkid"] { background: #0077ff; border-color: #0077ff; }
+.oauth__btn[data-p="yandex"] { background: #fc3f1d; border-color: #fc3f1d; font-size: 22px; }
+.oauth__btn[data-p="mailru"] { background: #005ff9; border-color: #005ff9; font-size: 22px; }
+.oauth__btn[data-p="google"] { background: #fff; color: #4285f4; border-color: #dadce0; font-size: 22px; }
+.oauth__btn--big { width: 64px; height: 64px; font-size: 24px; margin-bottom: 8px; }
+.oauth__or { display: flex; align-items: center; gap: 10px; margin: 16px 0 0; font-size: var(--fs-sm); color: var(--ink-soft); }
+.oauth__or::before, .oauth__or::after { content: ""; flex: 1; height: 1px; background: var(--line); }
+.otp-tabs { margin-bottom: 12px; }
+.oauth-demo { text-align: center; padding: 8px 0; }
+.oauth-demo h2 { font-size: var(--fs-lg); margin: 0 0 6px; }
+.oauth-demo .row { justify-content: center; }
+.field--name { background: var(--soft-bg, var(--sage)); border-radius: var(--r-ui); padding: 10px 12px; }
+
+/* Допы: крупные карточки с картинкой «что получите»; 1 колонка → 2 от 600 px → 3 от 1000 px */
+.addon-grid { list-style: none; padding: 0; margin: 10px 0 0; display: grid; gap: 14px; grid-template-columns: 1fr; }
+@media (min-width: 600px) { .addon-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (min-width: 1000px) { .addon-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+.addon-card { display: flex; flex-direction: column; background: var(--surface); border: 2px solid var(--line); border-radius: var(--r-ui); overflow: hidden; min-width: 0; }
+.addon-card--on { border-color: var(--forest); box-shadow: 0 0 0 1px var(--forest); }
+.addon-card__pic { position: relative; display: block; width: 100%; padding: 0; border: 0; background: #efe6d4; cursor: zoom-in; }
+.addon-card__pic:focus-visible { outline: 3px solid var(--gold); outline-offset: -3px; }
+.addon-art { display: block; width: 100%; height: auto; aspect-ratio: 320 / 220; }
+.addon-card__zoom { position: absolute; right: 8px; top: 8px; width: 30px; height: 30px; border-radius: 50%; background: rgba(255, 255, 255, 0.9); color: #1e4d3b; display: inline-flex; align-items: center; justify-content: center; font-size: 16px; }
+.addon-card__soon { position: absolute; left: 8px; top: 8px; }
+.addon-card__body { display: flex; flex-direction: column; gap: 4px; padding: 10px 12px 12px; flex: 1; }
+.addon-card__title { font: 800 var(--fs-base, 1rem)/1.25 var(--font-head); }
+.addon-card__desc { font-size: var(--fs-sm); color: var(--ink-soft); line-height: 1.4; }
+.addon-card__foot { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-top: auto; padding-top: 6px; flex-wrap: wrap; }
+.addon-card__price { font-size: var(--fs-md, 1.05rem); }
+.addon-card--soon .addon-card__price { color: var(--gold-ink); }
+.addon-more { margin-top: 10px; }
+
+/* Окно на странице (увеличенный доп и др.) */
+html.modal-open { overflow: hidden; }
+.modal { position: fixed; inset: 0; z-index: 200; background: rgba(10, 20, 15, 0.6); display: flex; align-items: center; justify-content: center; padding: 16px; }
+.modal__box { background: var(--surface); color: var(--ink); border-radius: 16px; width: min(640px, 100%); max-height: calc(100vh - 32px); overflow: auto; padding: 16px 18px 18px; box-shadow: 0 20px 60px rgba(0, 0, 0, 0.35); }
+.modal__head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; margin-bottom: 10px; }
+.modal__head h2 { margin: 0; font-size: var(--fs-lg); }
+.modal__close { flex: none; width: 40px; height: 40px; border-radius: 50%; border: 1px solid var(--line); background: var(--surface); color: var(--ink); font-size: 24px; line-height: 1; cursor: pointer; }
+.modal .addon-art { border-radius: 10px; }
+.addon-modal__desc { margin: 10px 0; }
+
+/* Бонусы, отзыв, изменение заказа, «скоро» */
+.bonus-check { margin-top: 12px; }
+.bonus-offer { background: var(--gold-soft); color: var(--gold-ink); border-radius: var(--r-ui); padding: 8px 12px; margin: 0 0 10px; }
+.bonus-credit { margin: 8px 0 0; font-weight: 700; color: var(--forest); }
+.review-ask { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 14px; background: var(--gold-soft); color: var(--gold-ink); border-radius: var(--r-ui); padding: 14px 16px; margin-bottom: 16px; }
+.review-ask > div { flex: 1 1 220px; min-width: 0; }
+.review-ask__icon { font-size: 26px; color: var(--gold); }
+.cab-bonus { margin-bottom: 16px; }
+.cab-bonus__top { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 4px 12px; }
+.cab-bonus__hist { margin: 6px 0 0; padding-left: 18px; }
+.order-change__hist { margin: 10px 0 0; padding-left: 18px; display: grid; gap: 6px; }
+.order-change__lock { color: var(--ink-soft); }
+.soon-inline .badge { vertical-align: middle; }

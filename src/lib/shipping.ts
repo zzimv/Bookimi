@@ -256,3 +256,39 @@ export function cdekOrderInput(order: {
   const address = { ...(sh.address as ShipAddress), pvzCode: sh.pvzCode ?? (sh.address as ShipAddress).pvzCode, cityCode: sh.cityCode ?? (sh.address as ShipAddress).cityCode };
   return { code: order.publicCode, method: sh.method, name: normalizeName(order.contactName ?? ""), phone: order.contactPhone ?? "", address, books: order.books } as Parameters<typeof createCdekOrder>[0];
 }
+
+/** Способ доставки разрешён сейчас: включён в настройках; самовывоз — только если у типографии есть адрес. */
+export async function shippingMethodError(method: string, pickupAddress?: string | null): Promise<string | null> {
+  const allowed = await availableMethods(pickupAddress);
+  if (allowed.includes(method as ShipMethod)) return null;
+  if (method === "pickup") return "Самовывоз сейчас недоступен — выберите доставку СДЭК";
+  return "Этот способ доставки сейчас недоступен — выберите другой";
+}
+
+/**
+ * Пункт выдачи СДЭК при оформлении: с ключами — код проверяется по API (пункт есть в городе и выдаёт посылки),
+ * адрес берётся из СДЭК, а не из браузера. Без ключей — как ввёл покупатель (оператор сверит вручную).
+ * СДЭК не ответил — принимаем как есть и пишем в лог (заказ не теряем).
+ */
+export async function verifyPvz(address: ShipAddress): Promise<{ ok: true; address: ShipAddress } | { ok: false; error: string }> {
+  if (!address.pvzCode) return { ok: false, error: "Выберите пункт выдачи СДЭК" };
+  if (!hasCdek()) return { ok: true, address };
+  if (!address.cityCode) return { ok: false, error: "Выберите город из подсказки, затем пункт выдачи" };
+  let points: Pvz[];
+  try {
+    points = await cdekPoints(address.cityCode);
+  } catch (e) {
+    console.error("[shipping] проверка ПВЗ:", (e as Error).message);
+    return { ok: true, address };
+  }
+  const p = points.find((x) => x.code === address.pvzCode);
+  if (!p) return { ok: false, error: "Такого пункта выдачи СДЭК нет в выбранном городе — выберите пункт заново" };
+  return { ok: true, address: { ...address, pvzAddress: p.address || address.pvzAddress } };
+}
+
+/** Номер отправления СДЭК (cdek_number) по uuid заказа: появляется через несколько секунд после создания. */
+export async function cdekTrackNumber(uuid: string): Promise<string | null> {
+  if (!hasCdek()) return null;
+  const j = await cdekGet<{ entity?: { cdek_number?: string } }>(`/v2/orders/${encodeURIComponent(uuid)}`, {});
+  return j.entity?.cdek_number ?? null;
+}

@@ -6,11 +6,12 @@ import { Breadcrumbs, JsonLd, StickyCta } from "@/components/Layout";
 import { NamePreview } from "@/components/NamePreview";
 import { Faq } from "@/components/Sections";
 import { ageLabel, displayTitle, getAddonsFor, getPriceTable, getStories, getStory, HERO_WORD, rub } from "@/lib/catalog";
-import { FAQ } from "@/lib/catalog-defaults";
+import { faqItems, fillFacts, siteFacts } from "@/lib/seo";
 import { sampleUrl } from "@/lib/obrazec";
 import { og } from "@/lib/og";
 import { getSeason, getSoon, segmentTitle, SVOYA_IDEYA } from "@/lib/storefront";
 import { SOON_SHORT } from "@/lib/shelf";
+import { cfg } from "@/lib/settings";
 import { SoonBanner } from "@/components/Soon";
 import { EXTRA_ROLE_LABELS } from "@/lib/quiz";
 import { ART_STYLE_IDS, OCCASIONS as OCCASION_KEYS, TEXT_STYLE_IDS } from "@/content/profiles";
@@ -49,7 +50,9 @@ export default async function Page({ params }: { params: Promise<{ slug: string 
   // Аудитория «скоро» (storefront.soon): книгу можно посмотреть, «Создать» выключена
   const isSoon = soon.audiences.includes(story.audience);
   // Допы — свои для аудитории книги; в блоке цены — четыре первых (без «второго экземпляра» и срочности)
-  const extras = (await getAddonsFor(story.audience)).filter((a) => a.kind !== "MODIFIER" && a.priceRub).slice(0, 4);
+  const extras = (await getAddonsFor(story.audience)).filter((a) => a.kind !== "MODIFIER" && a.priceRub && !a.key.startsWith("cartoon")).slice(0, 4);
+  // «Оживление книги» пока «скоро» (cartoon.enabled = false): упоминаем без цены
+  const cartoonSoon = !(await cfg("cartoon").catch(() => ({ enabled: false }))).enabled;
   const title = displayTitle(story.title, story.audience);
   const pdf = prices.find((r) => r.kind === "PDF");
   const print = prices.filter((r) => r.kind === "PRINT").sort((a, b) => a.priceRub - b.priceRub);
@@ -75,8 +78,10 @@ export default async function Page({ params }: { params: Promise<{ slug: string 
             "@type": "Product",
             name: title,
             description: story.description,
+            // Картинка — обложка книги (или её OG-карточка); «скоро» — предзаказ, не «в наличии»
+            image: [story.coverUrl ? (story.coverUrl.startsWith("http") ? story.coverUrl : `https://${domain}${story.coverUrl}`) : `https://${domain}/og?s=${encodeURIComponent(story.slug)}`],
             brand: { "@type": "Brand", name: "БУКИМИ" },
-            offers: { "@type": "AggregateOffer", priceCurrency: "RUB", lowPrice: minPrice, highPrice: maxPrice, availability: "https://schema.org/InStock", url: `https://${domain}/skazki/${story.slug}` },
+            offers: { "@type": "AggregateOffer", priceCurrency: "RUB", lowPrice: minPrice, highPrice: maxPrice, availability: isSoon ? "https://schema.org/PreOrder" : "https://schema.org/InStock", url: `https://${domain}/skazki/${story.slug}` },
           },
           {
             "@context": "https://schema.org",
@@ -114,6 +119,7 @@ export default async function Page({ params }: { params: Promise<{ slug: string 
           {extras.length > 0 && (
             <p className="small product__addons" data-addons={story.audience}>
               К книге можно добавить: {extras.map((a, i) => <span key={a.key}>{i > 0 && ", "}{shortAddon(a.title)} — {rub(a.priceRub!)}</span>)}.
+              {cartoonSoon && <> <span className="soon-inline" data-cartoon-soon>Оживление книги <span className="badge badge--gold">скоро</span></span></>}
             </p>
           )}
           {season?.printLine && seasonFits && <p className="deadline">{season.printLine}</p>}
@@ -196,7 +202,7 @@ export default async function Page({ params }: { params: Promise<{ slug: string 
           </div>
         </div>
       </section>
-      <Faq items={FAQ.slice(0, 4)} />
+      <Faq items={faqItems(await siteFacts()).slice(0, 4)} />
       <StickyCta href={create} label="Создать книгу" soon={isSoon} />
     </>
   );

@@ -52,6 +52,18 @@ export async function deleteAccount(userId: string): Promise<DeleteResult> {
   const heroNames = (await db.hero.findMany({ where: { userId }, select: { name: true } })).map((h) => h.name).filter((x) => x.length >= 2);
   names.push(...heroNames, ...(user.firstName ? [user.firstName] : []), ...(user.name ? user.name.split(/\s+/) : []));
   const contacts = [user.email, user.phone, ...user.notifyPrefs.map((p) => p.address)].filter(Boolean) as string[];
+  // Заказы: коды, получатели и адреса — чтобы найти и обезличить письма типографии и алерты владельцу
+  const userOrders = await db.order.findMany({ where: { userId }, select: { publicCode: true, contactName: true, contactPhone: true, contactEmail: true, shipment: { select: { address: true, pvzAddress: true } } } });
+  const orderCodes = userOrders.map((o) => o.publicCode);
+  for (const o of userOrders) {
+    if (o.contactName) names.push(...o.contactName.split(/\s+/).filter((x) => x.length >= 2));
+    for (const c of [o.contactPhone, o.contactEmail]) if (c && !contacts.includes(c)) contacts.push(c);
+  }
+  const addressBits = userOrders.flatMap((o) => {
+    const a = (o.shipment?.address ?? {}) as Record<string, unknown>;
+    return [a.street, a.flat && `кв. ${a.flat}`, a.comment, a.postalCode, o.shipment?.pvzAddress].filter((x): x is string => typeof x === "string" && x.trim().length >= 3);
+  });
+  const ticketTexts = (await db.supportTicket.findMany({ where: { OR: [{ userId }, ...(contacts.length ? [{ contact: { in: contacts } }] : [])] }, select: { message: true } })).map((t) => t.message.slice(0, 60)).filter((x) => x.length >= 10);
 
   // 1. Фото (портрет и исходник) — из хранилища, затем записи
   const photos = await db.photo.findMany({
@@ -92,6 +104,21 @@ export async function deleteAccount(userId: string): Promise<DeleteResult> {
     for (const c of contacts) {
       await tx.auditLog.deleteMany({ where: { action: { startsWith: "outbox." }, details: { path: ["to"], equals: c } } });
     }
+    // Письма и алерты другим адресатам (типография, владелица) о заказах и обращениях покупателя — обезличить
+    const needles = [...orderCodes, ...contacts, ...ticketTexts];
+    const seenRows = new Set<string>();
+    for (const n of needles) {
+      const rows = await tx.auditLog.findMany({
+        where: { action: { startsWith: "outbox." }, OR: [{ details: { path: ["text"], string_contains: n } }, { details: { path: ["subject"], string_contains: n } }] },
+        select: { id: true, details: true },
+      });
+      for (const r of rows) {
+        if (seenRows.has(r.id)) continue;
+        seenRows.add(r.id);
+        const d = (r.details ?? {}) as { to?: string; subject?: string; text?: string };
+        await tx.auditLog.update({ where: { id: r.id }, data: { details: { to: d.to ?? "", subject: anonymizeText(d.subject ?? "", names, contacts, addressBits), text: anonymizeText(d.text ?? "", names, contacts, addressBits), anonymized: true } } });
+      }
+    }
     await tx.notificationPref.deleteMany({ where: { userId } });
     await tx.session.deleteMany({ where: { userId } });
 
@@ -116,9 +143,82 @@ export async function deleteAccount(userId: string): Promise<DeleteResult> {
     });
     await tx.auditLog.create({ data: { action: "user.delete", entity: "user", entityId: userId, details: { books: bookIds.length, photos: photos.length } } });
   });
+  // Отложенные уведомления в очереди pg-boss (данные письма: имена, название книги) — удалить
+  for (const t of ["job", "archive"]) {
+    await db.$executeRawUnsafe(`DELETE FROM pgboss.${t} WHERE name = 'send-notification' AND data->>'userId' = $1`, userId).catch(() => {});
+  }
   return { ok: true, books: bookIds.length, photos: photos.length };
+}
+
+/** Текст письма/алерта без ПДн: строки получателя и адреса — прочь, имена, контакты и части адреса — заменены. */
+export function anonymizeText(text: string, names: string[], contacts: string[], addressBits: string[] = []) {
+  const lines = text
+    .split("\n")
+    .map((l) => (/^\s*(Получатель|Адрес|Телефон|Почта|Email|Контакт)\s*:/i.test(l) ? `${l.split(":")[0]}: [удалено]` : l));
+  let out = lines.join("\n");
+  for (const b of [...new Set(addressBits)].sort((x, y) => y.length - x.length)) out = out.split(b).join("[адрес]");
+  return scrubContacts(scrubNames(out, names), contacts);
 }
 
 function scrubContacts(text: string, contacts: string[]) {
   return contacts.reduce((t, c) => t.split(c).join("[контакт]"), text).replace(/[^\s@]+@[^\s@]+\.[^\s@]{2,}/g, "[email]").replace(/\+?[78][\s(-]*9\d{2}[\s)-]*\d{3}[\s-]*\d{2}[\s-]*\d{2}/g, "[телефон]");
+}
+
+/**
+ * «Мои данные» (152-ФЗ, ст. 14): всё, что хранится о покупателе, одним JSON — профиль и адресная книга, согласия,
+ * герои (с анкетой внешности и ссылками на фото, пока фото не удалены), книги с анкетой (params) и текстом,
+ * черновики анкеты, заказы (состав, доставка, чеки, трек), отзывы, обращения в поддержку, каналы уведомлений
+ * с адресами. Без секретов (2FA, хэши устройств, коды входа). Ссылки на фото — подписанные, на 24 часа.
+ */
+export async function exportUserData(userId: string) {
+  const { signedUrl } = await import("./storage");
+  const user = await db.user.findUniqueOrThrow({
+    where: { id: userId },
+    select: { id: true, email: true, phone: true, name: true, firstName: true, role: true, marketingOk: true, referralCode: true, savedAddresses: true, createdAt: true },
+  });
+  const drafts = await db.quizDraft.findMany({ where: { userId }, select: { id: true, anonId: true, step: true, answers: true, contact: true, bookId: true, createdAt: true, updatedAt: true } });
+  const books = await db.book.findMany({ where: { userId }, select: { id: true, params: true, text: true, status: true, styleKey: true, withPhoto: true, createdAt: true } });
+  const bookIds = books.map((b) => b.id);
+  const heroes = await db.hero.findMany({
+    where: { OR: [{ userId }, { bookId: { in: bookIds } }, { draftId: { in: drafts.map((d) => d.id) } }] },
+    select: { id: true, bookId: true, draftId: true, role: true, name: true, nickname: true, gender: true, ageGroup: true, birthDate: true, appearance: true, interests: true, createdAt: true, userId: true, photos: { where: { deletedAt: null }, select: { id: true, storageKey: true, createdAt: true, expiresAt: true } } },
+  });
+  const link = async (key: string) => signedUrl("photos", key, 86400).catch(() => null);
+  const heroesOut = await Promise.all(
+    heroes.map(async ({ photos, userId: owner, ...h }) => ({
+      ...h,
+      inProfile: owner === userId,
+      photos: await Promise.all(photos.map(async (p) => ({ id: p.id, uploadedAt: p.createdAt, deletedAfter: p.expiresAt, url: await link(p.storageKey) }))),
+    })),
+  );
+  const orders = await db.order.findMany({
+    where: { userId },
+    select: {
+      publicCode: true, status: true, whoPrints: true, subtotalRub: true, discountRub: true, shippingRub: true, totalRub: true, createdAt: true, paidAt: true,
+      contactName: true, contactPhone: true, contactEmail: true, comment: true,
+      items: { select: { title: true, kind: true, priceRub: true, qty: true } },
+      receipts: { where: { status: "issued" }, select: { url: true, amountRub: true, createdAt: true } },
+      shipment: { select: { method: true, address: true, pvzCode: true, pvzAddress: true, trackNumber: true, etaDate: true } },
+    },
+  });
+  const [consents, reviews, tickets, channels] = await Promise.all([
+    db.consent.findMany({ where: { userId }, select: { type: true, granted: true, docVersion: true, createdAt: true } }),
+    db.review.findMany({ where: { userId }, select: { rating: true, text: true, authorName: true, storySlug: true, status: true, createdAt: true } }),
+    db.supportTicket.findMany({ where: { OR: [{ userId }, ...(user.email ? [{ contact: user.email }] : []), ...(user.phone ? [{ contact: user.phone }] : [])] }, select: { contact: true, message: true, answer: true, status: true, createdAt: true } }),
+    db.notificationPref.findMany({ where: { userId }, select: { channel: true, address: true, marketing: true, isActive: true } }),
+  ]);
+  return {
+    exportedAt: new Date(),
+    profile: user,
+    consents,
+    heroes: heroesOut,
+    books: books.map((b) => ({ ...b, questionnaire: b.params, params: undefined })),
+    drafts: drafts.map((d) => ({ ...d, questionnaire: d.answers, answers: undefined })),
+    orders,
+    reviews,
+    supportTickets: tickets,
+    notificationChannels: channels,
+    // Совместимость со старой выгрузкой (ключи верхнего уровня)
+    ...user,
+  };
 }

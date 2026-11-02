@@ -51,6 +51,11 @@ export async function requestOtp(raw: string): Promise<{ ok: true; demoCode?: st
   if (!(await hit(`otp:${t.value}`, "otp", 5)) || !(await hit(`otpip:${ip}`, "otp", 30))) {
     return { ok: false, error: "Слишком много попыток. Попробуйте завтра или напишите в поддержку." };
   }
+  // admin-хост: код — только сотрудникам; остальным тот же ответ «отправили», но без письма (адреса не перебрать)
+  if (await onAdminHost()) {
+    const u = await db.user.findUnique({ where: t.kind === "email" ? { email: t.value } : { phone: t.value }, select: { role: true, deletedAt: true } });
+    if (!u || u.deletedAt || !isStaffRole(u.role)) return { ok: true };
+  }
   const code = otpCode();
   const row = await db.otpCode.create({
     data: { target: t.value, codeHash: sha256(`${t.value}:${code}`), expiresAt: new Date(Date.now() + 10 * 60_000) },
@@ -85,6 +90,11 @@ export async function verifyOtp(raw: string, code: string, opts: { referral?: st
     orderBy: { createdAt: "desc" },
   });
   if (!row) return { ok: false as const, error: "Код устарел. Запросите новый." };
+  // admin-хост: вход только сотрудникам, новых аккаунтов здесь не создаём (код не тратим)
+  if (await onAdminHost()) {
+    const u = await db.user.findUnique({ where: t.kind === "email" ? { email: t.value } : { phone: t.value }, select: { role: true, deletedAt: true } });
+    if (!u || u.deletedAt || !isStaffRole(u.role)) return { ok: false as const, error: "Вход на этом адресе — только для сотрудников" };
+  }
   if (row.attempts >= 5) return { ok: false as const, error: "Слишком много попыток. Запросите новый код." };
   if (row.codeHash !== sha256(`${t.value}:${code.trim()}`)) {
     await db.otpCode.update({ where: { id: row.id }, data: { attempts: { increment: 1 } } });
@@ -110,8 +120,11 @@ export async function verifyOtp(raw: string, code: string, opts: { referral?: st
   await createSession(user.id, user.role);
   // Черновики и книги, созданные до входа, привязываются к аккаунту
   const anon = await anonId();
+  if (anon === "no-anon") return { ok: true as const, user }; // admin-хост и запросы без cookie: чужие «ничьи» книги не забираем
   await db.book.updateMany({ where: { anonId: anon, userId: null }, data: { userId: user.id } });
   await db.quizDraft.updateMany({ where: { anonId: anon, userId: null }, data: { userId: user.id } });
+  // Герои книг и черновиков этого браузера — тоже в аккаунт («Мои герои», напоминания о дне рождения)
+  await attachAnonHeroes(anon, user.id);
   return { ok: true as const, user };
 }
 
@@ -131,26 +144,91 @@ export function sessionAlive(s: { expiresAt: Date; createdAt: Date; user: { dele
   return true;
 }
 
+/** Запрос пришёл на admin-хост (admin.<DOMAIN>); разделение выключено (локально, демо) — false. */
+export async function onAdminHost() {
+  const { adminHosts, requestHost } = await import("./admin-host");
+  const cfg = adminHosts();
+  return !!cfg && requestHost(await headers()) === cfg.admin;
+}
+
+/**
+ * Сессия после входа. Покупатель — cookie bk_session (основной домен, SameSite=Lax). Сотрудник на admin-хосте —
+ * отдельная сессия scope=staff в cookie bk_staff: только этот хост (без Domain), SameSite=Strict, Secure, HttpOnly;
+ * вход пишется в журнал с IP и устройством, новый IP/устройство — алерт владельцу. Сотрудник на основном домене —
+ * обычная сессия покупателя (админку она не открывает). Без разделения хостов (локально, демо) сотрудник получает обе.
+ */
 export async function createSession(userId: string, role?: Role | string | null) {
+  const { adminHosts, STAFF_COOKIE } = await import("./admin-host");
+  const staff = isStaffRole(role);
+  const split = !!adminHosts();
+  const adminHost = await onAdminHost();
+  if (adminHost && !staff) throw new Error("Вход на этом адресе — только для сотрудников");
+  const h = await headers();
+  const ip = await clientIp();
+  const ua = (h.get("user-agent") ?? "").slice(0, 300);
+  const jar = await cookies();
+  const secure = process.env.NODE_ENV === "production";
+  if (staff && (adminHost || !split)) {
+    const raw = token();
+    const ttl = STAFF_SESSION_HOURS * 3600;
+    await db.session.create({ data: { userId, tokenHash: sha256(raw), csrfToken: token(16), scope: "staff", ip, userAgent: ua, expiresAt: new Date(Date.now() + ttl * 1000) } });
+    jar.set(STAFF_COOKIE, raw, { httpOnly: true, secure: secure || adminHost, sameSite: "strict", path: "/", maxAge: ttl });
+    await staffLoginAudit(userId, ip, ua);
+    if (adminHost) return;
+  }
   const raw = token();
   const ttl = sessionTtlSeconds(role);
   await db.session.create({
-    data: { userId, tokenHash: sha256(raw), csrfToken: token(16), expiresAt: new Date(Date.now() + ttl * 1000) },
+    data: { userId, tokenHash: sha256(raw), csrfToken: token(16), scope: "customer", ip, userAgent: ua, expiresAt: new Date(Date.now() + ttl * 1000) },
   });
-  (await cookies()).set(SESSION_COOKIE, raw, {
-    httpOnly: true,
-    secure: process.env.NODE_ENV === "production",
-    sameSite: "lax",
-    path: "/",
-    maxAge: ttl,
-  });
+  jar.set(SESSION_COOKIE, raw, { httpOnly: true, secure, sameSite: "lax", path: "/", maxAge: ttl });
 }
 
+/** Отпечаток устройства для журнала входов: браузер и система без версий мелких сборок. */
+export function deviceLabel(ua: string) {
+  const os = /Windows/.test(ua) ? "Windows" : /Mac OS X|Macintosh/.test(ua) ? "macOS" : /Android/.test(ua) ? "Android" : /iPhone|iPad|iOS/.test(ua) ? "iOS" : /Linux/.test(ua) ? "Linux" : "другая ОС";
+  const br = /YaBrowser/.test(ua) ? "Яндекс Браузер" : /Edg\//.test(ua) ? "Edge" : /Firefox\//.test(ua) ? "Firefox" : /Chrome\//.test(ua) ? "Chrome" : /Safari\//.test(ua) ? "Safari" : "браузер";
+  return `${br}, ${os}`;
+}
+
+/** Вход сотрудника: журнал (IP, устройство); IP или устройство впервые — алерт владельцу. */
+export async function staffLoginAudit(userId: string, ip: string, ua: string) {
+  const device = sha256(`ua:${ua}`).slice(0, 16);
+  const prev = await db.auditLog.findMany({ where: { action: "admin.login", entityId: userId }, select: { details: true }, orderBy: { createdAt: "desc" }, take: 200 });
+  const seen = prev.map((p) => (p.details ?? {}) as { ip?: string; device?: string });
+  const newIp = !seen.some((x) => x.ip === ip);
+  const newDevice = !seen.some((x) => x.device === device);
+  await db.auditLog.create({ data: { actorId: userId, action: "admin.login", entity: "user", entityId: userId, details: { ip, device, userAgent: ua, newIp, newDevice } } });
+  if (newIp || newDevice) {
+    const u = await db.user.findUnique({ where: { id: userId }, select: { email: true, role: true } });
+    const { alertOwner } = await import("./notify");
+    await alertOwner(
+      `Вход в админку: ${newIp ? "новый IP" : ""}${newIp && newDevice ? " и " : ""}${newDevice ? "новое устройство" : ""}`,
+      `${u?.email ?? userId} (${u?.role ?? "?"}) вошёл с IP ${ip}, ${deviceLabel(ua)}. Если это не сотрудник — завершите сессию в Админке → Команда и смените ему роль.`,
+    ).catch(() => {});
+  }
+}
+
+/** Сессия покупателя (cookie bk_session): сессия сотрудника сюда не подходит. */
 export async function currentSession() {
   const raw = (await cookies()).get(SESSION_COOKIE)?.value;
   if (!raw) return null;
   const s = await db.session.findUnique({ where: { tokenHash: sha256(raw) }, include: { user: true } });
-  if (!s || !sessionAlive(s)) return null;
+  if (!s || s.scope !== "customer" || !sessionAlive(s)) return null;
+  return s;
+}
+
+/**
+ * Сессия сотрудника (cookie bk_staff, scope=staff): только она открывает админку. При разделении хостов —
+ * только на admin-хосте (cookie туда и так приходит одна, проверка — на случай ошибки настройки прокси).
+ */
+export async function currentStaffSession() {
+  const { STAFF_COOKIE, adminHosts } = await import("./admin-host");
+  if (adminHosts() && !(await onAdminHost())) return null;
+  const raw = (await cookies()).get(STAFF_COOKIE)?.value;
+  if (!raw) return null;
+  const s = await db.session.findUnique({ where: { tokenHash: sha256(raw) }, include: { user: true } });
+  if (!s || s.scope !== "staff" || !isStaffRole(s.user.role) || !sessionAlive(s)) return null;
   return s;
 }
 
@@ -165,9 +243,13 @@ export async function currentUser(): Promise<User | null> {
 }
 
 export async function logout() {
-  const raw = (await cookies()).get(SESSION_COOKIE)?.value;
-  if (raw) await db.session.deleteMany({ where: { tokenHash: sha256(raw) } });
-  (await cookies()).delete(SESSION_COOKIE);
+  const { STAFF_COOKIE } = await import("./admin-host");
+  const jar = await cookies();
+  for (const name of [SESSION_COOKIE, STAFF_COOKIE]) {
+    const raw = jar.get(name)?.value;
+    if (raw) await db.session.deleteMany({ where: { tokenHash: sha256(raw) } });
+    jar.delete(name);
+  }
 }
 
 // ── Роли администраторов ──
@@ -198,10 +280,9 @@ export type Perm = keyof typeof PERMS;
 export const can = (role: Role, perm: Perm) => (PERMS[perm] as Role[]).includes(role);
 export const seesPersonalData = (role: Role) => role === "OWNER" || role === "OPERATOR";
 
+/** Админка открывается только сессией сотрудника (bk_staff), сессия покупателя — никогда. */
 export async function adminSession() {
-  const s = await currentSession();
-  if (!s || !isStaffRole(s.user.role)) return null;
-  return s;
+  return currentStaffSession();
 }
 
 /** Страница кабинета: покупатель или переход ко входу (layout и page рендерятся параллельно — без «!»). */
@@ -209,4 +290,21 @@ export async function userOrLogin(next = "/kabinet") {
   const u = await currentUser();
   if (!u) redirect(`/vhod?next=${encodeURIComponent(next)}`);
   return u;
+}
+
+/**
+ * Герои, созданные до входа (книги и черновики анонимной cookie), переходят в аккаунт: без этого «Мои герои» пусты,
+ * а напоминание о дне рождения (triggers: hero.userId) не срабатывает. Чужих героев (с userId) не трогаем.
+ */
+export async function attachAnonHeroes(anon: string, userId: string) {
+  const [books, drafts] = await Promise.all([
+    db.book.findMany({ where: { anonId: anon, userId }, select: { id: true } }),
+    db.quizDraft.findMany({ where: { anonId: anon, userId }, select: { id: true } }),
+  ]);
+  if (!books.length && !drafts.length) return 0;
+  const r = await db.hero.updateMany({
+    where: { userId: null, OR: [{ bookId: { in: books.map((b) => b.id) } }, { draftId: { in: drafts.map((d) => d.id) } }] },
+    data: { userId },
+  });
+  return r.count;
 }

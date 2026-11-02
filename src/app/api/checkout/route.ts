@@ -1,6 +1,6 @@
 import { body, err, json, throttle, ownBook, utmCookie } from "@/lib/api";
 import { currentUser } from "@/lib/auth";
-import { createOrder } from "@/lib/orders";
+import { checkoutAllowed, createOrder } from "@/lib/orders";
 import { Checkout } from "@/lib/checkout-schema";
 import { notifySafe } from "@/lib/notify";
 import { db } from "@/lib/db";
@@ -19,6 +19,8 @@ export async function POST(req: Request) {
   const own = await ownBook(b.bookId);
   if (!own || own.book.userId !== user.id) return err("Не найдено", 404);
   if (b.addonsOnly && (!own.book.paidFull || b.whoPrints !== "self")) return err("Докупить можно к уже оплаченной книге");
+  // Оформить можно после превью; без превью — когда текст утверждён и дневной лимит превью исчерпан
+  if (!b.addonsOnly && !own.book.paidFull && !(await checkoutAllowed(own.book, user)).ok) return err("Сначала утвердите текст сказки и посмотрите превью");
   if (b.whoPrints === "bookimi") {
     if (!b.shipping) return err("Выберите доставку");
     const addr = cleanAddress(b.shipping.method, b.shipping.address);

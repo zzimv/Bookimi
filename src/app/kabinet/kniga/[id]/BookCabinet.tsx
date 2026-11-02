@@ -4,7 +4,7 @@ import { SpreadText } from "@/components/SpreadText";
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { api, rub } from "@/lib/client";
-import { AddonThumb } from "@/components/book/AddonThumb";
+import { AddonCards } from "@/components/book/AddonCards";
 import { CartoonPanel } from "./CartoonPanel";
 import { SILENT_ERROR, isSilent, levelMeter } from "@/lib/cartoon-guide";
 
@@ -24,7 +24,9 @@ export interface LaterAddon {
   title: string;
   description: string;
   priceRub: number;
+  soon?: boolean;
 }
+const CARTOON_SOON: LaterAddon = { key: "cartoon", title: "Оживление книги", description: "Иллюстрации оживают, диктор читает сказку — 2 минуты для телевизора и сторис.", priceRub: 0, soon: true };
 
 export function BookCabinet(p: {
   id: string;
@@ -39,6 +41,9 @@ export function BookCabinet(p: {
   /** Цифровые допы для аудитории книги, которые можно докупить сейчас (мультфильм — своя панель). */
   later?: LaterAddon[];
   coverUrl?: string | null;
+  heroName?: string;
+  /** «Оживление книги» пока не продаётся — карточка «скоро» среди допов. */
+  cartoonSoon?: boolean;
 }) {
   const router = useRouter();
   const [msg, setMsg] = useState("");
@@ -106,7 +111,7 @@ export function BookCabinet(p: {
 
       {p.status === "FULL_READY" && <CartoonPanel bookId={p.id} />}
 
-      {p.status === "FULL_READY" && p.later && p.later.length > 0 && <LaterAddons bookId={p.id} items={p.later} coverUrl={p.coverUrl ?? null} />}
+      {p.status === "FULL_READY" && ((p.later?.length ?? 0) > 0 || p.cartoonSoon) && <LaterAddons bookId={p.id} items={[...(p.later ?? []), ...(p.cartoonSoon ? [CARTOON_SOON] : [])]} art={{ images: [p.coverUrl, ...p.pages.filter((x) => x.index > 0).map((x) => x.url)].filter(Boolean) as string[], name: p.heroName ?? "", title: p.title }} />}
 
       {p.selfRead && <VoiceRecorder bookId={p.id} pages={p.pages} />}
 
@@ -140,7 +145,7 @@ export function BookCabinet(p: {
 }
 
 /** «Добавить к книге»: докупка цифровых допов к оплаченной книге — отдельный заказ без печати (addonsOnly). */
-function LaterAddons({ bookId, items, coverUrl }: { bookId: string; items: LaterAddon[]; coverUrl: string | null }) {
+function LaterAddons({ bookId, items, art }: { bookId: string; items: LaterAddon[]; art: { images: string[]; name: string; title: string } }) {
   const router = useRouter();
   const [busy, setBusy] = useState("");
   const [msg, setMsg] = useState("");
@@ -158,18 +163,7 @@ function LaterAddons({ bookId, items, coverUrl }: { bookId: string; items: Later
   return (
     <div className="panel" style={{ marginTop: 16 }} data-later-addons>
       <b>Добавить к книге</b>
-      <div className="later-addons">
-        {items.map((a) => (
-          <div key={a.key} className="choice addon-choice" data-addon={a.key}>
-            <AddonThumb addonKey={a.key} coverUrl={coverUrl} />
-            <div style={{ flex: 1 }}>
-              <strong>{a.title}</strong>
-              {a.description && <small className="addon-choice__desc">{a.description}</small>}
-              <button className="btn btn--ghost btn--sm" disabled={Boolean(busy)} onClick={() => buy(a.key)}>{busy === a.key ? "Оформляем…" : `Добавить — ${rub(a.priceRub)}`}</button>
-            </div>
-          </div>
-        ))}
-      </div>
+      <AddonCards mode="buy" idPrefix="later" items={items.map((a) => ({ ...a, priceRub: a.priceRub }))} onToggle={buy} busyKey={busy} art={art} />
       {msg && <p className="error">{msg}</p>}
     </div>
   );

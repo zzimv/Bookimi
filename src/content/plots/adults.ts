@@ -145,7 +145,7 @@ export const ADULT_PLOTS: Plot[] = [
       "two tiny planets in a starry sky connected by a glowing bridge, the hero and the partner meeting in the middle, a lantern between them, dreamy pastel night",
     spreads: [
       {
-        text: "Была у каждого планета —\nсвоя, размером с огород.\nМоя — в ромашках, в пятнах света,\nтвоя — где чай и рыжий кот.",
+        text: "Была у каждого планета —\nсвоя, размером с огород.\nМоя — в ромашках, в пятнах света,\nтвоя — где чай и рыжий кот.\n— {ДОП1.им}!",
         scene: "two tiny separate planets in a starry sky, one covered with daisies and patches of light, the other with a small house, a teapot and a ginger cat, the hero on one and the partner on the other",
       },
       {
@@ -434,7 +434,7 @@ export const ADULT_PLOTS: Plot[] = [
         scene: "a carved wooden house by a river next to an oak grove, fairy-tale countryside, the grandparent on the porch in morning light",
       },
       {
-        text: "Руки — золото, не руки,\nНи минуты нет для скуки:\nСад цветёт, скрипит крылечко,\nПироги пыхтят на печке.\nА к крыльцу со всей округи\nХодят за советом други.\n{МН:Непоседа|Непоседы} — тут с утра,\nИ в саду звенит: «Ура!»",
+        text: "Руки — золото, не руки,\nНи минуты нет для скуки:\nСад цветёт, скрипит крылечко,\nПироги пыхтят на печке.\nА к крыльцу со всей округи\nХодят за советом други.\n{МН:Непоседа|Непоседы} — тут с утра,\nИ в саду звенит: «Ура!»\n— {ДОПЫ.им}!",
         scene: "the grandparent working in a blooming garden by the carved porch, neighbors coming for advice, grandchildren running through the gate cheering",
       },
       {

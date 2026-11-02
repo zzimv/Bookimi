@@ -19,7 +19,12 @@ export const DEFAULTS = {
     email: "",
     phone: "",
   } as Seller,
-  tax: { regime: "npd" as "npd" | "ip", ipName: "", ogrnip: "", npdYearLimitRub: 2_400_000 },
+  /**
+   * Чек 54-ФЗ через ЮKassa (режим ИП): vatCode — ставка НДС (1 — без НДС для УСН/ПСН, 11 — 22% с 2026), taxSystemCode —
+   * СНО (1 ОСН, 2 УСН «доходы», 3 УСН «доходы − расходы», 6 ПСН; 0 — не передавать, если касса настроена на одну СНО),
+   * ffd12 — касса на ФФД 1.2 (передаём единицу измерения measure).
+   */
+  tax: { regime: "npd" as "npd" | "ip", ipName: "", ogrnip: "", npdYearLimitRub: 2_400_000, vatCode: 1, taxSystemCode: 2, ffd12: true },
   payments: {
     sbpQr: { enabled: false, provider: "demo" as "demo" | "generic", confirmMinutes: 60 },
     transfer: { enabled: false, phone: "", card: "", bank: "", holder: "", cancelHours: 24 },
@@ -55,6 +60,17 @@ export const DEFAULTS = {
      * отдельный суточный лимит, ₽; в лимит покупателей (dailySpendRub) не входят.
      */
     staffDailySpendRub: 1000,
+  },
+  /**
+   * Бонусы за отзыв (rev 10): 1 бонус = 1 ₽. После получения книги просим отзыв; за отзыв на заказ (один на заказ,
+   * только после «получен») начисляем reviewRub сразу, отклонённый как спам отзыв — бонусы списываются обратно.
+   * Оплатить бонусами можно не больше maxSharePct % заказа; сгорают через expiryDays дней (src/lib/bonuses.ts).
+   */
+  bonus: {
+    enabled: true,
+    reviewRub: 300,
+    maxSharePct: 30,
+    expiryDays: 180,
   },
   auth: {
     /** Телефон обязателен при входе (+7…); код приходит на почту. */
@@ -101,9 +117,12 @@ export const DEFAULTS = {
       { key: "jane", title: "Джейн — сказочный женский" },
     ],
   },
-  /** «Мультфильм по книге» (src/lib/gen/cartoon*.ts). Цену владелица ещё не назвала — 690 ₽ по умолчанию (ASSUMPTIONS). */
+  /**
+   * «Оживление книги» (бывш. «Мультфильм по книге», src/lib/gen/cartoon*.ts). Решение владелицы (rev 10): пока «скоро» —
+   * видно в допах и на страницах, но не продаётся (enabled: false). Цена — 690 ₽ по умолчанию (ASSUMPTIONS).
+   */
   cartoon: {
-    enabled: true,
+    enabled: false,
     priceRub: 690,
     /** «Своим голосом» — дополнение к мультфильму. */
     ownVoiceRub: 400,
@@ -200,6 +219,8 @@ function merge<T>(base: T, over: unknown): T {
   if (over == null || typeof over !== "object" || Array.isArray(over)) return (over as T) ?? base;
   const out: Record<string, unknown> = { ...(base as Record<string, unknown>) };
   for (const [k, v] of Object.entries(over as Record<string, unknown>)) {
+    // Служебные ключи из БД не переносим: `out["__proto__"] = …` подменил бы прототип объекта настроек
+    if (k === "__proto__" || k === "constructor" || k === "prototype") continue;
     const b = (base as Record<string, unknown>)?.[k];
     out[k] = b && typeof b === "object" && !Array.isArray(b) && v && typeof v === "object" && !Array.isArray(v) ? merge(b, v) : v;
   }
@@ -233,6 +254,8 @@ export async function cfg<K extends SettingKey>(key: K): Promise<Settings[K]> {
 }
 
 export async function saveSetting(key: string, value: unknown) {
+  const { stripForbidden } = await import("./settings-validate");
+  value = stripForbidden(value);
   await db.setting.upsert({ where: { key }, update: { value: value as object }, create: { key, value: value as object } });
 }
 

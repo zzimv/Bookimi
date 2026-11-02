@@ -23,13 +23,13 @@ export function HomeHero({ shelf, rating }: { shelf: ShelfLink[]; rating: { avg:
     <section className="home-hero" aria-labelledby="home-h">
       <div className="wrap home-hero__in">
         <p className="home-hero__eyebrow">
-          <span aria-hidden="true">★</span> Персональные книги по фото
+          <span aria-hidden="true">★</span> Книги о самых близких
         </p>
         <h1 id="home-h">
           Книга, где главный герой —{" "}
           <span className="home-hero__line">тот, кого вы любите</span>
         </h1>
-        <p className="home-hero__lead">Загрузите фото — и за 5 минут получите бесплатное превью сказки с узнаваемым героем</p>
+        <p className="home-hero__lead">Загрузите фото или опишите героя — и за 5 минут получите бесплатное превью сказки</p>
         <div className="home-hero__cta">
           <Link href="/sozdat" className="btn btn--primary btn--lg">
             Создать книгу <span aria-hidden="true">→</span>
@@ -148,6 +148,9 @@ export function FiveMinutes() {
             PDF — сразу после оплаты. Печатная — 3–5 рабочих дней и доставка по России.
           </li>
         </ol>
+        <p className="small soon-inline" data-cartoon-soon style={{ marginTop: 16 }}>
+          <b>Оживление книги</b> <span className="badge badge--gold">скоро</span> — иллюстрации вашей сказки оживут, а диктор прочитает её вслух.
+        </p>
         <p style={{ marginTop: 28 }}>
           <Link href="/sozdat" className="btn btn--primary">Создать книгу</Link>
         </p>

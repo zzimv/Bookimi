@@ -4,6 +4,7 @@ import { SpreadText } from "@/components/SpreadText";
 import { useCallback, useEffect, useState } from "react";
 import { api, goal } from "@/lib/client";
 import { OtpForm } from "@/components/OtpForm";
+import { FlowLegal } from "@/components/FlowLegal";
 
 interface BookState {
   id: string;
@@ -57,6 +58,8 @@ export function BookFlow({
 }) {
   const [b, setB] = useState<BookState | null>(null);
   const [error, setError] = useState("");
+  // Дневной лимит превью исчерпан — можно оформить книгу сразу, без превью (сервер это разрешает)
+  const [buyNow, setBuyNow] = useState(false);
   const [busy, setBusy] = useState(false);
   const [edit, setEdit] = useState<Record<number, string>>({});
   const [pdNow, setPdNow] = useState(false);
@@ -105,6 +108,7 @@ export function BookFlow({
       return true;
     } catch (e) {
       setError((e as Error).message);
+      if ((e as { status?: number }).status === 429 && (body as { action?: string }).action === "preview") setBuyNow(true);
       return false;
     } finally {
       setBusy(false);
@@ -140,7 +144,7 @@ export function BookFlow({
     };
   }, [showBulk, bookId]);
 
-  if (!b) return <div className="flow"><div className="spinner" style={{ margin: "60px auto" }} /></div>;
+  if (!b) return <div className="flow"><div className="spinner" style={{ margin: "60px auto" }} /><FlowLegal /></div>;
 
   const moodLeft = Math.max(0, moodChangesPreview - b.moodChanges.preview);
   void photoEnabled;
@@ -160,7 +164,14 @@ export function BookFlow({
     <div className="flow">
       {b.status === "TEXT_QUEUED" && generating("Сочиняем сказку", "Обычно это занимает меньше минуты.")}
 
-      {b.status === "FAILED" && (
+      {b.status === "FAILED" && b.paid && (
+        <div className="panel" role="status">
+          <h1>Мы уже исправляем</h1>
+          <p className="muted">При подготовке книги случилась заминка — мы уже знаем о ней и всё исправим. Книга будет готова, вам придёт письмо. Делать ничего не нужно.</p>
+        </div>
+      )}
+
+      {b.status === "FAILED" && !b.paid && (
         <div className="panel">
           <h1>Что-то пошло не так</h1>
           <p className="muted">Мы уже знаем об ошибке. Попробуйте ещё раз — черновик сохранён.</p>
@@ -221,7 +232,6 @@ export function BookFlow({
                 </div>
               ) : (
                 <div className="panel">
-                  {b.consent?.pd && <p className="consent-done small"><span aria-hidden="true">✓</span> Согласие на обработку данных дано{b.consent.photo ? " (и на фото)" : ""}</p>}
                   {!b.consent?.pd && (
                     <label className="check">
                       <input type="checkbox" name="consent-pd" checked={pdNow} onChange={(e) => setPdNow(e.target.checked)} />
@@ -237,6 +247,11 @@ export function BookFlow({
                 {b.withPhoto ? "Нарисуем по фото, которое вы загрузили и мы уже обработали." : "Нарисуем по описанию из анкеты."}
               </p>
               {error && <p className="error" role="alert">{error}</p>}
+              {buyNow && (
+                <p style={{ marginTop: 8 }}>
+                  <Link className="btn btn--gold" href={`/kniga/${bookId}/kupit`} onClick={() => goal("choose_print", { withoutPreview: 1 })}>Оформить без превью</Link>
+                </p>
+              )}
             </>
           }
         </section>
@@ -333,6 +348,7 @@ export function BookFlow({
           </div>
         </div>
       )}
+      <FlowLegal />
     </div>
   );
 }

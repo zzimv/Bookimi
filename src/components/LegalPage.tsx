@@ -1,3 +1,4 @@
+import { og } from "@/lib/og";
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { Breadcrumbs } from "./Layout";
@@ -7,7 +8,7 @@ import { getSeller, getSetting, sellerIsComplete, type Seller } from "@/lib/sett
 
 export function legalMetadata(key: string, path: string): Metadata {
   const d = LEGAL[key];
-  return d ? { title: d.title, description: d.description, alternates: { canonical: path } } : {};
+  return d ? { title: d.title, description: d.description, alternates: { canonical: path }, ...og({ title: d.title, description: d.description, path }) } : {};
 }
 
 // Редакция из админки: настройка legal.<ключ> = { markdown, version }.

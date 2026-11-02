@@ -70,7 +70,7 @@ describe("промпт картинок", () => {
     const job = { plot: { slug: "x", theme: "winter", heroKind: "child" as const }, index: 1, scene: "the child in a snowy forest", style: "kind-classic", mood: mood("warm"), heroes: [{ role: "main", description: "", photos: [] }], age: 5, preview: true };
     const p = scenePrompt(job);
     expect(p.prompt).toMatch(/Scene: the child in a snowy forest/);
-    expect(p.prompt).toMatch(/Mood: warm golden-hour/);
+    expect(p.prompt).toMatch(/Mood: warm amber/);
     expect(p.negative).toMatch(/cold blue cast/);
   });
   it("демо-картинка: герой и доп. герои, настроение", async () => {
@@ -78,7 +78,8 @@ describe("промпт картинок", () => {
     const r = await new DemoImageProvider().scene({ plot, index: 0, scene: "", style: "linocut", mood: mood("romantic"), heroes: [{ role: "main", description: "", photos: [], look: { gender: "girl" } }, { role: "partner", description: "", photos: [], look: { gender: "boy" } }], age: 30, preview: true, title: "Наша история" });
     const svg = r.data.toString();
     expect(svg).toMatch(/^<svg/);
-    expect(svg).toMatch(/Наша история/);
+    // Название на обложку накладывают сайт и PDF — в самой картинке его нет (иначе на демо-обложке оно дважды)
+    expect(svg).not.toMatch(/Наша история/);
     expect(svg).not.toMatch(/NaN|undefined/);
   });
 });

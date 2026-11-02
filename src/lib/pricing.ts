@@ -113,11 +113,11 @@ export function quote(input: QuoteInput, formats: CatalogFormat[], addons: Catal
     }
     // Мультфильм: «Своим голосом» — только вместе с мультфильмом или к уже купленному; дважды не продаём
     if (key === CARTOON_ADDON && input.cartoonPaid) {
-      errors.push("Мультфильм к этой книге уже куплен");
+      errors.push("«Оживление книги» к этой книге уже куплено");
       continue;
     }
     if (key === CARTOON_OWN_VOICE && !chosen.includes(CARTOON_ADDON) && !input.cartoonPaid) {
-      errors.push("«Своим голосом» — дополнение к мультфильму: добавьте мультфильм");
+      errors.push("«Своим голосом» — дополнение к «Оживлению книги»: добавьте его");
       continue;
     }
     if (a.kind === "DIGITAL" && key !== CARTOON_ADDON && input.paidAddons?.includes(key)) {

@@ -6,6 +6,7 @@ import { currentUser } from "@/lib/auth";
 import { checkText } from "@/lib/moderation";
 import { track } from "@/lib/events";
 import { normalizeSignature } from "@/lib/names";
+import { creditReviewBonus } from "@/lib/bonus-server";
 
 // Отзыв покупателя — только после оплаченного заказа, публикуется после модерации.
 export async function POST(req: Request) {
@@ -29,11 +30,12 @@ export async function POST(req: Request) {
   const created = await db.$transaction(async (tx) => {
     // Параллельные запросы: блокировка по заказу, внутри — повторная проверка
     await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`review:${order.id}`}))`;
-    if (await tx.review.count({ where: { orderId: order.id } })) return false;
-    await tx.review.create({ data: { userId: user.id, orderId: order.id, rating: b.rating, text: b.text, authorName: b.authorName, status: "pending" } });
-    return true;
+    if (await tx.review.count({ where: { orderId: order.id } })) return null;
+    return tx.review.create({ data: { userId: user.id, orderId: order.id, rating: b.rating, text: b.text, authorName: b.authorName, status: "pending" }, select: { id: true } });
   });
   if (!created) return err("Спасибо! Отзыв на этот заказ уже есть", 409);
   await track("review", { userId: user.id });
-  return json({ ok: true });
+  // rev 10: за отзыв о полученном заказе — бонусы сразу (отклонят как спам — спишутся, src/lib/bonus-server.ts)
+  const bonusRub = await creditReviewBonus(user.id, order, created.id).catch(() => 0);
+  return json({ ok: true, bonusRub });
 }

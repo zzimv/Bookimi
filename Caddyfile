@@ -2,12 +2,50 @@
 # Основной домен — из DOMAIN, дополнительные (через запятую в EXTRA_DOMAINS,
 # например «букими.рф, bookimi.com») переадресуются на основной с кодом 301.
 # Кириллический домен указывайте в punycode: xn--90aiimqf.xn--p1ai
+# Админка — только на ADMIN_HOST (по умолчанию admin.<DOMAIN>) и только из ADMIN_ALLOW_IPS / VPN (README, «Безопасность админки»).
+
+# Базовая авторизация поверх админки — по флагу ADMIN_BASIC_AUTH=on (логин ADMIN_BASIC_USER, хэш: caddy hash-password)
+(admin-auth-off) {
+}
+(admin-auth-on) {
+	basic_auth {
+		{$ADMIN_BASIC_USER:staff} {$ADMIN_BASIC_HASH}
+	}
+}
 
 {$DOMAIN} {
 	encode zstd gzip
+	# Админки на основном домене нет (вторая линия; первая — middleware Next)
+	@admin path /admin /admin/* /api/admin /api/admin/*
+	respond @admin 404
 	reverse_proxy web:3000
 	@static path /_next/static/* /fonts/*
 	header @static Cache-Control "public, max-age=31536000, immutable"
+}
+
+{$ADMIN_HOST} {
+	encode zstd gzip
+	header {
+		X-Robots-Tag "noindex, nofollow, noarchive"
+		X-Frame-Options "DENY"
+		Referrer-Policy "no-referrer"
+		-Server
+	}
+	# Только белый список (ADMIN_ALLOW_IPS — CIDR через пробел) и подсеть WireGuard (ADMIN_VPN_SUBNET); остальным — 403
+	@allowed remote_ip {$ADMIN_ALLOW_IPS:127.0.0.1/32} {$ADMIN_VPN_SUBNET:10.13.13.0/24}
+	handle @allowed {
+		import admin-auth-{$ADMIN_BASIC_AUTH:off}
+		reverse_proxy web:3000
+	}
+	handle {
+		respond "Forbidden" 403
+	}
+	log {
+		output file /data/admin-access.log {
+			roll_size 10mb
+			roll_keep 10
+		}
+	}
 }
 
 {$EXTRA_DOMAINS} {

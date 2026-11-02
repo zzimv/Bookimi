@@ -21,7 +21,7 @@ export async function issueReceipt(orderId: string, opts: { urlFromPayment?: str
   const existing = order.receipts.find((r) => r.status === "issued");
   if (existing) return existing;
   const tax = await cfg("tax");
-  if (tax.regime === "ip") return null; // 54-ФЗ — через кассу провайдера
+  if (tax.regime === "ip") return null; // 54-ФЗ — касса ЮKassa по объекту receipt (src/lib/receipt54.ts, payments.ts)
 
   const mode = npdMode();
   let url: string | undefined = opts.urlFromPayment;
@@ -51,9 +51,24 @@ export async function issueReceipt(orderId: string, opts: { urlFromPayment?: str
   return db.receipt.create({ data: { orderId, regime: "npd", url, externalId, amountRub: order.totalRub, status: "issued" } });
 }
 
-export async function attachManualReceipt(orderId: string, url: string) {
-  const order = await db.order.findUniqueOrThrow({ where: { id: orderId } });
-  return db.receipt.create({ data: { orderId, regime: "npd", url, amountRub: order.totalRub, status: "issued" } });
+export class ReceiptExists extends Error {}
+
+/**
+ * Ручной чек: один действующий чек на оплату заказа. Чек уже есть — без `replace` отказ (ReceiptExists);
+ * с `replace` (оператор подтвердил замену) старый помечается «replaced», новый — «issued». Под блокировкой заказа:
+ * двойной клик или две вкладки не создадут два чека (иначе прогноз лимита НПД завышается).
+ */
+export async function attachManualReceipt(orderId: string, url: string, opts: { replace?: boolean } = {}) {
+  return db.$transaction(async (tx) => {
+    await tx.$queryRaw`SELECT "id" FROM "Order" WHERE "id" = ${orderId}::uuid FOR UPDATE`;
+    const order = await tx.order.findUniqueOrThrow({ where: { id: orderId }, include: { receipts: true } });
+    if (!order.paidAt) throw new Error("Заказ не оплачен — чек не нужен");
+    const issued = order.receipts.filter((r) => r.status === "issued");
+    if (issued.length && !opts.replace) throw new ReceiptExists("У заказа уже есть чек. Чтобы заменить его, отметьте «Заменить чек».");
+    if (issued.some((r) => r.url === url)) return issued.find((r) => r.url === url)!;
+    for (const r of issued) await tx.receipt.update({ where: { id: r.id }, data: { status: "replaced", cancelledAt: new Date() } });
+    return tx.receipt.create({ data: { orderId, regime: "npd", url, amountRub: order.totalRub, status: "issued" } });
+  });
 }
 
 /** Аннулирование чека при возврате. В manual-режиме оператор аннулирует его в «Мой налог» сам. */

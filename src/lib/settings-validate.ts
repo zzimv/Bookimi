@@ -56,6 +56,8 @@ const SCHEMAS: Partial<Record<SettingKey, z.ZodTypeAny>> = {
   tax: z
     .object({
       regime: z.enum(["npd", "ip"], { errorMap: () => ({ message: "Режим: НПД или ИП" }) }),
+      vatCode: num("Ставка НДС в чеке (код ЮKassa)", 1, 12).optional(),
+      taxSystemCode: num("Система налогообложения (код ЮKassa)", 0, 6).optional(),
       ogrnip: z.string().trim().refine((v) => !v || /^\d{15}$/.test(v), "ОГРНИП: 15 цифр"),
       npdYearLimitRub: num("Лимит дохода НПД", 1, 100_000_000),
     })
@@ -119,6 +121,7 @@ const SCHEMAS: Partial<Record<SettingKey, z.ZodTypeAny>> = {
     .passthrough(),
   notifications: z.object({ smtpPort: num("Порт SMTP", 1, 65535), smtpFrom: z.string().trim().max(200) }).passthrough(),
   alerts: z.object({ email: emailOrEmpty("Почта для алертов"), spendPct: pctList("Порог расходов, %"), npdPct: pctList("Порог НПД, %") }).passthrough(),
+  bonus: z.object({ reviewRub: num("Бонусов за отзыв", 0, 5000), maxSharePct: num("Оплата бонусами, % заказа", 0, 100), expiryDays: num("Бонусы сгорают через, дней", 1, 3650) }).passthrough(),
   referral: z.object({ newbiePct: num("Скидка новичку", 0, 90), bonusPct: num("Бонус приглашающему", 0, 90), delayDays: num("Бонус через, дней", 0, 365) }).passthrough(),
   season: z.object({ mode: z.enum(["auto", "manual", "off"]), printDeadline: dateOrEmpty("Последний день заказа") }).passthrough(),
   promoBar: z.object({ text: z.string().trim().max(200, "Текст полосы: не длиннее 200 символов") }).passthrough(),
@@ -177,3 +180,73 @@ export const optNum = (v: FormDataEntryValue | null) => {
   const s = String(v ?? "").trim();
   return s === "" ? null : Number(s.replace(",", "."));
 };
+
+// ── Разбор формы настроек (f.<путь>) без загрязнения прототипов ──
+/** Ключи, которые нельзя принимать из формы и из БД: `f.__proto__.x` иначе меняет Object.prototype всего процесса. */
+export const FORBIDDEN_KEYS = new Set(["__proto__", "constructor", "prototype"]);
+
+/** Путь из формы: только «слова» через точку, без служебных ключей. */
+export function safePath(path: string): string[] | null {
+  const parts = path.split(".");
+  if (!parts.length || parts.length > 6) return null;
+  for (const p of parts) if (!/^[A-Za-z0-9_-]{1,60}$/.test(p) || FORBIDDEN_KEYS.has(p)) return null;
+  return parts;
+}
+
+/** Записать значение по пути в объект без прототипа; служебный ключ — отказ (false). */
+export function safeSet(out: Record<string, unknown>, path: string, v: unknown): boolean {
+  const parts = safePath(path);
+  if (!parts) return false;
+  let o = out;
+  for (const p of parts.slice(0, -1)) {
+    const next = Object.prototype.hasOwnProperty.call(o, p) ? o[p] : undefined;
+    if (next && typeof next === "object" && !Array.isArray(next)) o = next as Record<string, unknown>;
+    else o = (o[p] = Object.create(null)) as Record<string, unknown>;
+  }
+  o[parts.at(-1)!] = v;
+  return true;
+}
+
+/** Прочитать значение по пути (только собственные свойства). */
+export function safeGet(base: unknown, path: string): unknown {
+  const parts = safePath(path);
+  if (!parts) return undefined;
+  let o: unknown = base;
+  for (const p of parts) {
+    if (!o || typeof o !== "object" || !Object.prototype.hasOwnProperty.call(o, p)) return undefined;
+    o = (o as Record<string, unknown>)[p];
+  }
+  return o;
+}
+
+/** Копия без служебных ключей на любом уровне (значение из БД или из формы). */
+export function stripForbidden<T>(v: T): T {
+  if (Array.isArray(v)) return v.map(stripForbidden) as T;
+  if (!v || typeof v !== "object") return v;
+  const out: Record<string, unknown> = {};
+  for (const [k, x] of Object.entries(v as Record<string, unknown>)) if (!FORBIDDEN_KEYS.has(k)) out[k] = stripForbidden(x);
+  return out as T;
+}
+
+/**
+ * Раздел настроек из формы: поля `f.<путь>` по типам значений по умолчанию, чекбоксы — из `__bools`.
+ * Пути со служебными ключами (`__proto__`, `constructor`, `prototype`) и неизвестными символами пропускаются.
+ */
+export function parseSettingsForm(defaults: unknown, f: { entries(): Iterable<[string, unknown]>; get(k: string): unknown }): Record<string, unknown> {
+  const out: Record<string, unknown> = Object.create(null);
+  for (const [name, raw] of f.entries()) {
+    if (!name.startsWith("f.")) continue;
+    const path = name.slice(2);
+    if (!safePath(path)) continue;
+    const def = safeGet(defaults, path);
+    const v = String(raw);
+    if (typeof def === "number") safeSet(out, path, v.trim() === "" ? NaN : Number(v.replace(",", ".")));
+    else if (Array.isArray(def) && def[0] && typeof def[0] === "object") safeSet(out, path, parseTiers(v));
+    else if (Array.isArray(def)) safeSet(out, path, v.split(",").map((x) => x.trim()).filter(Boolean).map((x) => (typeof def[0] === "number" ? Number(x) : x)));
+    else safeSet(out, path, v);
+  }
+  // Чекбоксы: отсутствуют в форме, если выключены
+  for (const name of String(f.get("__bools") ?? "").split(",").filter(Boolean)) safeSet(out, name, f.get(`f.${name}`) === "on");
+  // Обычный объект (дальше — spread и zod), без служебных ключей
+  return stripForbidden({ ...out });
+}

@@ -27,6 +27,9 @@ vi.mock("next/cache", () => ({ revalidatePath: () => {}, revalidateTag: () => {}
 // PDF в тестах не рендерим (Chromium): считаем вызовы — печать после PDF должна делать только блок и обложку
 const pdf = vi.hoisted(() => ({ calls: [] as string[] }));
 vi.mock("@/lib/pdf", () => ({
+  // Подготовка картинок к печати (300 dpi) — без изменений в тестах; ниже 250 dpi — не проверяем
+  preparePrint: async (d: unknown) => ({ data: d, lowDpi: [] }),
+  MIN_SOURCE_DPI: 250,
   renderPdf: async (_d: unknown, o: { kind: string }) => {
     pdf.calls.push(o.kind);
     return Buffer.from("%PDF-1.4 test");
@@ -83,13 +86,19 @@ d("исправления по отчёту 30.10: БД", async () => {
     n++;
     return db.user.create({ data: { email: `${name}-${tag}-${n}@test.local`, phone: `+79${String(randomInt(0, 1e9)).padStart(9, "0")}`, referralCode: `F${tag}${n}`.slice(0, 12).toUpperCase(), ...data } });
   }
+  // Вход: сессия покупателя (bk_session); сотруднику — ещё и сессия админки (bk_staff, scope=staff) — её и возвращаем
   async function login(userId: string, data: Record<string, unknown> = {}) {
     const raw = randomUUID();
-    const s = await db.session.create({ data: { userId, tokenHash: createHash("sha256").update(raw).digest("hex"), csrfToken: "t", expiresAt: new Date(Date.now() + 86400_000), ...data } });
+    const u = await db.user.findUniqueOrThrow({ where: { id: userId }, select: { role: true } });
+    const staff = u.role !== "CUSTOMER";
+    const s = await db.session.create({ data: { userId, tokenHash: createHash("sha256").update(raw).digest("hex"), csrfToken: "t", expiresAt: new Date(Date.now() + 86400_000), ...(staff ? {} : data) } });
     ctx.cookies.clear();
     ctx.cookies.set("bk_session", raw);
     ctx.cookies.set("bk_anon", `anon-${tag}-${userId}`);
-    return s;
+    if (!staff) return s;
+    const rawStaff = randomUUID();
+    ctx.cookies.set("bk_staff", rawStaff);
+    return db.session.create({ data: { userId, scope: "staff", tokenHash: createHash("sha256").update(rawStaff).digest("hex"), csrfToken: "t", expiresAt: new Date(Date.now() + 86400_000), ...data } });
   }
   async function book(userId: string | null, data: Record<string, unknown> = {}) {
     const story = await db.story.findFirstOrThrow({ where: { isActive: true, audience: "CHILD" } });
@@ -243,12 +252,12 @@ d("исправления по отчёту 30.10: БД", async () => {
     });
 
     it("сессия сотрудника — не дольше 12 часов", async () => {
-      const { currentSession } = await import("@/lib/auth");
+      const { currentSession, currentStaffSession } = await import("@/lib/auth");
       const op = await user("old", { role: "OPERATOR" });
       const s = await login(op.id);
-      expect(await currentSession()).not.toBeNull();
+      expect(await currentStaffSession()).not.toBeNull();
       await db.session.update({ where: { id: s.id }, data: { createdAt: new Date(Date.now() - 13 * 3600_000) } });
-      expect(await currentSession()).toBeNull();
+      expect(await currentStaffSession()).toBeNull();
       const c = await user("cust");
       const s2 = await login(c.id);
       await db.session.update({ where: { id: s2.id }, data: { createdAt: new Date(Date.now() - 13 * 3600_000) } });

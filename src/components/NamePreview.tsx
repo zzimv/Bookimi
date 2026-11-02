@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import { normalizeName } from "@/lib/declension";
 
 const KEY = "bookimi.heroName";
+const DRAFT_KEY = "bookimi.quiz.v3";
 
 function clean(v: string) {
   return v.replace(/[^A-Za-zА-Яа-яЁё\- ]/g, "").slice(0, 20);
@@ -44,6 +45,12 @@ export function NamePreview({ label = "Как зовут героя?", placehold
           apply(v);
           try {
             localStorage.setItem(KEY, v);
+            // Черновик анкеты уже есть — имя в нём тоже меняем, чтобы анкета не спросила его ещё раз со старым ответом
+            const d = JSON.parse(localStorage.getItem(DRAFT_KEY) ?? "null");
+            if (d?.a?.hero) {
+              d.a.hero.name = normalizeName(v);
+              localStorage.setItem(DRAFT_KEY, JSON.stringify(d));
+            }
           } catch {}
         }}
       />

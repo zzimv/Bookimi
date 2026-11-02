@@ -10,7 +10,7 @@ export type FlowStep = "heroes" | "occasion" | "book" | "group" | "details";
 
 export const FLOW_STEP_LABEL: Record<FlowStep, string> = {
   heroes: "Герои",
-  occasion: "Для кого и повод",
+  occasion: "Повод",
   book: "Книга",
   group: "Группа",
   details: "Детали",

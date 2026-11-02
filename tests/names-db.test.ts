@@ -38,6 +38,13 @@ d("имена: БД", async () => {
     ctx.cookies.clear();
     ctx.cookies.set("bk_session", raw);
     ctx.cookies.set("bk_anon", `anon-${tag}-${userId}`);
+    // Сотруднику — ещё и сессия админки (bk_staff, scope=staff)
+    const u = await db.user.findUniqueOrThrow({ where: { id: userId }, select: { role: true } });
+    if (u.role !== "CUSTOMER") {
+      const rawStaff = randomUUID();
+      await db.session.create({ data: { userId, scope: "staff", mfaPassed: true, mfaAt: new Date(), tokenHash: createHash("sha256").update(rawStaff).digest("hex"), csrfToken: "t", expiresAt: new Date(Date.now() + 86400_000) } });
+      ctx.cookies.set("bk_staff", rawStaff);
+    }
   }
   async function book(userId: string, name = "маша") {
     const story = await db.story.findFirstOrThrow({ where: { isActive: true, audience: "CHILD" } });

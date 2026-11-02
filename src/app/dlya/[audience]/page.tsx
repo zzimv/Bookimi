@@ -1,3 +1,4 @@
+import { og } from "@/lib/og";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
@@ -6,7 +7,7 @@ import { catalogHref } from "@/components/CatalogNav";
 import { Breadcrumbs, JsonLd, StickyCta } from "@/components/Layout";
 import { Faq } from "@/components/Sections";
 import { getMinPrice, getStories } from "@/lib/catalog";
-import { FAQ } from "@/lib/catalog-defaults";
+import { faqItems, fillFacts, siteFacts } from "@/lib/seo";
 import { OCCASIONS as OCCASION_KEYS } from "@/content/profiles";
 import { AUDIENCE_PAGES, catalogStories, getSoon, segmentChips } from "@/lib/storefront";
 import { SoonBanner } from "@/components/Soon";
@@ -21,7 +22,7 @@ export async function generateMetadata({ params }: { params: Promise<{ audience:
   const { audience } = await params;
   const a = AUDIENCE_PAGES.find((x) => x.slug === audience);
   if (!a) return {};
-  return { title: a.title, description: a.description, alternates: { canonical: `/dlya/${a.slug}` } };
+  return { title: a.title, description: a.description, alternates: { canonical: `/dlya/${a.slug}` }, ...og({ title: a.title, description: a.description, path: `/dlya/${a.slug}` }) };
 }
 
 // Посадочная аудитории (SEO): кому именно → книги → поводы → вопросы.
@@ -79,7 +80,7 @@ export default async function Page({ params }: { params: Promise<{ audience: str
           </div>
         </div>
       </section>
-      <Faq items={FAQ} />
+      <Faq items={faqItems(await siteFacts())} />
       <StickyCta href={`/sozdat?dlya=${a.key}`} soon={isSoon} />
     </>
   );

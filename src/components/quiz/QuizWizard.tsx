@@ -29,6 +29,7 @@ import { rosterIssues } from "@/lib/roster";
 import { DEFAULT_BULK_TIERS, type BulkTier } from "@/lib/bulk";
 import { PhotoSlot, type ConsentState, type PhotoView } from "./PhotoSlot";
 import { GroupStep, type DraftAdult, type DraftMember, type QuizGroup } from "./GroupStep";
+import { FlowLegal } from "@/components/FlowLegal";
 
 export interface QuizStory {
   slug: string;
@@ -66,6 +67,7 @@ export interface QuizMood {
 }
 
 const KEY = "bookimi.quiz.v3";
+const HERO_NAME_KEY = "bookimi.heroName";
 const OLD_KEYS = ["bookimi.quiz.v2", "bookimi.quiz.v1"];
 
 type Extra = QuizAnswers["extras"][number];
@@ -244,7 +246,7 @@ export function QuizWizard({
     try {
       const raw = localStorage.getItem(KEY) ?? OLD_KEYS.map((k) => localStorage.getItem(k)).find(Boolean) ?? "null";
       const saved = JSON.parse(raw);
-      const name = localStorage.getItem("bookimi.heroName") ?? "";
+      const name = normalizeName(localStorage.getItem(HERO_NAME_KEY) ?? "");
       const fromLink = Boolean(initial.story?.slug || initial.audience || initial.occasion?.key);
       setA((cur) => {
         const s = saved?.a ? { ...saved.a } : null;
@@ -257,7 +259,8 @@ export function QuizWizard({
         // Полка главной: пол героя и сегмент из ссылки (?pol=, ?segment=)
         if (fromLink && initial.segment) base.segment = initial.segment;
         if (fromLink && initial.hero?.gender) base.hero = { ...base.hero, gender: initial.hero.gender };
-        if (!base.hero.name && name) base.hero = { ...base.hero, name };
+        // Имя, введённое на странице книги («живая обложка»), — главнее старого черновика: вопрос не повторяем
+        if (name && name !== normalizeName(base.hero.name ?? "")) base.hero = { ...base.hero, name };
         ids = [...(base.hero.photoIds ?? []), ...base.extras.map((e) => e.photoId ?? ""), ...base.group.members.map((m) => m.photoId ?? "")].filter(Boolean);
         return { ...base };
       });
@@ -301,6 +304,13 @@ export function QuizWizard({
 
   const set = <K extends keyof Draft>(k: K, v: Draft[K]) => setA((cur) => ({ ...cur, [k]: v }));
   const hero = (patch: Partial<Draft["hero"]>) => setA((cur) => ({ ...cur, hero: { ...cur.hero, ...patch } }));
+  // Имя героя — одно на сайт: то же, что в «живой обложке» страницы книги (bookimi.heroName), чтобы не спрашивать дважды
+  const heroName = (name: string) => {
+    hero({ name });
+    try {
+      localStorage.setItem(HERO_NAME_KEY, name.replace(/[^A-Za-zА-Яа-яЁё\- ]/g, "").slice(0, 20));
+    } catch {}
+  };
   const look = (patch: Partial<Draft["appearance"]>) => setA((cur) => ({ ...cur, appearance: { ...cur.appearance, ...patch } }));
   const pet = (patch: Partial<Draft["pet"]>) => setA((cur) => ({ ...cur, pet: { ...cur.pet, ...patch } }));
   const adult = (patch: Partial<Draft["adult"]>) => setA((cur) => ({ ...cur, adult: { ...cur.adult, ...patch } }));
@@ -367,6 +377,15 @@ export function QuizWizard({
     window.addEventListener("popstate", onPop);
     return () => window.removeEventListener("popstate", onPop);
   }, [loaded]);
+
+  // Обязательные доп. герои (пара, хозяева), которых уже назвали на шаге «Герои», в «Деталях» второй раз не спрашиваем.
+  // Снимок при входе на шаг: поле не исчезает, пока его заполняют здесь.
+  const [askedOnHeroes, setAskedOnHeroes] = useState<number[]>([]);
+  useEffect(() => {
+    if (step !== "details") return;
+    setAskedOnHeroes(a.extras.map((e, i) => (e.name.trim() && (HUMAN_ROLES.includes(e.role) || e.gender) ? i : -1)).filter((i) => i >= 0));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [step]);
 
   const age = typeof a.hero.age === "number" ? a.hero.age : undefined;
   const heroAgeNum = aud === "CHILD" ? AGE_GROUPS.find((g) => g.key === a.hero.ageGroup)?.age : age;
@@ -689,8 +708,16 @@ export function QuizWizard({
                 <div className="grid2">
                   <label className="field">
                     <span>{aud === "PET" ? "Кличка" : "Имя"} <span className="req">*</span></span>
-                    <input className="input input--lg ym-disable-keys" name="hero-name" autoComplete="off" value={a.hero.name ?? ""} maxLength={30} onChange={(e) => hero({ name: e.target.value })} onBlur={() => hero({ name: normalizeName(a.hero.name ?? "") })} placeholder={aud === "PET" ? "Например, Пушок" : aud === "ADULT" ? "Например, Анна" : "Например, Марк"} />
-                    <NameHint value={a.hero.name} onFix={(v) => hero({ name: v })} />
+                    <input className="input input--lg ym-disable-keys" name="hero-name" autoComplete="off" value={a.hero.name ?? ""} maxLength={30} onChange={(e) => heroName(e.target.value)} onBlur={() => heroName(normalizeName(a.hero.name ?? ""))} placeholder={aud === "PET" ? "Например, Пушок" : aud === "ADULT" ? "Например, Анна" : "Например, Марк"} />
+                    <NameHint value={a.hero.name} onFix={(v) => heroName(v)} />
+                    {aud !== "TEEN" && (
+                      <details className="more nick" open={Boolean(a.hero.nickname)}>
+                        <summary>{aud === "PET" ? "+ как ласково зовут дома" : "+ ласковое имя — как зовут дома"}</summary>
+                        <input className="input ym-disable-keys" name="hero-nickname" aria-label="Как ласково зовут дома" autoComplete="off" value={a.hero.nickname ?? ""} maxLength={30} onChange={(e) => hero({ nickname: e.target.value })} onBlur={() => hero({ nickname: normalizeName(a.hero.nickname ?? "") })} placeholder={aud === "PET" ? "Например, Пушистик" : aud === "ADULT" ? "Например, Анечка" : "Например, Марусик"} />
+                        <small>Необязательно. Так герой будет звучать в тёплых местах книги</small>
+                        <NameHint value={a.hero.nickname} onFix={(v) => hero({ nickname: v })} />
+                      </details>
+                    )}
                   </label>
                   {aud === "PET" && (
                     <div>
@@ -826,13 +853,12 @@ export function QuizWizard({
 
           {step === "occasion" && (
             <section>
-              <h1 ref={h1} tabIndex={-1}>Для кого и какой повод?</h1>
-              {!presetAudience && (
-                <>
-                  <span className="label">Для кого книга</span>
-                  <Chips name="audience" label="Для кого книга" items={KIND_CARDS.map((k) => ({ key: k.key, label: AUDIENCE_LABEL[k.key] }))} value={aud} onChange={(v) => v && chooseAudience(v as AudienceKey)} />
-                </>
-              )}
+              <h1 ref={h1} tabIndex={-1}>Какой повод?</h1>
+              {/* «Для кого» уже выбрано на шаге «Герои» («Кто герой?») — здесь только напоминание, без второго вопроса */}
+              <p className="muted quiz__known" data-known="audience">
+                {AUDIENCE_LABEL[aud]}{a.hero.name?.trim() ? <> — <b>{normalizeName(a.hero.name)}</b></> : null}
+                {!presetAudience && <> · <button type="button" className="link-btn" onClick={() => go("heroes")}>изменить</button></>}
+              </p>
               <span className="label">Повод</span>
               <Chips name="occasion" label="Повод" items={occasionChips(aud)} value={occChosen ? a.occasion.key : ""} onChange={(v) => chooseOccasion(v as string)} />
               {occChosen && a.occasion.key === "svoj" && (
@@ -912,14 +938,6 @@ export function QuizWizard({
             <section>
               <h1 ref={h1} tabIndex={-1}>{aud === "PET" ? `Какой характер у ${fill("{ГЕРОЙ.род}")}?` : `Что любит ${fill("{ГЕРОЙ.им}")}?`}</h1>
               <p className="muted">Привычки и увлечения станут сценами книги.</p>
-              {aud !== "TEEN" && (
-                <label className="field">
-                  <span>Как ласково зовут дома</span>
-                  <input className="input ym-disable-keys" name="hero-nickname" autoComplete="off" value={a.hero.nickname ?? ""} maxLength={30} onChange={(e) => hero({ nickname: e.target.value })} onBlur={() => hero({ nickname: normalizeName(a.hero.nickname ?? "") })} placeholder={aud === "PET" ? "Например, Пушистик" : aud === "ADULT" ? "Например, Анечка" : "Например, Марусик"} />
-                  <small>Необязательно. Так герой будет звучать в тёплых местах книги</small>
-                  <NameHint value={a.hero.nickname} onFix={(v) => hero({ nickname: v })} />
-                </label>
-              )}
               {aud === "CHILD" && (
                 <>
                   <span className="label">Увлечения — до трёх</span>
@@ -991,7 +1009,11 @@ export function QuizWizard({
                     const over = i >= maxExtras;
                     return (
                       <div className={`extra-line ${over ? "extra-line--over" : ""}`} key={i} data-extra-detail={i}>
-                        {required ? (
+                        {required && askedOnHeroes.includes(i) ? (
+                          <p className="extra-known" data-known={`extra-${i}`}>
+                            {EXTRA_ROLE_LABELS[e.role] ?? e.role}: <b>{e.name}</b> · <button type="button" className="link-btn" onClick={() => go("heroes")}>изменить</button>
+                          </p>
+                        ) : required ? (
                           <div className="grid2">
                             <label className="field">
                               <span>{EXTRA_ROLE_LABELS[e.role] ?? e.role} — имя <span className="req">*</span></span>
@@ -1098,6 +1120,7 @@ export function QuizWizard({
           </button>
         </div>
       </div>
+      <FlowLegal />
     </div>
   );
 }

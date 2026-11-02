@@ -1,4 +1,4 @@
-// «Мультфильм по книге» в демо-стенде: ролик не рендерится на сервере — он играет прямо в браузере.
+// «Оживление книги» в демо-стенде: ролик не рендерится на сервере — он играет прямо в браузере.
 // Canvas по разворотам книги (наезд/панорама, наплыв между сценами, частицы по настроению, виньетка, субтитры),
 // озвучка — русский голос браузера (speechSynthesis, ru-RU) или ваши записи со страницы «Озвучить своим голосом»;
 // нет русского голоса — только субтитры. Сценарий и тайминг — те же функции, что на сайте (src/lib/gen/cartoon-script.ts).
@@ -410,8 +410,8 @@ export function CartoonPlayer({ book }: { book: DBook }) {
   const mode = own.size ? `Ваш голос: ${own.size} из ${cues.length} реплик`  : voiceName ? `Голос браузера: ${voiceName}` : "Без голоса — русского голоса в браузере нет, показываем субтитры";
   return (
     <section className="panel cartoon-demo" data-cartoon-player aria-labelledby="cartoon-h" style={{ marginBottom: 16 }}>
-      <h2 id="cartoon-h" style={{ fontSize: "var(--fs-lg)", marginTop: 0 }}>Мультфильм по книге{own.size ? " — вашим голосом" : ""}</h2>
-      <canvas data-cartoon={book.id} width={SIZE} height={SIZE} className="cartoon-demo__canvas" aria-label="Мультфильм: развороты книги с озвучкой и субтитрами" onClick={() => (state === "playing" ? (player.current?.pause(), setState("paused")) : play())} />
+      <h2 id="cartoon-h" style={{ fontSize: "var(--fs-lg)", marginTop: 0 }}>Оживление книги{own.size ? " — вашим голосом" : ""}</h2>
+      <canvas data-cartoon={book.id} width={SIZE} height={SIZE} className="cartoon-demo__canvas" aria-label="Оживление книги: развороты книги с озвучкой и субтитрами" onClick={() => (state === "playing" ? (player.current?.pause(), setState("paused")) : play())} />
       <div className="row" style={{ marginTop: 10 }}>
         {state === "playing" ? (
           <button type="button" className="btn btn--primary btn--sm" data-cartoon-pause onClick={() => { player.current?.pause(); setState("paused"); }}>Пауза</button>
@@ -423,7 +423,7 @@ export function CartoonPlayer({ book }: { book: DBook }) {
       </div>
       <p className="small muted" style={{ margin: "8px 0 0" }} data-cartoon-voice>{mode}.</p>
       <p className="small demo-note" style={{ margin: "8px 0 0" }}>
-        Демо: мультфильм играет прямо в браузере. На сайте — MP4 1080×1080 и 9:16 с диктором или вашим голосом, музыкой и ссылкой «Поделиться».
+        Демо: «Оживление книги» играет прямо в браузере. На сайте — MP4 1080×1080 и 9:16 с диктором или вашим голосом, музыкой и ссылкой «Поделиться».
       </p>
       <div className="row" style={{ marginTop: 10 }}>
         {c.ownVoice ? (
@@ -466,7 +466,7 @@ export async function DemoMult({ id }: { id: string }) {
     return (
       <div className="panel">
         <h1 style={{ fontSize: "var(--fs-xl)" }}>Озвучить своим голосом</h1>
-        <p>Эта возможность — дополнение к мультфильму по книге. Добавить её можно на странице книги.</p>
+        <p>Эта возможность — дополнение к «Оживлению книги». Добавить её можно на странице книги.</p>
         <Link className="btn btn--primary btn--sm" href={`/kabinet/kniga/${id}`}>К книге</Link>
       </div>
     );
@@ -477,7 +477,7 @@ export async function DemoMult({ id }: { id: string }) {
     <>
       <p className="small"><Link href={`/kabinet/kniga/${id}`}>← {title}</Link></p>
       <h1 style={{ fontSize: "var(--fs-xl)" }}>Озвучить своим голосом</h1>
-      <p>Прочитайте мультфильм сами — {cues.length} коротких реплик, на всё уйдёт минут десять. Сцены подстроятся под ваш голос.</p>
+      <p>Озвучьте ролик сами — {cues.length} коротких реплик, на всё уйдёт минут десять. Сцены подстроятся под ваш голос.</p>
       <p className="muted-panel small demo-note">Демо: записи остаются только в памяти этой вкладки и играют в плеере вместо голоса браузера. Перезагрузите страницу — записи исчезнут.</p>
       <details className="panel">
         <summary style={{ cursor: "pointer", fontWeight: 700 }}>С чего начать</summary>

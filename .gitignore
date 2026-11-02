@@ -14,3 +14,6 @@ __pycache__/
 .venv/
 /storage
 /tools/demo/out
+
+# Ключи WireGuard (docker compose --profile vpn) — не в репозиторий
+wireguard/

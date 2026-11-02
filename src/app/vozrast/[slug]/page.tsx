@@ -1,3 +1,4 @@
+import { og } from "@/lib/og";
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { BookCard } from "@/components/BookCard";
@@ -20,6 +21,7 @@ export async function generateMetadata({ params }: { params: Promise<{ slug: str
     title: `${a.title}: персональные сказки по фото`,
     description: `Именные книги для детей ${a.min}–${a.max} лет, где ребёнок — главный герой. Превью бесплатно, PDF 990 ₽, печать от 2 490 ₽.`,
     alternates: { canonical: `/vozrast/${a.slug}` },
+    ...og({ title: `${a.title}: персональные сказки по фото`, description: `Именные книги для детей ${a.min}–${a.max} лет, где ребёнок — главный герой.`, path: `/vozrast/${a.slug}` }),
   };
 }
 

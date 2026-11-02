@@ -15,4 +15,7 @@ export async function setupSellerAndPayments() {
   await saveSetting("alerts", TEST_ALERTS);
   await saveSetting("seller", TEST_SELLER);
   await saveSetting("payments", TEST_PAYMENTS);
+  // Самовывоз разрешён, только если у типографии есть адрес (проверка на сервере) — тесты с pickup его получают
+  const { db } = await import("@/lib/db");
+  await db.printHouse.updateMany({ where: { isActive: true, pickupAddress: null }, data: { pickupAddress: "Москва, ул. Типографская, 1" } });
 }

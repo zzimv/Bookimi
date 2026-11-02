@@ -56,6 +56,7 @@ model User {
   auditLogs     AuditLog[]
   reviews       Review[]
   tickets       SupportTicket[]
+  bonusEntries  BonusEntry[]
 }
 
 model OtpCode {
@@ -81,8 +82,15 @@ model Session {
   mfaAt      DateTime?
   /// Коды восстановления, ещё не показанные после настройки 2FA (зашифрованы; стираются после «Я сохранил(а)»)
   recoveryShow String?
+  /// customer — сайт (cookie bk_session), staff — админка на admin-хосте (cookie bk_staff); одна не открывает другую
+  scope      String   @default("customer")
+  /// IP и устройство входа (журнал входов, алерт о новом IP/устройстве, «Команда» → активные сессии)
+  ip         String?
+  userAgent  String?
   expiresAt  DateTime
   createdAt  DateTime @default(now())
+
+  @@index([userId, scope])
 }
 
 enum ConsentType {
@@ -131,6 +139,8 @@ model Occasion {
   sortOrder   Int      @default(0)
   isActive    Boolean  @default(true)
   stories     Story[]
+  /// Изменение в админке или seed — lastmod в sitemap (миграция 0012)
+  updatedAt     DateTime  @default(now()) @updatedAt
 }
 
 model Story {
@@ -160,6 +170,8 @@ model Story {
   isActive      Boolean   @default(true)
   createdAt     DateTime  @default(now())
   books         Book[]
+  /// Изменение в админке или seed — lastmod в sitemap (миграция 0012)
+  updatedAt     DateTime  @default(now()) @updatedAt
 }
 
 model IllustrationStyle {
@@ -450,7 +462,10 @@ model Order {
   expiresAt     DateTime?   // автоотмена неоплаченного
   createdAt     DateTime    @default(now())
   paidAt        DateTime?
+  /// Оплачено бонусами, ₽ (rev 10: не больше bonus.maxSharePct % заказа)
+  bonusRub      Int         @default(0)
   items         OrderItem[]
+  changes       OrderChange[]
   payments      Payment[]
   receipts      Receipt[]
   shipment      Shipment?
@@ -497,7 +512,7 @@ model Receipt {
   externalId  String?
   url         String?
   amountRub   Int
-  status      String   // issued | cancelled
+  status      String   // issued | cancelled | replaced (один issued на заказ — частичный уникальный индекс, миграция 0009)
   createdAt   DateTime @default(now())
   cancelledAt DateTime?
 }
@@ -542,6 +557,8 @@ model Shipment {
   priceRub    Int
   etaDate     DateTime?
   trackNumber String?
+  /// uuid заказа в СДЭК (POST /v2/orders); номер отправления приходит позже — в trackNumber
+  cdekUuid    String?
   status      String   @default("created")
   updatedAt   DateTime @updatedAt
 }
@@ -642,6 +659,36 @@ model Review {
   storySlug  String?
   status     String   @default("pending") // pending | approved | rejected
   createdAt  DateTime @default(now())
+}
+
+/// Бонусы (rev 10, src/lib/bonuses.ts): журнал начислений (+) и списаний (−); остаток — сумма живых партий.
+model BonusEntry {
+  id        String    @id @default(uuid()) @db.Uuid
+  userId    String    @db.Uuid
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  kind      String    // review | spend | revoke | return
+  amountRub Int
+  orderId   String?   @db.Uuid
+  reviewId  String?   @db.Uuid
+  expiresAt DateTime?
+  createdAt DateTime  @default(now())
+
+  @@unique([kind, orderId])
+  @@index([userId, createdAt])
+}
+
+/// «Изменить заказ» — только до оплаты (rev 10, src/lib/order-change.ts): что было, что стало, новая сумма.
+model OrderChange {
+  id        String   @id @default(uuid()) @db.Uuid
+  orderId   String   @db.Uuid
+  order     Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  before    Json
+  after     Json
+  lines     String[]
+  totalRub  Int
+  createdAt DateTime @default(now())
+
+  @@index([orderId, createdAt])
 }
 
 // ───────────── Служебное ─────────────

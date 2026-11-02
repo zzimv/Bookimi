@@ -16,9 +16,18 @@ export interface BookPageData {
   audience?: "CHILD" | "TEEN" | "ADULT" | "PET";
   /** Пол героя (boy | girl) — для «главный герой / главная героиня». */
   heroGender?: string;
-  cover: { data: Buffer; contentType: string };
-  spreads: { text: string; image: { data: Buffer; contentType: string } }[];
+  cover: PdfImage;
+  spreads: { text: string; image: PdfImage; /** Печать: левая и правая половины разворота точно под страницу (preparePrint). */ halves?: [PdfImage, PdfImage] }[];
   orderCode?: string;
+  /** Картинки уже подготовлены для печати этого вида (preparePrint) — повторно не масштабируем. */
+  preparedFor?: string;
+}
+
+/** Картинка книги: data — облегчённая (экран, А4); source — исходник (SVG или PNG) для печати в 300 dpi. */
+export interface PdfImage {
+  data: Buffer;
+  contentType: string;
+  source?: { data: Buffer; contentType: string };
 }
 
 export type PdfKind =
@@ -94,8 +103,11 @@ function blockPages(b: BookPageData, pageW: number, pageH: number, inset: number
     for (const side of ["left", "right"] as const) {
       const pos = side === "left" ? "0% 50%" : "100% 50%";
       const hasText = (side === "left") === textLeft;
+      // Печать: у каждой страницы своя половина разворота в 300 dpi (preparePrint); иначе — весь разворот со сдвигом
+      const half = s.halves?.[side === "left" ? 0 : 1];
+      const bg = half ? `background-image:url(${uri(half)});background-size:cover;background-position:50% 50%` : `background-image:url(${uri(s.image)});background-size:200% 100%;background-position:${pos}`;
       pages.push(`<section class="page" style="--fs:${fs}pt">
-        <div class="img" style="background-image:url(${uri(s.image)});background-size:200% 100%;background-position:${pos}"></div>
+        <div class="img" style="${bg}"></div>
         ${hasText ? `<div class="text" style="left:${inset + 4}mm;right:${inset + 4}mm;bottom:${inset + 4}mm">${spreadHtml(s.text)}</div>` : ""}
         <span class="mark">${esc(b.orderCode ?? "")}</span></section>`);
     }
@@ -133,9 +145,7 @@ export function bookHtml(b: BookPageData, k: PdfKind): { html: string; wMm: numb
     return { html: `<style>${baseCss(W, H)}</style>${blockPages(b, W, H, BLEED + SAFE)}`, wMm: W, hMm: H };
   }
   // Обложка: задняя | корешок | передняя. Корешок ≈ 0,1 мм на страницу + 4 мм (твёрдая), загиб 17 мм.
-  const spine = k.hard ? Math.round((k.pages * 0.1 + 4) * 10) / 10 : Math.round(k.pages * 0.1 * 10) / 10;
-  const wrap = k.hard ? 17 : BLEED;
-  const W = k.wMm * 2 + spine + wrap * 2, H = k.hMm + wrap * 2;
+  const { spine, wrap, W, H } = coverGeometry(k);
   const html = `<style>${baseCss(W, H)}</style><section class="page">
     <div class="img" style="left:${wrap + k.wMm + spine}mm;right:0;background-image:url(${uri(b.cover)})"></div>
     <h1 style="position:absolute;left:${wrap + k.wMm + spine + 10}mm;width:${k.wMm - 20}mm;bottom:${wrap + 14}mm;color:#fff;font-size:20pt;text-shadow:0 1mm 4mm rgba(0,0,0,.4)">${esc(b.title)}</h1>
@@ -147,8 +157,121 @@ export function bookHtml(b: BookPageData, k: PdfKind): { html: string; wMm: numb
 }
 
 export async function renderPdf(b: BookPageData, k: PdfKind): Promise<Buffer> {
-  const { html, wMm, hMm } = bookHtml(b, k);
-  return renderHtmlPdf(html, wMm, hMm, b);
+  // Типографии — иллюстрации в 300 dpi под обрезной формат + вылеты; TrimBox/BleedBox — точные
+  const data = (k.kind === "print" || k.kind === "cover") && b.preparedFor !== kindKey(k) ? (await preparePrint(b, k)).data : b;
+  const { html, wMm, hMm } = bookHtml(data, k);
+  const pdf = await renderHtmlPdf(html, wMm, hMm, data);
+  if (k.kind === "print") return setBoxes(pdf, k.wMm, k.hMm, BLEED);
+  if (k.kind === "cover") {
+    const g = coverGeometry(k);
+    return setBoxes(pdf, g.W - 2 * g.wrap, g.H - 2 * g.wrap, g.wrap);
+  }
+  return pdf;
+}
+
+// ── Печать: 300 dpi ──
+export const PRINT_DPI = 300;
+/** Ниже — предупреждение в админке: исходник растянут больше чем на 20 %. */
+export const MIN_SOURCE_DPI = 250;
+export const mmToPx = (mm: number, dpi = PRINT_DPI) => Math.ceil((mm / 25.4) * dpi);
+const kindKey = (k: PdfKind) => (k.kind === "print" || k.kind === "cover" ? `${k.kind}-${k.wMm}x${k.hMm}${k.kind === "cover" ? `-${k.hard ? "h" : "s"}` : ""}` : k.kind);
+
+/** Обложка: корешок, загиб (твёрдая — 17 мм, мягкая — вылет 3 мм), размер листа. */
+export function coverGeometry(k: { wMm: number; hMm: number; hard: boolean; pages: number }) {
+  const spine = k.hard ? Math.round((k.pages * 0.1 + 4) * 10) / 10 : Math.round(k.pages * 0.1 * 10) / 10;
+  const wrap = k.hard ? 17 : BLEED;
+  return { spine, wrap, W: k.wMm * 2 + spine + wrap * 2, H: k.hMm + wrap * 2 };
+}
+
+export interface LowDpi {
+  page: string;
+  dpi: number;
+}
+
+/**
+ * Картинка ровно w×h пикселей (заполнение с обрезкой по центру): SVG — растрируется сразу в нужном разрешении
+ * (density), растр — масштабируется Lanczos. Эффективное разрешение исходника < MIN_SOURCE_DPI — в lowDpi.
+ */
+/**
+ * Самый крупный растр каждого SVG-исходника за эту сборку (JPEG q95): фильтры демо-SVG дорого растрировать в 300 dpi,
+ * а книге нужны блоки 210 и 150 мм и файл типографии — рисуем один раз в наибольшем размере и уменьшаем Lanczos.
+ * WeakMap — память освобождается вместе с данными книги.
+ */
+const svgRaster = new WeakMap<Buffer, { w: number; h: number; data: Buffer }>();
+
+async function fitImage(img: PdfImage, wPx: number, hPx: number, label: string, low: LowDpi[]): Promise<PdfImage> {
+  const sharp = (await import("sharp")).default;
+  sharp.cache(false); // большие растры не держим в кэше libvips (воркер — 1 ГБ)
+  sharp.concurrency(1);
+  const src = img.source ?? img;
+  if (!src.data.length) return img;
+  const svg = src.contentType.includes("svg");
+  let input: Buffer;
+  if (svg) {
+    const m = await sharp(src.data, { density: 72 }).metadata();
+    const scale = Math.max(wPx / (m.width ?? wPx), hPx / (m.height ?? hPx));
+    const cached = svgRaster.get(src.data);
+    if (cached && cached.w >= Math.ceil((m.width ?? wPx) * scale) && cached.h >= Math.ceil((m.height ?? hPx) * scale)) input = cached.data;
+    else {
+      input = await sharp(src.data, { density: Math.min(2400, Math.ceil(72 * scale * 1.01)), limitInputPixels: false }).flatten({ background: "#ffffff" }).jpeg({ quality: 95, chromaSubsampling: "4:4:4" }).toBuffer();
+      const rm = await sharp(input).metadata();
+      svgRaster.set(src.data, { w: rm.width ?? 0, h: rm.height ?? 0, data: input });
+    }
+  } else {
+    const m = await sharp(src.data).metadata();
+    const scale = Math.max(wPx / (m.width ?? 1), hPx / (m.height ?? 1));
+    const dpi = Math.round(PRINT_DPI / scale);
+    if (dpi < MIN_SOURCE_DPI) low.push({ page: label, dpi });
+    input = src.data;
+  }
+  const data = await sharp(input, { limitInputPixels: false })
+    .resize(wPx, hPx, { fit: "cover", position: "centre", kernel: "lanczos3" })
+    .flatten({ background: "#ffffff" })
+    .withMetadata({ density: PRINT_DPI })
+    .jpeg({ quality: 92, chromaSubsampling: "4:4:4" })
+    .toBuffer();
+  return { data, contentType: "image/jpeg" };
+}
+
+/**
+ * Иллюстрации для типографии в 300 dpi на итоговый размер с вылетами: разворот — 2 × (формат + 2 × 3 мм) по ширине,
+ * делится на половины по страницам; обложка — передняя часть с загибом. lowDpi — страницы, где исходник растянут
+ * (< 250 dpi): владельцу предупреждение в админке.
+ */
+export async function preparePrint(b: BookPageData, k: PdfKind): Promise<{ data: BookPageData; lowDpi: LowDpi[] }> {
+  const low: LowDpi[] = [];
+  if (k.kind === "print") {
+    const wPx = mmToPx(k.wMm + 2 * BLEED), hPx = mmToPx(k.hMm + 2 * BLEED);
+    const sharp = (await import("sharp")).default;
+    const spreads = [];
+    for (const [i, s] of b.spreads.entries()) {
+      const full = await fitImage(s.image, wPx * 2, hPx, `разворот ${i + 1}`, low);
+      const half = async (left: number) => ({ data: await sharp(full.data).extract({ left, top: 0, width: wPx, height: hPx }).withMetadata({ density: PRINT_DPI }).jpeg({ quality: 92, chromaSubsampling: "4:4:4" }).toBuffer(), contentType: "image/jpeg" });
+      spreads.push({ ...s, halves: [await half(0), await half(wPx)] as [PdfImage, PdfImage] });
+    }
+    return { data: { ...b, spreads, preparedFor: kindKey(k) }, lowDpi: low };
+  }
+  if (k.kind === "cover") {
+    const g = coverGeometry(k);
+    const cover = await fitImage(b.cover, mmToPx(k.wMm + g.wrap), mmToPx(g.H), "обложка", low);
+    return { data: { ...b, cover, preparedFor: kindKey(k) }, lowDpi: low };
+  }
+  return { data: b, lowDpi: low };
+}
+
+const PT = 72 / 25.4;
+/** MediaBox/BleedBox — лист целиком (обрезной формат + вылеты), TrimBox — обрезной формат. Chromium округляет размер — ставим точно. */
+export async function setBoxes(pdfBytes: Buffer, trimWMm: number, trimHMm: number, bleedMm: number): Promise<Buffer> {
+  const { PDFDocument } = await import("pdf-lib");
+  const doc = await PDFDocument.load(pdfBytes);
+  const b = bleedMm * PT, w = trimWMm * PT, h = trimHMm * PT;
+  for (const p of doc.getPages()) {
+    p.setMediaBox(0, 0, w + 2 * b, h + 2 * b);
+    p.setBleedBox(0, 0, w + 2 * b, h + 2 * b);
+    p.setTrimBox(b, b, w, h);
+    p.setCropBox(0, 0, w + 2 * b, h + 2 * b);
+  }
+  return Buffer.from(await doc.save());
 }
 
 /** HTML → PDF страницами w×h мм (Chromium) и метаданные. Общий для книги и файлов допов (src/lib/addon-files.ts). */

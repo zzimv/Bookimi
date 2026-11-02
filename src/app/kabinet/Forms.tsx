@@ -182,20 +182,27 @@ export function SupportForm({ orders, contact }: { orders: { id: string; code: s
   );
 }
 
-export function ReviewForm({ orderId }: { orderId?: string }) {
+export function ReviewForm({ orderId, initialName = "", bonusRub = 0 }: { orderId?: string; initialName?: string; /** Сколько бонусов начислим за отзыв (0 — не показываем). */ bonusRub?: number }) {
   const [rating, setRating] = useState(5);
   const [text, setText] = useState("");
-  const [name, setName] = useState("");
-  const [ok, setOk] = useState(false);
+  const [name, setName] = useState(initialName);
+  const [ok, setOk] = useState<null | { bonusRub?: number }>(null);
   const [error, setError] = useState("");
-  if (ok) return <p className="ok">Спасибо! Отзыв появится на сайте после проверки.</p>;
+  if (ok)
+    return (
+      <div className="panel review-done" data-review-done>
+        <p className="ok" style={{ margin: 0 }}>Спасибо! Отзыв появится на сайте после проверки.</p>
+        {(ok.bonusRub ?? 0) > 0 && <p className="bonus-credit" data-bonus-credit>+{ok.bonusRub} бонусов на вашем счёте — спишите их при следующем заказе (1 бонус = 1 ₽).</p>}
+      </div>
+    );
   return (
     <div className="panel">
+      {bonusRub > 0 && <p className="bonus-offer small" data-bonus-offer>За отзыв — <b>+{bonusRub} бонусов</b> (1 бонус = 1 ₽) на следующую книгу.</p>}
       <div className="chips">{[5, 4, 3, 2, 1].map((r) => <button key={r} className="chip" aria-pressed={rating === r} onClick={() => setRating(r)}>{"★".repeat(r)}</button>)}</div>
       <label className="field"><span>Как подписать отзыв</span><input className="input" placeholder="Например, Ольга, мама Вари" value={name} onChange={(e) => setName(e.target.value)} onBlur={() => setName(normalizeSignature(name))} /></label>
       <label className="field"><span>Отзыв</span><textarea className="textarea" value={text} maxLength={2000} onChange={(e) => setText(e.target.value)} /></label>
       <p className="small muted">Отправляя отзыв, вы разрешаете опубликовать его на сайте с этой подписью.</p>
-      <button className="btn btn--primary" disabled={text.length < 10 || name.length < 2} onClick={async () => { try { await api("/api/reviews", { rating, text, authorName: normalizeSignature(name), orderId }); setOk(true); } catch (e) { setError((e as Error).message); } }}>Отправить отзыв</button>
+      <button className="btn btn--primary" disabled={text.length < 10 || name.length < 2} onClick={async () => { try { setOk(await api<{ bonusRub?: number }>("/api/reviews", { rating, text, authorName: normalizeSignature(name), orderId })); } catch (e) { setError((e as Error).message); } }}>Отправить отзыв</button>
       {error && <p className="error">{error}</p>}
     </div>
   );

@@ -236,7 +236,7 @@ export const PET_PLOTS: Plot[] = [
       "the dog peeking out from under a sofa with a striped sock in its mouth, a colorful pile of socks behind it, playful cartoon mood",
     spreads: [
       {
-        text: "Утром, ровно в семь часов,\nДом остался без носков.\nИщут все — в шкафу, в комоде,\nПод кроватью и в проходе:\n«Был носок, а нынче — нет!\nГде носок? Пропал и след!»",
+        text: "Утром, ровно в семь часов,\nДом остался без носков.\nИщут все — в шкафу, в комоде,\nПод кроватью и в проходе:\n«Был носок, а нынче — нет!\nГде носок? Пропал и след!»\n— {ДОПЫ.им}!",
         scene: "the owner in pajamas searching a chest of drawers and under the bed for a missing sock, morning light",
       },
       {

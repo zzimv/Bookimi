@@ -1,5 +1,6 @@
 // GEO: машиночитаемое описание сервиса для Алисы/Яндекс Нейро, ChatGPT, Perplexity.
 // Собирается из БД — цены и сроки всегда актуальны.
+import { faqItems, siteFacts } from "./seo";
 import { getOccasions, getPriceTable, getStories, displayTitle } from "./catalog";
 import { cfg } from "./settings";
 import { db, hasDatabase } from "./db";
@@ -46,6 +47,8 @@ export async function catalogData() {
     .filter((a) => flags.printEnabled || !a.requiresPrint)
     .map((a) => (a.key === "cartoon" ? { ...a, priceRub: cartoon.priceRub } : a.key === "cartoon-own-voice" ? { ...a, priceRub: cartoon.ownVoiceRub } : a));
   const ph = hasDatabase ? await db.printHouse.findFirst({ where: { isActive: true } }).catch(() => null) : null;
+  const facts = await siteFacts();
+  const seller = await cfg("seller").catch(() => null);
   const base = `https://${process.env.DOMAIN ?? "bookimi.ru"}`;
   const plotBy = new Map(PLOTS.map((p) => [p.slug, p]));
   const pdf = prices.find((p) => p.kind === "PDF")?.priceRub;
@@ -53,6 +56,10 @@ export async function catalogData() {
   return {
     name: "БУКИМИ",
     url: base,
+    /** Определение одним предложением — для помощников («Что такое БУКИМИ»). */
+    definition: "БУКИМИ — российский сервис, который по фото и анкете создаёт персональную иллюстрированную книгу, где главный герой — ваш ребёнок, близкий человек или питомец.",
+    seller: seller?.fullName ? { name: seller.fullName, status: seller.status, inn: seller.inn } : null,
+    updatedAt: new Date().toISOString().slice(0, 10),
     description: "Персональные иллюстрированные книги по фото: для детей, подростков, взрослых и о питомцах. Герой узнаваем на иллюстрациях, его имя — в тексте. Есть книги о группе (детский сад, класс) — «книга для каждого ребёнка», и мультфильм по книге.",
     language: "ru",
     country: "RU",
@@ -102,7 +109,10 @@ export async function catalogData() {
     /** Все допы; audiences — для каких книг (пусто — для всех). */
     addons: addons.map((a) => ({ ...addonOut(a), audiences: a.audiences })),
     production: { printDays: `${ph?.leadDaysMin ?? 3}-${ph?.leadDaysMax ?? 5} рабочих дней`, pdf: "в течение часа после оплаты" },
-    delivery: { services: ["СДЭК", "Почта России", "Яндекс Доставка"].filter((_, i) => [shipping.cdekPvz || shipping.cdekCourier, shipping.pochta, shipping.yandex][i]), freeFromBooks: shipping.freeShippingBooks, cdekDays: "2-7", pochtaDays: "7-14" },
+    // Только включённые службы и их сроки из настроек (src/lib/seo.ts — один источник с FAQ и текстами)
+    delivery: { services: facts.delivery.map((d) => d.title), lines: facts.delivery.map((d) => `${d.title} — ${d.days}`), freeFromBooks: shipping.freeShippingBooks },
+    newYearOrderBy: facts.nyDeadline,
+    faq: faqItems(facts),
     privacy: { photoStorage: "серверы в России", photoDeletedAfterDays: limits.photoTtlDays, photoUse: "только для иллюстраций, без идентификации личности" },
     returns: "Персонализированная книга надлежащего качества не возвращается; при браке — бесплатная перепечатка или возврат денег.",
     payment: ["СБП по QR-коду", "перевод по реквизитам"],

@@ -19,7 +19,8 @@ export interface MoodEx extends Omit<Mood, "demo" | "audiences"> {
 }
 
 /** Хвост каждой добавки: настроение меняет только свет и цвет. */
-const KEEP = "keep the same characters, faces, outfits, poses and composition unchanged; only lighting, color and atmosphere change";
+// Настроение не меняет время суток и место сцены: ночная сцена остаётся ночной, космос — космосом (54 ночные сцены)
+const KEEP = "keep the scene's own time of day, weather and setting; keep the same characters, faces, outfits, poses and composition unchanged; only lighting, color and atmosphere change";
 const ALL: AudienceKey[] = ["CHILD", "TEEN", "ADULT", "PET"];
 
 export const MOODS: MoodEx[] = [
@@ -37,8 +38,8 @@ export const MOODS: MoodEx[] = [
     title: "Тёплое",
     oneLine: "Золотой вечерний свет, как в уютный летний вечер",
     audiences: ALL,
-    promptAdd: `warm golden-hour lighting, low amber sun, honey and peach color temperature, soft long shadows, cozy glowing atmosphere, ${KEEP}`,
-    negativeAdd: "cold blue cast, harsh flash lighting, gloomy overcast, desaturated grey tones",
+    promptAdd: `warm amber and honey light, peach color temperature, soft long shadows, cozy glowing atmosphere, ${KEEP}`,
+    negativeAdd: "cold blue cast, harsh flash lighting, desaturated grey tones",
     demo: {
       tint: "#ffcf8f", tintStrength: 0.32, saturation: 1.08, brightness: 1.06, contrast: 1.02,
       light: { top: "#ffd89a", topOpacity: 0.32, bottom: "#c2602a", bottomOpacity: 0.16 },
@@ -51,7 +52,7 @@ export const MOODS: MoodEx[] = [
     title: "Волшебное",
     oneLine: "Сияние, искорки и сказочные сиреневые сумерки",
     audiences: ALL,
-    promptAdd: `magical enchanted atmosphere, soft violet and turquoise twilight light, gentle glowing sparkles and floating light motes in the air, luminous rim light, dreamy fairy-tale glow, ${KEEP}`,
+    promptAdd: `magical enchanted atmosphere, soft violet and turquoise glow, gentle glowing sparkles and floating light motes in the air, luminous rim light, dreamy fairy-tale glow, ${KEEP}`,
     negativeAdd: "dull flat lighting, muddy colors, horror, dark menacing shadows",
     demo: {
       tint: "#c9b2ff", tintStrength: 0.34, saturation: 1.15, brightness: 1.0, contrast: 1.04,
@@ -66,8 +67,8 @@ export const MOODS: MoodEx[] = [
     title: "Весёлое",
     oneLine: "Яркий солнечный день, сочные краски",
     audiences: ALL,
-    promptAdd: `bright cheerful midday sunlight, vivid saturated playful colors, clear blue sky, crisp clean light, high-key joyful atmosphere, ${KEEP}`,
-    negativeAdd: "dark, gloomy, muted palette, rain, night, sad atmosphere",
+    promptAdd: `bright cheerful light, vivid saturated playful colors, crisp clean light, high-key joyful atmosphere, ${KEEP}`,
+    negativeAdd: "gloomy, muted palette, sad atmosphere",
     demo: {
       tint: "#fff1b8", tintStrength: 0.18, saturation: 1.35, brightness: 1.07, contrast: 1.06,
       light: { top: "#fff6c8", topOpacity: 0.22, bottom: "#ffffff", bottomOpacity: 0 },
@@ -79,8 +80,8 @@ export const MOODS: MoodEx[] = [
     title: "Сонное",
     oneLine: "Тихий вечер, луна и светлячки — для книги на ночь",
     audiences: ["CHILD", "PET"],
-    promptAdd: `calm sleepy bedtime evening, soft moonlight, deep blue and lavender dusk palette, warm small lights and fireflies, quiet hushed atmosphere, gentle low contrast, ${KEEP}`,
-    negativeAdd: "bright noon sun, harsh light, neon colors, scary darkness, high contrast",
+    promptAdd: `calm sleepy hushed atmosphere, soft gentle light, deep blue and lavender palette, warm small glowing lights, gentle low contrast, ${KEEP}`,
+    negativeAdd: "harsh light, neon colors, scary darkness, high contrast",
     demo: {
       tint: "#7f94d6", tintStrength: 0.42, saturation: 0.78, brightness: 0.93, contrast: 0.92,
       light: { top: "#1d2456", topOpacity: 0.55, bottom: "#1a1f40", bottomOpacity: 0.3 },
@@ -109,7 +110,7 @@ export const MOODS: MoodEx[] = [
     title: "Приключенческое",
     oneLine: "Сочный контраст, ветер и закатное небо — как в кино",
     audiences: ALL,
-    promptAdd: `cinematic adventurous lighting, dramatic sky, contrast of warm orange sunlight and cool teal shadows, crisp directional light, breezy energetic atmosphere, ${KEEP}`,
+    promptAdd: `cinematic adventurous lighting, contrast of warm orange highlights and cool teal shadows, crisp directional light, breezy energetic atmosphere, ${KEEP}`,
     negativeAdd: "flat lighting, washed out, boring composition changes, dull overcast",
     demo: {
       tint: "#ffbf80", tintStrength: 0.2, saturation: 1.12, brightness: 1.0, contrast: 1.16,
@@ -124,7 +125,7 @@ export const MOODS: MoodEx[] = [
     title: "Нежное",
     oneLine: "Пастельные тона и мягкий утренний свет",
     audiences: ALL,
-    promptAdd: `soft tender morning light, airy pastel palette of blush pink, cream and powder blue, gentle diffused glow, delicate low contrast, calm loving atmosphere, ${KEEP}`,
+    promptAdd: `soft tender light, airy pastel palette of blush pink, cream and powder blue, gentle diffused glow, delicate low contrast, calm loving atmosphere, ${KEEP}`,
     negativeAdd: "harsh shadows, saturated neon colors, dark tones, gritty texture",
     demo: {
       tint: "#ffd2df", tintStrength: 0.28, saturation: 0.82, brightness: 1.08, contrast: 0.9,
@@ -152,7 +153,7 @@ export const MOODS: MoodEx[] = [
     title: "Зимнее",
     oneLine: "Морозная свежесть и падающий снег",
     audiences: ALL,
-    promptAdd: `crisp wintry atmosphere, cool clear daylight, icy blue and silver tones, gently falling snowflakes, frosty sparkle in the air, ${KEEP}`,
+    promptAdd: `crisp wintry atmosphere, cool clear light, icy blue and silver tones, gently falling snowflakes, frosty sparkle in the air, ${KEEP}`,
     negativeAdd: "summer heat, warm orange cast, green summer foliage glow, rain",
     demo: {
       tint: "#b4cdff", tintStrength: 0.5, saturation: 0.72, brightness: 1.12, contrast: 0.98,
@@ -167,7 +168,7 @@ export const MOODS: MoodEx[] = [
     oneLine: "Розово-золотой закат и мягкие блики",
     audiences: ["ADULT", "TEEN"],
     minAge: 14,
-    promptAdd: `romantic sunset light, rose-gold and soft coral sky glow, warm dreamy bokeh, gentle haze, tender intimate atmosphere, ${KEEP}`,
+    promptAdd: `romantic rose-gold light, soft coral glow, warm dreamy bokeh, gentle haze, tender intimate atmosphere, ${KEEP}`,
     negativeAdd: "harsh light, cold grey palette, gloomy, explicit content",
     demo: {
       tint: "#ffb8b0", tintStrength: 0.3, saturation: 1.05, brightness: 1.02, contrast: 0.98,

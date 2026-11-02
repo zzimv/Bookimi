@@ -14,17 +14,9 @@ import { parseAddressBook } from "@/lib/delivery";
 export async function GET() {
   const user = await currentUser();
   if (!user) return err("Войдите", 401);
-  const data = await db.user.findUnique({
-    where: { id: user.id },
-    include: {
-      consents: true,
-      heroes: { select: { name: true, nickname: true, gender: true, ageGroup: true, birthDate: true, appearance: true, interests: true, createdAt: true } },
-      books: { select: { id: true, text: true, createdAt: true, status: true } },
-      orders: { select: { publicCode: true, status: true, totalRub: true, createdAt: true, contactName: true, contactPhone: true, contactEmail: true, shipment: { select: { method: true, address: true, pvzCode: true, pvzAddress: true } } } },
-      notifyPrefs: { select: { channel: true, marketing: true, isActive: true } },
-    },
-  });
-  return new NextResponse(JSON.stringify({ exportedAt: new Date(), ...data, totpSecret: undefined, totpRecovery: undefined, deviceHashes: undefined }, null, 2), {
+  const { exportUserData } = await import("@/lib/account");
+  const data = await exportUserData(user.id);
+  return new NextResponse(JSON.stringify(data, null, 2), {
     headers: { "Content-Type": "application/json; charset=utf-8", "Content-Disposition": 'attachment; filename="bookimi-my-data.json"' },
   });
 }

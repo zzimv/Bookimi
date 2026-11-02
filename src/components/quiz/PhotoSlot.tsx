@@ -194,8 +194,20 @@ export function PhotoSlot(props: {
         </div>
       ))}
       {props.ids.length < props.max && (
-        <label className={`drop ${props.compact ? "drop--sm" : ""}`}>
-          <input ref={file} type="file" name={`photo-${props.slot}`} accept="image/jpeg,image/png,image/webp,image/heic,image/heif" multiple={props.max - props.ids.length > 1} hidden onChange={(e) => upload(e.target.files)} />
+        // Клавиатура: зона выбора — кнопка (Tab, Enter/Пробел открывают выбор файла); само поле скрыто
+        <label
+          className={`drop ${props.compact ? "drop--sm" : ""}`}
+          role="button"
+          tabIndex={0}
+          aria-disabled={busy || undefined}
+          aria-label={props.ids.length ? "Добавить ещё фото" : "Выбрать фото"}
+          onKeyDown={(e) => {
+            if (busy || (e.key !== "Enter" && e.key !== " ")) return;
+            e.preventDefault();
+            file.current?.click();
+          }}
+        >
+          <input ref={file} tabIndex={-1} type="file" name={`photo-${props.slot}`} accept="image/jpeg,image/png,image/webp,image/heic,image/heif" multiple={props.max - props.ids.length > 1} hidden onChange={(e) => upload(e.target.files)} />
           <b>{busy ? "Обрабатываем фото…" : props.ids.length ? "Ещё фото" : "Выбрать фото"}</b>
           {!props.compact && <small className="muted">{PHOTO_TIPS[props.audience]} JPG, PNG, WebP, HEIC до 15 МБ.</small>}
         </label>

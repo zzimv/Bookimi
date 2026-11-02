@@ -33,7 +33,7 @@ export function parseAudiences(values: string[], key?: string, cartoonAudiences?
   // «Своим голосом» — дополнение к мультфильму: не там, где мультфильма нет
   if (key === "cartoon-own-voice" && cartoonAudiences?.length) {
     const outside = (value.length ? value : ADDON_AUDIENCES).filter((a) => !cartoonAudiences.includes(a));
-    if (outside.length) return { ok: false, error: `«Своим голосом» — только вместе с мультфильмом: мультфильма нет для «${outside.map((a) => ADDON_AUDIENCE_LABEL[a as AudienceKey]).join(", ")}»` };
+    if (outside.length) return { ok: false, error: `«Своим голосом» — только вместе с «Оживлением книги»: его нет для «${outside.map((a) => ADDON_AUDIENCE_LABEL[a as AudienceKey]).join(", ")}»` };
   }
   return { ok: true, value };
 }
@@ -76,7 +76,7 @@ export function validateAddonForm(
   if (row.key === "cartoon" && related.ownVoice) {
     const all = (l: readonly string[]) => (l.length ? l : ADDON_AUDIENCES);
     const lost = all(related.ownVoice).filter((a) => !all(aud.value).includes(a as AudienceKey));
-    if (lost.length) return { ok: false, error: `Сначала уберите «Своим голосом» у аудиторий: ${lost.map((a) => ADDON_AUDIENCE_LABEL[a as AudienceKey]).join(", ")} — без мультфильма он не продаётся` };
+    if (lost.length) return { ok: false, error: `Сначала уберите «Своим голосом» у аудиторий: ${lost.map((a) => ADDON_AUDIENCE_LABEL[a as AudienceKey]).join(", ")} — без «Оживления книги» он не продаётся` };
   }
   return { ok: true, value: { ...f, title: f.title.trim(), description: f.description.trim(), audiences: aud.value } };
 }

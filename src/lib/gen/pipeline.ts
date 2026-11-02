@@ -18,7 +18,7 @@ import { HERO_KIND_BY_AUDIENCE, type DemoLook, type HeroKind } from "../../conte
 import type { ExtraV2T } from "../../content/answers";
 import { guessGender, normalizeName } from "../declension";
 import { getFile, putFile, deleteFile } from "../storage";
-import { renderPdf, type BookPageData } from "../pdf";
+import { MIN_SOURCE_DPI, preparePrint, renderPdf, type BookPageData } from "../pdf";
 import { ttsProvider } from "./tts";
 import { spentTodayRub } from "../limits";
 import { bookIsStaff, spendLimitReached } from "../staff";
@@ -293,12 +293,13 @@ export async function bookPdfData(bookId: string, orderCode?: string): Promise<B
     if (!key) return { data: Buffer.from(""), contentType: "image/png" };
     const data = await getFile("books", key);
     // Демо-SVG с фильтрами (фактура, настроение) Chromium растрирует в огромные PDF — переводим в JPEG заранее
+    // Исходник (source) — для печати: SVG растрируется, PNG масштабируется сразу в 300 dpi (src/lib/pdf.ts, preparePrint)
     if (key.endsWith(".svg")) {
       const jpg = await sharp(data, { density: 72 }).flatten({ background: "#ffffff" }).jpeg({ quality: 86 }).toBuffer().catch(() => null);
-      if (jpg) return { data: jpg, contentType: "image/jpeg" };
+      if (jpg) return { data: jpg, contentType: "image/jpeg", source: { data, contentType: "image/svg+xml" } };
       return { data, contentType: "image/svg+xml" };
     }
-    return { data, contentType: "image/png" };
+    return { data, contentType: "image/png", source: { data, contentType: "image/png" } };
   };
   const cover = book.pages.find((p) => p.index === 0);
   return {
@@ -341,8 +342,22 @@ export async function renderPrintFiles(bookId: string, order: { publicCode: stri
   const f = await db.productFormat.findUnique({ where: { key: fmtItem.refKey } });
   if (!f?.widthMm || !f.heightMm) return false;
   const d = data ?? (await bookPdfData(bookId, order.publicCode));
-  await saveFile(bookId, "print-block", await renderPdf(d, { kind: "print", wMm: f.widthMm, hMm: f.heightMm }), "pdf", "application/pdf");
-  await saveFile(bookId, "print-cover", await renderPdf(d, { kind: "cover", wMm: f.widthMm, hMm: f.heightMm, hard: f.cover === "HARD", pages: 26 }), "pdf", "application/pdf");
+  // 300 dpi на обрезной формат + вылеты; исходник ниже 250 dpi — предупреждение владельцу и в карточке заказа
+  const blockKind = { kind: "print" as const, wMm: f.widthMm, hMm: f.heightMm };
+  const coverKind = { kind: "cover" as const, wMm: f.widthMm, hMm: f.heightMm, hard: f.cover === "HARD", pages: 26 };
+  const block = await preparePrint(d, blockKind);
+  const cover = await preparePrint(d, coverKind);
+  await saveFile(bookId, "print-block", await renderPdf(block.data, blockKind), "pdf", "application/pdf");
+  await saveFile(bookId, "print-cover", await renderPdf(cover.data, coverKind), "pdf", "application/pdf");
+  const low = [...block.lowDpi, ...cover.lowDpi];
+  if (low.length) {
+    const worst = Math.min(...low.map((x) => x.dpi));
+    await db.auditLog.create({ data: { action: "print.lowdpi", entity: "book", entityId: bookId, details: { order: order.publicCode, pages: low } as object } });
+    await alertOwner(
+      `Заказ ${order.publicCode}: иллюстрации ниже ${MIN_SOURCE_DPI} dpi`,
+      `Для печати ${f.widthMm}×${f.heightMm} мм исходник растянут: ${low.map((x) => `${x.page} — ${x.dpi} dpi`).join("; ")}. Минимум ${worst} dpi. Проверьте сервер иллюстраций (увеличение до печатного размера) или перерисуйте страницы.`,
+    ).catch(() => {});
+  }
   const { printAddonKeys } = await import("../print");
   await renderAddonFiles(bookId, await printAddonKeys(order.items), order.publicCode, d);
   return true;
@@ -386,8 +401,8 @@ async function runExtras(bookId: string, orderId: string) {
     await onCartoonPaid(bookId, mine, { fromFull: true }).catch((e) => alertOwner("Мультфильм не поставлен в очередь", `${bookId}: ${(e as Error).message}`));
   }
   if (order.whoPrints === "bookimi") {
-    const { sendToPrint } = await import("../print");
-    await sendToPrint(order.id).catch((e) => alertOwner("Не удалось передать заказ в печать", `${order.publicCode}: ${(e as Error).message}`));
+    const { sendToPrintWhenReady } = await import("../print");
+    await sendToPrintWhenReady(order.id).catch((e) => alertOwner("Не удалось передать заказ в печать", `${order.publicCode}: ${(e as Error).message}`));
   }
 }
 
@@ -418,8 +433,8 @@ export async function runFull(bookId: string, orderId?: string) {
     await onCartoonPaid(bookId, order.items, { fromFull: true }).catch((e) => alertOwner("Мультфильм не поставлен в очередь", `${bookId}: ${(e as Error).message}`));
   }
   if (order?.whoPrints === "bookimi") {
-    const { sendToPrint } = await import("../print");
-    await sendToPrint(order.id).catch((e) => alertOwner("Не удалось передать заказ в печать", `${order.publicCode}: ${(e as Error).message}`));
+    const { sendToPrintWhenReady } = await import("../print");
+    await sendToPrintWhenReady(order.id).catch((e) => alertOwner("Не удалось передать заказ в печать", `${order.publicCode}: ${(e as Error).message}`));
   }
 }
 

@@ -72,8 +72,25 @@ const INTEREST_LINES: Record<string, string> = {
 // Как назвать доп. героя в демо-фразах («мама Оля»)
 const EXTRA_WORD: Record<string, string> = { mom: "мама", dad: "папа", grandma: "бабушка", grandpa: "дедушка" };
 
-/** Ссылается ли текст сюжета на доп. героев (тогда они уже вплетены в сюжет). */
-const usesExtras = (spreads: { text: string }[]) => spreads.some((s) => /\{(ДОП[1-3]|ДОПЫ)[.}]/.test(s.text));
+/**
+ * Какие доп. герои уже названы текстом сюжета: номера слотов 1..3; {ДОПЫ} называет всех. Остальных (2-го и 3-го,
+ * если сюжет знает только {ДОП1}) — дописываем своими фразами, а не «всё или ничего».
+ */
+export function extrasNamedByPlot(spreads: { text: string }[], count: number): Set<number> {
+  const all = spreads.map((s) => s.text).join("\n");
+  if (/\{ДОПЫ[.}]/.test(all)) return new Set(Array.from({ length: count }, (_, i) => i + 1));
+  return new Set([1, 2, 3].filter((n) => new RegExp(`\\{ДОП${n}[.}]`).test(all)));
+}
+
+/** Строка-обращение для стихов: «— {ДОП1.им}!», «— {ДОП2.им} и {ДОП3.им}!» (кроме меток — одно слово «и»). */
+export function extrasAddressLine(count: number, named: Set<number>): string | null {
+  const tags = Array.from({ length: Math.min(count, 3) }, (_, i) => i + 1).filter((n) => !named.has(n)).map((n) => `{ДОП${n}.им}`);
+  if (!tags.length) return null;
+  return `— ${tags.length === 1 ? tags[0] : `${tags.slice(0, -1).join(", ")} и ${tags.at(-1)}`}!`;
+}
+
+/** Сказки-цепочки и колыбельные: свой ритм — вставки про увлечения и доп. героев его ломают. */
+const NO_INSERT_STYLES = new Set(["cumulative-bedtime", "gentle-bedtime"]);
 
 // Доп. герои, которых сюжет не знает: каждому — своя фраза в начале и в финале, без повторов формулировок.
 // {X} — «мама {ДОПn.им}», {N} — номер героя (для {ДОПn.род}, {Рn:…}).
@@ -81,8 +98,8 @@ const EXTRA_OPEN = [
   "Рядом стоял{РN:|а} {X} и подмигивал{РN:|а}: ну что, начинаем?",
   "{X} тоже был{РN:|а} тут — куда же без {РN:него|неё}!",
   "{X} был{РN:|а} рядом — с {РN:ним|ней} никогда не бывает скучно.",
-  "А {X} уже ждал{РN:|а} у порога: такие дела веселее делать вместе.",
-  "Конечно же, {X} пош{РN:ёл|ла} тоже — такое пропустить нельзя.",
+  "А {X} уже был{РN:|а} тут как тут: такие дела веселее делать вместе.",
+  "Конечно же, {X} был{РN:|а} в деле — такое пропустить нельзя.",
   "{X} шепнул{РN:|а}: «Я с тобой» — и стало совсем не страшно.",
 ];
 const EXTRA_CLOSE = [
@@ -103,14 +120,15 @@ const pickDistinct = (pool: string[], n: number, seed: number) => {
 const seedOf = (s: string) => [...s].reduce((h, c) => (h * 31 + c.charCodeAt(0)) >>> 0, 7);
 
 /** Фразы про доп. героев: [номер разворота (0..11), текст] — разные шаблоны, разные развороты. */
-export function extraLines(extras: { role: string; name: string }[], variant: number): [number, string][] {
+export function extraLines(extras: { role: string; name: string }[], variant: number, named: Set<number> = new Set()): [number, string][] {
   const n = Math.min(extras.length, 3);
-  if (!n) return [];
+  if (!n || named.size >= n) return [];
   const seed = seedOf(extras.map((e) => e.name).join("|")) + variant;
   const open = pickDistinct(EXTRA_OPEN, n, seed);
   const close = pickDistinct(EXTRA_CLOSE, n, seed + 3);
   const out: [number, string][] = [];
   for (let i = 0; i < n; i++) {
+    if (named.has(i + 1)) continue; // уже назван(а) текстом сюжета
     const role = EXTRA_WORD[extras[i].role];
     const put = (t: string, atStart: boolean) =>
       t
@@ -256,15 +274,25 @@ export class DemoTextProvider implements TextProvider {
     const g = groupOf(a, base);
     const spreads = applyGroupScenes(base, applyOccasion(base, a.occasion.key, a.occasion.custom), g.members.length, g.adults.length).map((s, i) => ({ index: i + 1, text: s.text, scene: s.scene }));
     const verse = !!textStyle(base.textStyle)?.verse;
-    if (a.audience === "CHILD" && !verse) {
+    // Вставки по сцене: увлечения — не в стихах, колыбельных и сказках-цепочках («бегал быстрее всех» в колыбельной);
+    // фразы о доп. героях — не в стихах и цепочках (ритм), в колыбельной — можно (они спокойные и без места действия)
+    const rhythm = verse || base.textStyle === "cumulative-bedtime";
+    const inserts = !rhythm && !NO_INSERT_STYLES.has(base.textStyle);
+    if (a.audience === "CHILD" && inserts) {
       const interest = [...a.interests, a.interestCustom].map((x) => INTEREST_LINES[x?.toLowerCase?.() ?? ""]).find(Boolean);
       if (interest) spreads[1].text += " " + interest;
     }
-    // Доп. герои, которых сюжет не знает, — у каждого своя фраза в начале и в финале (стихи не трогаем)
-    if (a.extras.length && !usesExtras(base.spreads) && !verse) {
-      for (const [i, line] of extraLines(a.extras, variant)) spreads[i].text += " " + line;
+    // Доп. герои, которых сюжет не называет (по слотам: 2-й и 3-й — даже если 1-й уже в сюжете)
+    const named = extrasNamedByPlot(base.spreads, a.extras.length);
+    if (a.extras.length && !rhythm) {
+      for (const [i, line] of extraLines(a.extras, variant, named)) spreads[i].text += " " + line;
     }
-    if (variant > 0 && !verse) spreads[11].text = spreads[11].text + " Это была самая лучшая история.";
+    // Стихи и цепочки: не названные сюжетом доп. герои — отдельной строкой-обращением вне метра («— {ДОП2.им}!»)
+    if (a.extras.length && rhythm) {
+      const line = extrasAddressLine(a.extras.length, named);
+      if (line) spreads[1].text += `\n${line}`;
+    }
+    if (variant > 0 && inserts) spreads[11].text = spreads[11].text + " Это была самая лучшая история.";
     let title = titleTemplate(base.title);
     if (!plot) {
       // Вариант демо («Тайна: …») — название по самой идее; настоящее название варианта (YandexGPT) — как есть
@@ -311,7 +339,8 @@ export function brief(a: QuizAnswers, plot: Plot | null, style: TextStyle | null
   if (a.audience === "CHILD" || a.audience === "TEEN") lines.push(`Возраст героя: ${heroAge(a)}.`);
   if (a.audience === "PET") {
     const sp = a.pet.species === "cat" ? "кошка" : a.pet.species === "dog" ? "собака" : "домашний питомец";
-    lines.push(`Питомец: ${sp}${a.pet.breed ? `, порода: ${a.pet.breed}` : ""}${a.pet.furColor ? `, окрас: ${a.pet.furColor}` : ""}.`);
+    const breed = clean(a.pet.breed), fur = clean(a.pet.furColor);
+    lines.push(`Питомец: ${sp}${breed ? `, порода: ${breed}` : ""}${fur ? `, окрас: ${fur}` : ""}.`);
     if (a.pet.traits) lines.push(`Характер и привычки: ${clean(a.pet.traits)}.`);
   }
   if (a.audience === "ADULT") {
@@ -327,7 +356,7 @@ export function brief(a: QuizAnswers, plot: Plot | null, style: TextStyle | null
   if (look) lines.push(`Внешность (для описаний сцен): ${look}.`);
   lines.push(
     a.extras.length
-      ? `Дополнительные герои: ${a.extras.map((e, i) => `{ДОП${i + 1}} — ${EXTRA_ROLE_LABELS[e.role] ?? e.role}${e.what ? ` (${clean(e.what)})` : ""}${e.description ? `: ${clean(e.description)}` : ""}`).join("; ")}. Все вместе — {ДОПЫ}.`
+      ? `Дополнительные герои: ${a.extras.map((e, i) => `{ДОП${i + 1}} — ${EXTRA_ROLE_LABELS[e.role] ?? e.role}${e.what ? ` (${clean(e.what)})` : ""}${e.description ? `: ${clean(e.description)}` : ""}`).join("; ")}. Все вместе — {ДОПЫ}. Каждого назови хотя бы раз там, где он(а) уместен(на) по сцене${style?.verse ? " (в стихах — отдельной строкой-обращением: «— {ДОП2.им}!»)" : ""}.`
       : "Дополнительных героев нет.",
   );
   const grp = groupOf(a, plot);
@@ -342,11 +371,13 @@ export function brief(a: QuizAnswers, plot: Plot | null, style: TextStyle | null
     if (grp.adults.length) lines.push(`Взрослые группы: ${grp.adults.map((x, i) => `{ВОСПИТАТЕЛЬ${i + 1}} — ${x.role}`).join("; ")} (зови по имени-отчеству метками; род — {РВn:м|ж}).`);
   }
   const occ = OCCASIONS.find((o) => o.key === a.occasion.key);
+  // «Свой повод» — свободный текст: и в строке повода, и в заготовках/плане сюжета — только очищенный
+  const occCustom = clean(a.occasion.custom);
   if (a.occasion.key && a.occasion.key !== "bez" && (a.occasion.key !== "svoj" || a.occasion.custom)) {
-    const w = occasionWord(a.occasion.key, a.occasion.key === "svoj" ? clean(a.occasion.custom) : "");
+    const w = occasionWord(a.occasion.key, a.occasion.key === "svoj" ? occCustom : "");
     const grammar = w && a.occasion.key !== "svoj" ? ` (в тексте это слово «${w.им}», ${w.gender === "f" ? "женский" : w.gender === "n" ? "средний" : "мужской"} род; в падеже — {ПОВОД.род}, {ПОВОД.дат}…; не ставь рядом с меткой прилагательные по роду)` : "";
-    lines.push(`Повод: ${a.occasion.key === "svoj" ? clean(a.occasion.custom) : occ?.label}. В тексте повод — метка {ПОВОД}${grammar}.`);
-    const h = plot ? hooksFor(plot, a.occasion.key, a.occasion.custom) : null;
+    lines.push(`Повод: ${a.occasion.key === "svoj" ? occCustom : occ?.label}. В тексте повод — метка {ПОВОД}${grammar}.`);
+    const h = plot ? hooksFor(plot, a.occasion.key, occCustom) : null;
     if (h && (h.opening || h.closing)) lines.push(`Заготовки повода (перепиши своим голосом): начало — «${h.opening.replace(/\n/g, " / ")}»; финал — «${h.closing.replace(/\n/g, " / ")}».`);
   } else lines.push("Повода нет.");
   if (style) lines.push(`Голос книги: «${style.title}»${style.verse ? " (стихи)" : ""}.`);
@@ -354,7 +385,7 @@ export function brief(a: QuizAnswers, plot: Plot | null, style: TextStyle | null
     lines.push(`Сюжет «${titleTemplate(plot.title)}». Следуй плану по разворотам (можно менять детали и формулировки, сохраняя ход событий):`);
     // План группы — под её размер (лишние слоты выпали, блоки раскрыты), имён нет — только метки
     const counts = { members: grp.members.length, adults: grp.adults.length, slots: groupSlotCount(plot) };
-    applyOccasion(plot, a.occasion.key, a.occasion.custom).forEach((s, i) => lines.push(`${i + 1}. ${resolveGroupBlocks(s.text, counts).replace(/\n/g, " / ")}`));
+    applyOccasion(plot, a.occasion.key, occCustom).forEach((s, i) => lines.push(`${i + 1}. ${resolveGroupBlocks(s.text, counts).replace(/\n/g, " / ")}`));
   } else {
     const idea = a.story.ideaChoice ? `${a.story.ideaChoice.title}: ${a.story.ideaChoice.summary}` : a.story.idea;
     lines.push(`Сюжет по идее покупателя: ${clean(idea)}`);

@@ -292,3 +292,6 @@ export async function ruleStats() {
     }),
   );
 }
+
+/** Для тестов: кандидаты правила (без отправки). */
+export const triggerCandidates = (event: TriggerEvent, delayMinutes = 0) => candidates(event, delayMinutes);

@@ -8,7 +8,8 @@ import { addressError, cleanAddress, type Prefill } from "@/lib/delivery";
 import { fullNameError, normalizeName } from "@/lib/names";
 import { CityInput } from "./CityInput";
 import { PvzPicker } from "./PvzPicker";
-import { AddonThumb } from "./AddonThumb";
+import { AddonCards } from "./AddonCards";
+import { FlowLegal } from "@/components/FlowLegal";
 
 export interface Fmt { key: string; kind: "PDF" | "PRINT"; title: string; priceRub: number; widthMm: number | null; heightMm: number | null; cover: string; pages: number }
 export interface Add { key: string; kind: string; title: string; description: string; priceRub: number | null; percentOff: number | null; requiresPrint: boolean }
@@ -18,6 +19,9 @@ interface Quote {
   promo: { code: string } | null;
   ship: { priceRub: number; daysMin: number; daysMax: number; source: string } | null;
   eta: { readyText: string; etaText: string } | null;
+  /** Бонусы: списано в этот расчёт и максимум для заказа. */
+  bonusRub?: number;
+  bonusMax?: number;
 }
 /** «Книга для каждого в группе» (src/lib/bulk.ts): копии, скидки по количеству, общее посвящение. */
 export interface CheckoutBulk {
@@ -83,22 +87,37 @@ export function Checkout(props: {
   bulk?: CheckoutBulk | null;
   /** Аудитория книги — для текста про возврат («для вашего ребёнка» / «для вас» / …). */
   audience?: string;
+  /** Картинки для превью допов: развороты превью (обложка — coverUrl), имя героя и название книги. */
+  previewUrls?: string[];
+  heroName?: string;
+  bookTitle?: string;
+  /** «Оживление книги» пока не продаётся (cartoon.enabled = false): карточка «скоро» без цены. */
+  cartoonSoon?: boolean;
+  /** Бонусы покупателя (src/lib/bonuses.ts): остаток и доля заказа, которую можно ими оплатить. */
+  bonus?: { balance: number; maxSharePct: number } | null;
+  /**
+   * «Изменить заказ» (src/lib/order-change.ts, только до оплаты): тот же экран с выбором из заказа; сумма
+   * пересчитывается, кнопка — «Сохранить изменения».
+   */
+  edit?: { orderId: string; publicCode: string; formatKey?: string; addons: string[]; method?: string; address?: Partial<Addr>; contact?: { name: string; phone: string }; promo?: string; useBonus?: boolean; focus?: "delivery" } | null;
 }) {
   const router = useRouter();
-  const [who, setWho] = useState<"self" | "bookimi">(props.printEnabled ? props.initialWho : "self");
-  const defaultFmt = props.formats.find((f) => f.key === "std-hard") ?? props.formats.find((f) => f.kind === "PRINT");
+  const ed = props.edit ?? null;
+  const [who, setWho] = useState<"self" | "bookimi">(ed ? "bookimi" : props.printEnabled ? props.initialWho : "self");
+  const defaultFmt = props.formats.find((f) => f.key === (ed?.formatKey ?? "std-hard")) ?? props.formats.find((f) => f.kind === "PRINT");
   const [size, setSize] = useState(defaultFmt?.key.split("-")[0] ?? "std");
   const [cover, setCover] = useState<"soft" | "hard">(defaultFmt?.key.endsWith("soft") ? "soft" : "hard");
-  const [addons, setAddons] = useState<string[]>([]);
+  const [addons, setAddons] = useState<string[]>(ed?.addons ?? []);
   const [showAllAddons, setShowAllAddons] = useState(false);
   const defaultMethod = props.methods.find((m) => m.key !== "pickup")?.key ?? props.methods[0]?.key ?? "cdek_pvz";
   const pre = props.prefill;
-  const [method, setMethod] = useState(pre?.method && props.methods.some((m) => m.key === pre.method) ? pre.method : defaultMethod);
-  const [addr, setAddr] = useState<Addr>({ ...EMPTY_ADDR, ...pre?.address });
-  const [contact, setContact] = useState({ ...props.contact, name: normalizeName(pre?.contact.name || props.contact.name || ""), phone: pre?.contact.phone || props.contact.phone });
+  const [method, setMethod] = useState(ed?.method ?? (pre?.method && props.methods.some((m) => m.key === pre.method) ? pre.method : defaultMethod));
+  const [addr, setAddr] = useState<Addr>({ ...EMPTY_ADDR, ...(ed ? ed.address : pre?.address) });
+  const [contact, setContact] = useState(ed?.contact ? { ...props.contact, ...ed.contact } : { ...props.contact, name: normalizeName(pre?.contact.name || props.contact.name || ""), phone: pre?.contact.phone || props.contact.phone });
+  const [useBonus, setUseBonus] = useState(Boolean(ed?.useBonus));
   const [saveAddress, setSaveAddress] = useState(true);
-  const [prefilled, setPrefilled] = useState(pre?.source === "saved" || pre?.source === "order");
-  const [promo, setPromo] = useState("");
+  const [prefilled, setPrefilled] = useState(!ed && (pre?.source === "saved" || pre?.source === "order"));
+  const [promo, setPromo] = useState(ed?.promo ?? "");
   const [voice, setVoice] = useState(props.voices[0]?.key ?? "alena");
   const [q, setQ] = useState<Quote | null>(null);
   const [error, setError] = useState("");
@@ -116,8 +135,16 @@ export function Checkout(props: {
   const coverOptions = props.formats.filter((f) => f.key.startsWith(size + "-")).map((f) => (f.key.endsWith("soft") ? "soft" : "hard"));
   // Мемоизация обязательна: новый массив на каждой отрисовке менял payload и запускал пересчёт цены по кругу
   const availableAddons = useMemo(() => props.addons.filter((a) => who === "bookimi" || !a.requiresPrint), [props.addons, who]);
-  // Не больше трёх допов за раз: показываем три, остальное — по кнопке
-  const shownAddons = showAllAddons ? availableAddons : availableAddons.slice(0, 3);
+  // Не больше трёх допов за раз: показываем три, остальное — по кнопке. «Оживление книги — скоро» — в конце, без цены
+  const cards = useMemo(
+    () => [
+      ...availableAddons.map((a) => ({ key: a.key, title: a.title, description: a.description, priceRub: a.priceRub, percentOff: a.percentOff })),
+      ...(props.cartoonSoon && !availableAddons.some((a) => a.key === "cartoon") ? [{ key: "cartoon", title: "Оживление книги", description: "Иллюстрации оживают, диктор читает сказку — 2 минуты для телевизора и сторис.", priceRub: null, soon: true }] : []),
+    ],
+    [availableAddons, props.cartoonSoon],
+  );
+  const shownAddons = showAllAddons ? cards : cards.slice(0, 3);
+  const art = useMemo(() => ({ images: [props.coverUrl, ...(props.previewUrls ?? [])].filter(Boolean) as string[], name: props.heroName ?? "", title: props.bookTitle ?? "" }), [props.coverUrl, props.previewUrls, props.heroName, props.bookTitle]);
 
   const payload = useMemo(
     () => ({
@@ -131,8 +158,10 @@ export function Checkout(props: {
       promo: promo || undefined,
       contact,
       voice,
+      useBonus: useBonus || undefined,
+      changeOrderId: ed?.orderId,
     }),
-    [props.bookId, who, formatKey, addons, method, addr, promo, contact, voice, availableAddons, saveAddress, bulkOn],
+    [props.bookId, who, formatKey, addons, method, addr, promo, contact, voice, availableAddons, saveAddress, bulkOn, useBonus, ed?.orderId],
   );
 
   // Пересчёт цены — только когда запрос по сути изменился (сравнение по содержимому), с паузой 300 мс после ввода
@@ -155,6 +184,12 @@ export function Checkout(props: {
     return () => clearTimeout(t);
   }, [payloadKey]);
 
+  // «Изменить адрес доставки» — сразу к блоку доставки
+  useEffect(() => {
+    if (ed?.focus === "delivery") setTimeout(() => document.getElementById("dostavka")?.scrollIntoView({ block: "start" }), 50);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   async function order() {
     setError("");
     if (who === "bookimi") {
@@ -167,6 +202,12 @@ export function Checkout(props: {
     setBusy(true);
     try {
       if (bulkOn && !dedSaved) await saveDedication();
+      if (ed) {
+        // Изменение неоплаченного заказа — назад к оплате с новой суммой
+        await api(`/api/orders/${ed.orderId}/change`, payload);
+        router.push(`/zakaz/${ed.orderId}`);
+        return;
+      }
       const r = await api<{ orderId: string }>("/api/checkout", payload);
       goal("choose_print", { who });
       router.push(`/zakaz/${r.orderId}`);
@@ -240,8 +281,15 @@ export function Checkout(props: {
             )}
           </section>
         )}
-        <h1 style={{ fontSize: "var(--fs-xl)" }}>Кто печатает книгу?</h1>
-        <div className="choice-cards" style={{ marginBottom: 24 }}>
+        {ed ? (
+          <>
+            <h1 style={{ fontSize: "var(--fs-xl)" }}>Изменить заказ {ed.publicCode}</h1>
+            <p className="muted" data-edit-note>До оплаты можно поменять всё: формат, обложку, допы, способ доставки, адрес или пункт выдачи и получателя. Сумма пересчитается.</p>
+          </>
+        ) : (
+          <h1 style={{ fontSize: "var(--fs-xl)" }}>Кто печатает книгу?</h1>
+        )}
+        {!ed && <div className="choice-cards" style={{ marginBottom: 24 }}>
           <button className="big-choice" aria-pressed={who === "self"} onClick={() => setWho("self")}>
             <strong>Напечатаю сам</strong>
             PDF — {rub(props.formats.find((f) => f.kind === "PDF")?.priceRub ?? 990)}, все форматы файла входят
@@ -252,7 +300,7 @@ export function Checkout(props: {
               Печатная книга от {rub(Math.min(...props.formats.filter((f) => f.kind === "PRINT").map((f) => f.priceRub)))}, PDF в подарок
             </button>
           )}
-        </div>
+        </div>}
 
         {who === "self" ? (
           <div className="panel">
@@ -299,20 +347,9 @@ export function Checkout(props: {
         {availableAddons.length > 0 && !bulkOn && (
           <>
             <h2 style={{ fontSize: "var(--fs-lg)", marginTop: 24 }}>Добавить к книге</h2>
-            <div className="choice-cards">
-              {shownAddons.map((a) => (
-                <button key={a.key} className="choice addon-choice" data-addon={a.key} aria-pressed={addons.includes(a.key)} onClick={() => setAddons(toggleAddon(addons, a.key))}>
-                  <AddonThumb addonKey={a.key} coverUrl={props.coverUrl} />
-                  <div>
-                    <strong>{a.title}</strong>
-                    {a.description && a.description !== a.title && <small className="addon-choice__desc">{a.description}</small>}
-                    <span>{a.percentOff ? `−${a.percentOff}% от цены книги` : a.priceRub ? `+${rub(a.priceRub)}` : ""}</span>
-                  </div>
-                </button>
-              ))}
-            </div>
-            {availableAddons.length > 3 && (
-              <button className="link-btn" onClick={() => setShowAllAddons(!showAllAddons)}>{showAllAddons ? "Свернуть" : `Ещё ${availableAddons.length - 3}`}</button>
+            <AddonCards items={shownAddons} selected={addons} onToggle={(k) => setAddons(toggleAddon(addons, k))} art={art} />
+            {cards.length > 3 && (
+              <button className="btn btn--ghost btn--sm addon-more" data-addons-more onClick={() => setShowAllAddons(!showAllAddons)}>{showAllAddons ? "Свернуть" : `Показать все допы (${cards.length})`}</button>
             )}
             {addons.includes("audiobook") && (
               <label className="field" style={{ maxWidth: 320, marginTop: 10 }}>
@@ -327,7 +364,7 @@ export function Checkout(props: {
 
         {who === "bookimi" && (
           <>
-            <h2 style={{ fontSize: "var(--fs-lg)", marginTop: 24 }}>Доставка</h2>
+            <h2 style={{ fontSize: "var(--fs-lg)", marginTop: 24 }} id="dostavka">Доставка</h2>
             <div className="chips">
               {props.methods.map((m) => (
                 <button key={m.key} className="chip" aria-pressed={method === m.key} onClick={() => setMethod(m.key)}>{m.title}</button>
@@ -408,11 +445,20 @@ export function Checkout(props: {
               {q.quote.pdfCreditRub > 0 && <tr><td>Зачёт оплаченного PDF</td><td>−{rub(q.quote.pdfCreditRub)}</td></tr>}
               {q.quote.discountRub > 0 && <tr><td>Скидка{q.quote.bulkApplied ? ` за количество (−${q.quote.bulkPct}%)` : q.newbieApplied ? " по приглашению друга" : q.promo ? ` (${q.promo.code})` : ""}</td><td>−{rub(q.quote.discountRub)}</td></tr>}
               {who === "bookimi" && <tr><td>Доставка{q.ship?.source === "table" && method !== "pickup" ? " (ориентир)" : ""}</td><td>{q.quote.shippingRub ? rub(q.quote.shippingRub) : "0 ₽"}</td></tr>}
-              <tr className="total"><td>Итого</td><td>{rub(q.quote.totalRub)}</td></tr>
+              {(q.bonusRub ?? 0) > 0 && <tr data-bonus-line><td>Бонусами</td><td>−{rub(q.bonusRub!)}</td></tr>}
+              <tr className="total"><td>Итого</td><td>{rub(q.quote.totalRub - (q.bonusRub ?? 0))}</td></tr>
             </tbody>
           </table>
         ) : (
           <div className="spinner" />
+        )}
+        {props.bonus && props.bonus.balance > 0 && !bulkOn && (
+          <label className="check bonus-check" data-bonus>
+            <input type="checkbox" name="use-bonus" checked={useBonus} onChange={(e) => setUseBonus(e.target.checked)} />
+            <span>
+              Списать бонусы — у вас {props.bonus.balance.toLocaleString("ru-RU")} ₽{q?.bonusMax ? <> (в этот заказ — до {rub(q.bonusMax)}, не больше {props.bonus.maxSharePct}% суммы)</> : null}
+            </span>
+          </label>
         )}
         {q?.eta && <p className="small" style={{ marginTop: 10 }}>Изготовление — к {q.eta.readyText}. {method !== "pickup" && <>Доставка — ориентировочно к <b>{q.eta.etaText}</b>.</>}</p>}
         <label className="field" style={{ marginTop: 12 }}>
@@ -423,13 +469,14 @@ export function Checkout(props: {
         {q?.quote.errors.map((e) => <p className="error" key={e}>{e}</p>)}
         {error && <p className="error">{error}</p>}
         <button className="btn btn--primary btn--block" disabled={!props.canPay || busy || !q || q.quote.errors.length > 0} onClick={order}>
-          {busy ? "Оформляем…" : "Перейти к оплате"}
+          {busy ? (ed ? "Сохраняем…" : "Оформляем…") : ed ? "Сохранить изменения" : "Перейти к оплате"}
         </button>
         {!props.canPay && <p className="small muted" style={{ marginTop: 8 }}>Оплата пока не принимается — превью и книга сохранены в кабинете. Мы сообщим, когда можно будет оформить заказ.</p>}
         <p className="small muted" style={{ marginTop: 10 }}>
           Книга делается {MADE_FOR[props.audience ?? "CHILD"] ?? MADE_FOR.CHILD}, поэтому возврат возможен только при браке — тогда перепечатаем или вернём деньги. <Link href="/vozvrat" target="_blank">Подробнее</Link>
         </p>
       </aside>
+      <FlowLegal />
     </div>
   );
 }

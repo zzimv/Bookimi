@@ -10,9 +10,9 @@ export function ContinueBanner() {
   if (!b) return null;
   return (
     <div className="wrap" style={{ marginTop: 16 }}>
-      <div className="muted-panel row" style={{ justifyContent: "space-between" }}>
-        <span>Ваша книга «{b.title}» ждёт: {b.status === "PREVIEW_READY" ? "превью готово" : "можно продолжить"}.</span>
-        <Link className="btn btn--primary btn--sm" href={b.status === "PREVIEW_READY" ? `/kniga/${b.id}` : `/kniga/${b.id}`}>Продолжить</Link>
+      <div className="muted-panel continue-banner" data-continue>
+        <span className="continue-banner__text">Ваша книга «{b.title}» ждёт: {b.status === "PREVIEW_READY" ? "превью готово" : "можно продолжить"}.</span>
+        <Link className="btn btn--primary btn--sm continue-banner__btn" href={`/kniga/${b.id}`}>Продолжить</Link>
       </div>
     </div>
   );

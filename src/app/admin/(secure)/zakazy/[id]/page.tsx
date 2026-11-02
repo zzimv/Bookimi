@@ -33,12 +33,20 @@ export default async function Page({ params, searchParams }: { params: Promise<{
   const addr = o.shipment ? { ...(o.shipment.address as DeliveryAddress), ...(o.shipment.pvzCode ? { pvzCode: o.shipment.pvzCode, pvzAddress: o.shipment.pvzAddress ?? undefined } : {}) } : undefined;
   const logs = await db.auditLog.findMany({ where: { entityId: id }, orderBy: { createdAt: "desc" }, take: 20, include: { actor: { select: { email: true } } } });
   const hid = (name: string, v: string) => <input type="hidden" name={name} value={v} />;
+  // Печать: иллюстрации ниже 250 dpi на формате заказа (src/lib/pdf.ts, preparePrint)
+  const bookIds = [...new Set(o.items.map((i) => i.bookId).filter(Boolean))] as string[];
+  const lowDpi = bookIds.length ? await db.auditLog.findMany({ where: { action: "print.lowdpi", entityId: { in: bookIds } }, orderBy: { createdAt: "desc" }, take: 5 }) : [];
 
   return (
     <>
       <p className="small"><Link href="/admin/zakazy">← Заказы</Link></p>
       <h1 style={{ fontSize: "var(--fs-xl)" }}>Заказ {o.publicCode} <span className="badge">{ORDER_STATUS[o.status]}</span></h1>
       {sp.error && <p className="error" role="alert">{sp.error}</p>}
+      {lowDpi.length > 0 && (
+        <p className="error" role="alert">
+          Иллюстрации ниже 250 dpi для печати: {(lowDpi[0].details as { pages?: { page: string; dpi: number }[] }).pages?.map((x) => `${x.page} — ${x.dpi} dpi`).join("; ")}. Перед передачей в типографию проверьте качество или перерисуйте страницы.
+        </p>
+      )}
       {o.payments.some((p) => p.status === "needs_refund") && <p className="error" role="alert">Повторная оплата: верните покупателю деньги по платежу со статусом needs_refund.</p>}
 
       <div className="grid2">
@@ -96,6 +104,17 @@ export default async function Page({ params, searchParams }: { params: Promise<{
             <button className="btn btn--ghost btn--sm">Прикрепить чек</button>
             <small className="muted">Режим чеков: {npdMode()}</small>
           </form>
+        )}
+        {o.paidAt && o.receipts.some((r) => r.status === "issued") && (
+          <details id="receipt" style={{ marginTop: 10 }}>
+            <summary className="small">Заменить чек (ошибка в чеке)</summary>
+            <form action={attachReceiptAction} className="row" style={{ marginTop: 6 }}>
+              {hid("orderId", o.id)}
+              <input className="input" name="url" placeholder="Ссылка на новый чек" style={{ width: 340 }} required />
+              <label className="small"><input type="checkbox" name="replace" required /> Заменить действующий чек — старый будет помечен «заменён»</label>
+              <button className="btn btn--ghost btn--sm">Заменить чек</button>
+            </form>
+          </details>
         )}
         {o.paidAt && o.status !== "REFUNDED" && (
           <details className="edit" style={{ marginTop: 12 }}>

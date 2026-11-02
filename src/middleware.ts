@@ -1,4 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
+import { adminHeaders, adminHosts, requestHost, routeForHost } from "./lib/admin-host";
 
 // 1) Анонимный идентификатор для черновика и превью без регистрации.
 // 2) Реферальный код (?ref=) и UTM-метки — в cookie на 30 дней.
@@ -16,6 +17,11 @@ export function middleware(req: NextRequest) {
   const url = req.nextUrl;
   const method = req.method;
 
+  // Админка — только на admin.<DOMAIN>: на основном домене её нет (404), на admin-хосте нет сайта (→ основной домен)
+  const route = routeForHost(requestHost(req.headers), url.pathname, url.search, adminHosts());
+  if (route.action === "404") return new NextResponse("Not found", { status: 404, headers: { "X-Robots-Tag": "noindex" } });
+  if (route.action === "redirect") return NextResponse.redirect(route.to.startsWith("/") ? new URL(route.to, req.url) : route.to, route.status);
+
   if (url.pathname.startsWith("/api/") && !["GET", "HEAD", "OPTIONS"].includes(method)) {
     const isWebhook = url.pathname.startsWith("/api/payments/webhook") || url.pathname.startsWith("/api/telegram");
     if (!isWebhook) {
@@ -29,6 +35,10 @@ export function middleware(req: NextRequest) {
   }
 
   const res = NextResponse.next();
+  if (route.adminHost) {
+    for (const [k, v] of adminHeaders()) if (k !== "Content-Security-Policy") res.headers.set(k, v);
+    return res; // на admin-хосте — без cookie сайта (анонимный id, реферал, UTM)
+  }
   // Ссылка «Поделиться мультфильмом» — личная: не индексировать
   if (url.pathname.startsWith("/mult/")) res.headers.set("X-Robots-Tag", "noindex, nofollow, noarchive");
   const secure = process.env.NODE_ENV === "production";

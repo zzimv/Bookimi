@@ -5,7 +5,7 @@ import { redirect } from "next/navigation";
 import type { OrderStatus, Role } from "@prisma/client";
 import { db } from "@/lib/db";
 import { mfaFresh, requireAdmin, safeAdminNext, totpAttempt } from "@/lib/admin";
-import { clientIp, currentSession, isStaffRole } from "@/lib/auth";
+import { clientIp, currentStaffSession as currentSession, isStaffRole } from "@/lib/auth";
 import { audit, confirmTransfer, refundOrder, setStatus, STATUS_FLOW } from "@/lib/orders";
 import { sendToPrint } from "@/lib/print";
 import { attachManualReceipt } from "@/lib/npd";
@@ -14,7 +14,7 @@ import { enqueue, QUEUES } from "@/lib/queue";
 import { decrypt, encrypt, looksLikeRecovery, recoveryCodes, recoveryHash, totpSecret, totpVerify } from "@/lib/crypto";
 import { sendTestTrigger } from "@/lib/triggers";
 import { pingIndexNow } from "@/lib/indexnow";
-import { optNum, parseTiers, validatePromo, validateSettings } from "@/lib/settings-validate";
+import { FORBIDDEN_KEYS, optNum, parseSettingsForm, parseTiers, validatePromo, validateSettings } from "@/lib/settings-validate";
 import { validateAddonForm } from "@/lib/addons-core";
 
 const s = (f: FormData, k: string) => String(f.get(k) ?? "").trim();
@@ -89,10 +89,16 @@ export async function reprintAction(f: FormData) {
 export async function attachReceiptAction(f: FormData) {
   const u = await requireAdmin("orders");
   const url = s(f, "url");
-  if (!/^https:\/\/lknpd\.nalog\.ru\//.test(url) && !/^https:\/\//.test(url)) return;
-  await attachManualReceipt(s(f, "orderId"), url);
-  await audit(u.id, "receipt.attach", "order", s(f, "orderId"));
-  revalidatePath(`/admin/zakazy/${s(f, "orderId")}`);
+  const orderId = s(f, "orderId");
+  if (!/^https:\/\//.test(url)) fail(`/admin/zakazy/${orderId}`, "Ссылка на чек должна начинаться с https://", "receipt");
+  const replace = b(f, "replace");
+  try {
+    await attachManualReceipt(orderId, url, { replace });
+  } catch (e) {
+    fail(`/admin/zakazy/${orderId}`, (e as Error).message, "receipt");
+  }
+  await audit(u.id, replace ? "receipt.replace" : "receipt.attach", "order", orderId);
+  revalidatePath(`/admin/zakazy/${orderId}`);
 }
 
 export async function regenerateAction(f: FormData) {
@@ -210,7 +216,9 @@ export async function promoAction(f: FormData) {
 
 export async function reviewAction(f: FormData) {
   const u = await requireAdmin("reviews");
-  await db.review.update({ where: { id: s(f, "id") }, data: { status: s(f, "status") } });
+  const review = await db.review.update({ where: { id: s(f, "id") }, data: { status: s(f, "status") } });
+  // rev 10: отклонён как спам — бонусы за отзыв списываются
+  if (review.status === "rejected") await (await import("@/lib/bonus-server")).revokeReviewBonus(review).catch(() => {});
   await audit(u.id, "review.moderate", "review", s(f, "id"), { status: s(f, "status") });
   revalidatePath("/", "layout");
 }
@@ -272,33 +280,13 @@ export async function blogAction(f: FormData) {
 
 // ── Настройки ──
 function parseSection(key: SettingKey, f: FormData) {
-  const base = structuredClone(DEFAULTS[key]) as Record<string, unknown>;
-  const out: Record<string, unknown> = {};
-  const set = (path: string, v: unknown) => {
-    const parts = path.split(".");
-    let o = out;
-    for (const p of parts.slice(0, -1)) o = (o[p] ??= {}) as Record<string, unknown>;
-    o[parts.at(-1)!] = v;
-  };
-  const get = (path: string) => path.split(".").reduce<unknown>((o, p) => (o as Record<string, unknown>)?.[p], base);
-  for (const [name, raw] of f.entries()) {
-    if (!name.startsWith("f.")) continue;
-    const path = name.slice(2);
-    const def = get(path);
-    const v = String(raw);
-    if (typeof def === "number") set(path, v.trim() === "" ? NaN : Number(v.replace(",", ".")));
-    else if (Array.isArray(def) && def[0] && typeof def[0] === "object") set(path, parseTiers(v));
-    else if (Array.isArray(def)) set(path, v.split(",").map((x) => x.trim()).filter(Boolean).map((x) => (typeof def[0] === "number" ? Number(x) : x)));
-    else set(path, v);
-  }
-  // Чекбоксы: отсутствуют в форме, если выключены
-  for (const name of String(f.get("__bools") ?? "").split(",").filter(Boolean)) set(name, f.get(`f.${name}`) === "on");
-  return out;
+  // Безопасный разбор: f.__proto__.x / constructor / prototype отбрасываются (src/lib/settings-validate.ts)
+  return parseSettingsForm(structuredClone(DEFAULTS[key]), f);
 }
 
 export async function settingsAction(f: FormData) {
   const key = s(f, "__key") as SettingKey;
-  if (!(key in DEFAULTS)) return;
+  if (!Object.prototype.hasOwnProperty.call(DEFAULTS, key)) return;
   // Реквизиты, способы оплаты, цены — только со свежим кодом 2FA
   const u = await requireAdmin("settings", { fresh: SENSITIVE_SETTINGS.includes(key) });
   const current = (await cfg(key)) as Record<string, unknown>;
@@ -327,7 +315,7 @@ export async function printHouseAction(f: FormData) {
   let costs: Record<string, number> = {};
   for (const line of s(f, "costs").split("\n")) {
     const [k, v] = line.split(/[:=]/).map((x) => x.trim());
-    if (k && v && !isNaN(Number(v))) costs[k] = Number(v);
+    if (k && v && !isNaN(Number(v)) && !FORBIDDEN_KEYS.has(k)) costs[k] = Number(v);
   }
   const data = {
     name: s(f, "name"),
@@ -369,6 +357,17 @@ export async function teamAction(f: FormData) {
   // Смена роли — все сессии этого человека завершаются (новая роль — новый вход с 2FA)
   if (existing && existing.role !== role) await db.session.deleteMany({ where: { userId: existing.id } });
   await audit(u.id, "team.role", "user", email, { role });
+  revalidatePath("/admin/komanda");
+}
+
+/** Владелец завершает сессию админки (свою или сотрудника): запись удаляется — cookie больше ничего не открывает. */
+export async function revokeSessionAction(f: FormData) {
+  const u = await requireAdmin("users", { fresh: true });
+  const id = s(f, "id");
+  const sess = await db.session.findFirst({ where: { id, scope: "staff" }, include: { user: { select: { email: true } } } });
+  if (!sess) return;
+  await db.session.delete({ where: { id } });
+  await audit(u.id, "admin.session_revoke", "user", sess.userId, { session: id, email: sess.user.email, ip: sess.ip });
   revalidatePath("/admin/komanda");
 }
 

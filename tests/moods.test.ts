@@ -114,7 +114,7 @@ describe("moodPrompt", () => {
   });
   it("склеивает без двойных запятых и пробелов", () => {
     const r = moodPrompt("  children's book art, soft gouache,, ", "blurry, , extra fingers,", warm);
-    expect(r.prompt.startsWith("children's book art, soft gouache. Mood: warm golden-hour")).toBe(true);
+    expect(r.prompt.startsWith("children's book art, soft gouache. Mood: warm amber")).toBe(true);
     expect(r.prompt).not.toMatch(/,\s*,|\s{2}|^\s|\s$/);
     expect(r.negative.startsWith("blurry, extra fingers, cold blue cast")).toBe(true);
     expect(r.negative).not.toMatch(/,\s*,|\s{2}|^\s|\s$|,$/);

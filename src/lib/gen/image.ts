@@ -72,7 +72,8 @@ export class DemoImageProvider implements ImageProvider {
       caption: "демо-иллюстрация · подключите GPU в админке",
       crowd: job.crowd,
       crowdLayout: job.crowdLayout,
-      title: job.index === 0 ? job.title : undefined,
+      // Название не рисуем в картинку: обложку подписывают сайт и PDF (как у иллюстраций GPU) — иначе оно дважды
+      title: undefined,
       scene: job.scene,
     });
     return { data: Buffer.from(svg), contentType: "image/svg+xml", ext: "svg", gpuSeconds: 0, costKopecks: 0 };
@@ -93,7 +94,7 @@ const OWN_IDENTITY: Record<HeroKind, RegExp> = {
 
 /** Кто герой — для стилей чужой аудитории (свой стиль уже содержит такую фразу). */
 function identityFor(kind: HeroKind, age: number, gender: string | undefined, withPhoto: boolean): string {
-  const ref = withPhoto ? "keeps the exact face from the reference photo, instantly recognizable" : "drawn consistently on every page";
+  const ref = withPhoto ? "keeps the exact face from the reference photo, instantly recognizable" : "is drawn the same on every page, following the hero description";
   switch (kind) {
     case "child":
       return `The main hero is a ${age}-year-old ${gender === "girl" ? "girl" : "boy"} with child proportions who ${ref}.`;
@@ -144,10 +145,23 @@ const NEG_CONFLICTS: Record<HeroKind, string[]> = {
 /** Сцена прямо просит костюм — тогда не запрещаем одежду и костюмы (просьба art/pets.ts). */
 const COSTUME_SCENE = /costume|carnival|masquerade|fancy dress|dressed (up|as)|santa hat|party hat|festive hat|knitted (sweater|scarf)|bow tie|wearing a (scarf|sweater|hat|bow)/i;
 
-export function stylePrompt(style: ArtStyle | null, styleId: string, kind: HeroKind) {
+/**
+ * Без фото: в промпте стиля не должно быть «точное лицо с фото» — модель ищет несуществующую ссылку.
+ * Фразы стилей (kids, teens, adults, pets) переводим на «как в описании, одинаково на каждой странице».
+ */
+export function noPhotoIdentity(prompt: string) {
+  return prompt
+    .replace(/keeps? the exact face from the reference photo/gi, "looks the same on every page, exactly as in the hero description")
+    .replace(/keep the exact likeness of the people in the reference photos/gi, "stay the same people on every page, exactly as in the description")
+    .replace(/keep the (facial features, face shape, skin tone and hairstyle) from the reference photo/gi, "keep the $1 from the hero description")
+    .replace(/is the specific pet from the reference photo/gi, "is the specific pet from the description")
+    .replace(/from the reference photos?/gi, "from the description");
+}
+
+export function stylePrompt(style: ArtStyle | null, styleId: string, kind: HeroKind, withPhoto = true) {
   if (!style) return { prompt: styleId, negative: "text, letters, watermark, logo, signature, photo, photorealistic", own: false };
   const ownerKind = OWNER_KIND[ART_STYLE_OWNERS[style.id] ?? ""];
-  if (ownerKind === kind) return { prompt: style.prompt, negative: style.negative, own: true };
+  if (ownerKind === kind) return { prompt: withPhoto ? style.prompt : noPhotoIdentity(style.prompt), negative: style.negative, own: true };
   return { prompt: ownerKind ? style.prompt.replace(OWN_IDENTITY[ownerKind], "").trim() : style.prompt, negative: style.negative, own: false };
 }
 
@@ -178,7 +192,7 @@ export function scenePrompt(job: SceneJob): { prompt: string; negative: string }
   const kind = job.plot.heroKind;
   const main = job.heroes[0];
   const withPhoto = Boolean(main?.photos.length);
-  const st = stylePrompt(artStyle(job.style), job.style, kind);
+  const st = stylePrompt(artStyle(job.style), job.style, kind, withPhoto);
   const extras = job.heroes
     .slice(1)
     .map((h) => `${h.role}${h.description ? `: ${h.description}` : ""}`)
@@ -249,12 +263,19 @@ export class GpuImageProvider implements ImageProvider {
       negative,
       width: job.index === 0 ? 1536 : 2048,
       height: job.index === 0 ? 1536 : 1024,
+      // Книга (не превью): сервер увеличивает до печатного размера — 300 dpi на 21×21 см + вылеты
+      // (разворот 2 × 2551 px, обложка с загибом 2900 px); без апскейлера на сервере — Lanczos, и предупреждение в админке
+      ...(job.preview ? {} : job.index === 0 ? { out_width: PRINT_COVER_PX, out_height: PRINT_COVER_PX } : { out_width: PRINT_SPREAD_PX[0], out_height: PRINT_SPREAD_PX[1] }),
       steps: job.preview ? 30 : 40,
       seed: job.index + 11,
       text2img: images.length === 0,
     });
   }
 }
+
+/** Печатный размер иллюстраций (300 dpi, самый большой формат 210×210 мм + вылеты 3 мм; обложка — с загибом 17 мм). */
+export const PRINT_SPREAD_PX: [number, number] = [5102, 2551];
+export const PRINT_COVER_PX = 2900;
 
 export function imageProvider(name: string, hourlyRub: number): ImageProvider {
   if (name === "qwen" || name === "kandinsky") return new GpuImageProvider(name, hourlyRub);

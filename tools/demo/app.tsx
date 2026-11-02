@@ -15,10 +15,10 @@ import SozdatPage from "../../src/app/sozdat/page";
 import PrazdnikiPage from "../../src/app/prazdniki/page";
 import { AdminHolidays, DemoGeroi, resetHolidays } from "./holidays";
 import NotFound from "../../src/app/not-found";
-import { exportData, installApi, onAccountDeleted, onStoreChange, resetLimits, resetStore, resumeJobs, svgUrl } from "./api";
+import { exportData, installApi, onAccountDeleted, onStoreChange, resetLimits, resetStore, resumeJobs, S, setDemoFlags, svgUrl } from "./api";
 import { DemoMult } from "./cartoon";
-import { DemoPay, KabinetBook, KabinetDannye, KabinetHome, KabinetLayout, KabinetOrders, KabinetStub, KnigaPage, KupitPage, StubPage, VhodPage, ZakazPage } from "./pages";
-import { AdminCatalog, AdminDashboard, AdminHome, AdminJournal, AdminLayout, AdminOrder, AdminOrders, AdminPromos, AdminSettings, AdminTransfers } from "./admin";
+import { DemoPay, KabinetBook, KabinetDannye, KabinetHome, KabinetLayout, KabinetOrders, KabinetOtzyv, KabinetStub, KnigaDemo, KupitPage, StubPage, VhodPage, ZakazPage } from "./pages";
+import { AdminCatalog, AdminDashboard, AdminHome, AdminJournal, AdminLayout, AdminOrder, AdminOrders, AdminPromos, AdminReviews, AdminSettings, AdminTransfers } from "./admin";
 import { bindRouter, currentPath, currentQuery, currentUrl, demoHref, NotFoundError, push, RedirectError } from "./router";
 import { DEFAULTS } from "../../src/lib/settings";
 
@@ -84,7 +84,7 @@ function page(path: string, q: Record<string, string>) {
     case "sozdat":
       return <SozdatPage searchParams={sp} />;
     case "kniga":
-      return p[2] === "kupit" ? <KupitPage id={p[1]} who={q.who} pechat={q.pechat} bulk={q["dlya-vseh"]} /> : <KnigaPage id={p[1]} />;
+      return p[2] === "kupit" ? <KupitPage id={p[1]} who={q.who} pechat={q.pechat} bulk={q["dlya-vseh"]} izmenit={q.izmenit} chto={q.chto} /> : <KnigaDemo id={p[1]} />;
     case "demo-pay":
       return <DemoPay id={p[1]} />;
     case "zakaz":
@@ -94,7 +94,7 @@ function page(path: string, q: Record<string, string>) {
     case "kabinet":
       return (
         <KabinetLayout path={path}>
-          {!p[1] ? <KabinetHome /> : p[1] === "kniga" ? (p[3] === "mult" ? <DemoMult id={p[2]} /> : <KabinetBook id={p[2]} />) : p[1] === "zakazy" ? <KabinetOrders /> : p[1] === "geroi" ? <DemoGeroi /> : p[1] === "dannye" ? <KabinetDannye /> : <KabinetStub title={CAB_TITLES[p[1]] ?? "Кабинет"} />}
+          {!p[1] ? <KabinetHome /> : p[1] === "kniga" ? (p[3] === "mult" ? <DemoMult id={p[2]} /> : <KabinetBook id={p[2]} />) : p[1] === "zakazy" ? <KabinetOrders /> : p[1] === "geroi" ? <DemoGeroi /> : p[1] === "dannye" ? <KabinetDannye /> : p[1] === "otzyv" ? <KabinetOtzyv zakaz={q.zakaz} /> : <KabinetStub title={CAB_TITLES[p[1]] ?? "Кабинет"} />}
         </KabinetLayout>
       );
   }
@@ -122,6 +122,8 @@ function adminPage(p: string[]) {
       return <AdminHolidays />;
     case "zhurnal":
       return <AdminJournal />;
+    case "otzyvy":
+      return <AdminReviews />;
   }
   return <NotFound />;
 }
@@ -177,13 +179,15 @@ function View() {
       <div className="demo-bar">
         <div className="wrap demo-bar__in">
           <span className="demo-bar__text">
-            <b>Демо-стенд <span className="demo-rev">rev 09</span>.</b> <span className="demo-bar__long">Всё работает в этом окне: оплата понарошку, фото не покидает браузер, письма не отправляются.</span>
+            <b>Демо-стенд <span className="demo-rev">rev 10</span>.</b> <span className="demo-bar__long">Всё работает в этом окне: оплата понарошку, фото не покидает браузер, письма не отправляются. На сайте админка — только на admin.&lt;домен&gt; и только через VPN.</span>
           </span>
           <nav className="demo-tabs" aria-label="Демо">
             <a href="#/" aria-current={!admin ? "page" : undefined}>Сайт</a>
             <a href="#/admin" aria-current={admin ? "page" : undefined}>Админка</a>
           </nav>
           <ThemeQuick />
+          <button type="button" className="demo-limits" data-demo="admin-mode" aria-pressed={Boolean(S.adminMode)} title="Режим админа: на превью — кнопка «Показать всю книгу»" onClick={() => { setDemoFlags({ adminMode: !S.adminMode }); say(S.adminMode ? "Режим админа включён: на превью есть «Показать всю книгу»" : "Режим админа выключен"); }}><span className="demo-limits__long">Режим админа</span><span className="demo-limits__short" aria-hidden="true">Админ</span></button>
+          <ResetButton where="bar" />
           <button type="button" className="demo-limits" data-demo="reset-limits" title="Лимиты демо: по 999 сказок, превью, перерисовок в сутки" aria-label="Сбросить лимиты" onClick={() => { resetLimits(); say("Лимиты сброшены: по 999 сказок, превью, «Переписать», перерисовок и смен настроения"); }}><span className="demo-limits__long">Сбросить лимиты</span><span className="demo-limits__short" aria-hidden="true">Лимиты ↺</span></button>
         </div>
       </div>
@@ -199,8 +203,8 @@ function View() {
       )}
       <div className="demo-reset">
         <div className="wrap">
-          <button type="button" className="btn btn--ghost" data-demo="reset" onClick={reset}>Начать демо сначала</button>
-          <p className="small muted">Сотрёт книги, заказы, вход и настройки демо в этом браузере.</p>
+          <ResetButton where="bottom" />
+          <p className="small muted">Сотрёт книги, заказы, вход, бонусы, черновик анкеты и настройки демо в этом браузере (тема остаётся).</p>
         </div>
       </div>
       {toast && (
@@ -212,8 +216,25 @@ function View() {
   );
 }
 
+// «Начать заново»: подтверждение прямо на странице — confirm() в окне превью (iframe) браузер может молча
+// заблокировать, и тогда сброс не происходил вовсе (жалоба владелицы, rev 10).
+let asking: "" | "bar" | "bottom" = "";
+function ResetButton({ where }: { where: "bar" | "bottom" }) {
+  if (asking === where)
+    return (
+      <span className={`demo-confirm demo-confirm--${where}`} role="group" aria-label="Начать демо сначала?">
+        <span>Стереть всё и начать заново?</span>
+        <button type="button" className="demo-limits demo-confirm__yes" data-demo="reset-yes" onClick={() => { asking = ""; reset(); }}>Да, сначала</button>
+        <button type="button" className="demo-limits" data-demo="reset-no" onClick={() => { asking = ""; root.schedule(); }}>Отмена</button>
+      </span>
+    );
+  return where === "bar" ? (
+    <button type="button" className="demo-limits demo-restart" data-demo="reset-bar" title="Стереть книги, заказы, вход и настройки демо" onClick={() => { asking = "bar"; root.schedule(); }}><span className="demo-limits__long">Начать заново</span><span className="demo-limits__short" aria-hidden="true">Заново ↺</span></button>
+  ) : (
+    <button type="button" className="btn btn--ghost" data-demo="reset" onClick={() => { asking = "bottom"; root.schedule(); }}>Начать демо сначала</button>
+  );
+}
 function reset() {
-  if (!confirm("Начать демо сначала? Книги, заказы и настройки демо будут стёрты.")) return;
   resetStore();
   afterReset();
 }
@@ -221,6 +242,7 @@ function reset() {
 onAccountDeleted(() => setTimeout(afterReset, 0));
 function afterReset() {
   resetHolidays();
+  window.scrollTo({ top: 0 });
   document.documentElement.style.setProperty("--hero-name", '""');
   document.documentElement.classList.remove("has-name");
   root.reset();

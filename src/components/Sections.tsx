@@ -62,7 +62,8 @@ export async function Reviews() {
   );
 }
 
-export function Faq({ items, title = "Частые вопросы" }: { items: { q: string; a: string }[]; title?: string }) {
+/** jsonLd — разметка FAQPage: только на главной (одна страница с FAQPage на сайт — отчёт SEO 31.10, С-4). */
+export function Faq({ items, title = "Частые вопросы", jsonLd = false }: { items: { q: string; a: string }[]; title?: string; jsonLd?: boolean }) {
   return (
     <section className="section" id="voprosy">
       <div className="wrap faq">
@@ -73,13 +74,13 @@ export function Faq({ items, title = "Частые вопросы" }: { items: {
             <p>{it.a}</p>
           </details>
         ))}
-        <JsonLd
+        {jsonLd && <JsonLd
           data={{
             "@context": "https://schema.org",
             "@type": "FAQPage",
             mainEntity: items.map((it) => ({ "@type": "Question", name: it.q, acceptedAnswer: { "@type": "Answer", text: it.a } })),
           }}
-        />
+        />}
       </div>
     </section>
   );

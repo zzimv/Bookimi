@@ -6,3 +6,4 @@ node_modules
 tools/recognition-test/data
 tools/recognition-test/results
 storage
+wireguard

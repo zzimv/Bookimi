@@ -1,5 +1,5 @@
 "use client";
-// «Мультфильм по книге» в кабинете: покупка, сборка, плеер, скачивание, ссылка «Поделиться», голос и субтитры.
+// «Оживление книги» в кабинете: покупка, сборка, плеер, скачивание, ссылка «Поделиться», голос и субтитры.
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
@@ -63,7 +63,7 @@ export function CartoonPanel({ bookId }: { bookId: string }) {
   if (!s.bought.cartoon) {
     return (
       <div className="panel" style={{ marginTop: 16 }}>
-        <b>Мультфильм по книге</b>
+        <b>Оживление книги</b>
         <p className="small" style={{ margin: "6px 0 10px" }}>
           Две минуты сказки: ваши герои оживают на страницах книги, диктор читает историю, тихо играет музыка. Смотреть на телефоне и телевизоре, скачать и отправить
           бабушке ссылкой.
@@ -73,7 +73,7 @@ export function CartoonPanel({ bookId }: { bookId: string }) {
           <span>Озвучу своим голосом (+{rub(s.prices.ownVoice)}) — дадим сценарий по репликам и подсказки, как записать</span>
         </label>
         <button className="btn btn--primary btn--sm" disabled={busy} onClick={() => act({ action: "buy", ownVoice: own }, (r) => router.push(`/zakaz/${(r as { orderId: string }).orderId}`))}>
-          Добавить мультфильм — {rub(s.prices.cartoon + (own ? s.prices.ownVoice : 0))}
+          Добавить «Оживление книги» — {rub(s.prices.cartoon + (own ? s.prices.ownVoice : 0))}
         </button>
         {msg && <p className="error">{msg}</p>}
       </div>
@@ -83,17 +83,17 @@ export function CartoonPanel({ bookId }: { bookId: string }) {
   const shareUrl = s.share ? `${typeof window !== "undefined" ? window.location.origin : ""}/mult/${s.share.token}` : "";
   return (
     <div className="panel" style={{ marginTop: 16 }}>
-      <b>Мультфильм по книге{s.voiceMode === "own" ? " — вашим голосом" : ""}</b>
-      {(s.status === "NONE" || s.status === "PENDING") && <p className="small muted">Начнём собирать мультфильм, как только книга будет готова.</p>}
+      <b>Оживление книги{s.voiceMode === "own" ? " — вашим голосом" : ""}</b>
+      {(s.status === "NONE" || s.status === "PENDING") && <p className="small muted">Начнём собирать ролик, как только книга будет готова.</p>}
       {(s.status === "QUEUED" || s.status === "RENDERING") && (
         <div className="muted-panel" style={{ marginTop: 10 }}>
-          Собираем мультфильм: {s.progress}%. Обычно это 2–4 минуты, страница обновится сама.
+          Собираем ролик: {s.progress}%. Обычно это 2–4 минуты, страница обновится сама.
           <div className="progress"><i style={{ width: `${s.progress}%` }} /></div>
         </div>
       )}
       {s.status === "FAILED" && (
         <div style={{ marginTop: 10 }}>
-          <p className="error">Мультфильм не собрался. Мы уже знаем и посмотрим; можно попробовать ещё раз.</p>
+          <p className="error">Ролик не собрался. Мы уже знаем и посмотрим; можно попробовать ещё раз.</p>
           <button className="btn btn--ghost btn--sm" disabled={busy} onClick={() => act({ action: s.voiceMode === "own" ? "submitOwn" : "rerender" })}>Попробовать ещё раз</button>
         </div>
       )}
@@ -139,12 +139,12 @@ export function CartoonPanel({ bookId }: { bookId: string }) {
           </div>
           {s.voiceMode === "auto" ? (
             <p className="small" style={{ marginTop: 8 }}>
-              Поменяли голос, субтитры или текст книги — пересоберите мультфильм. Бесплатно: {s.rerendersLeft} раз.{" "}
+              Поменяли голос, субтитры или текст книги — пересоберите ролик. Бесплатно: {s.rerendersLeft} раз.{" "}
               <button className="link-btn" disabled={busy || s.rerendersLeft <= 0} onClick={() => act({ action: "rerender" })}>Пересобрать</button>
             </p>
           ) : (
             <p className="small" style={{ marginTop: 8 }}>
-              Сейчас в мультфильме ваш голос.{" "}
+              Сейчас в ролике ваш голос.{" "}
               <button className="link-btn" disabled={busy} onClick={() => act({ action: "settings", voiceMode: "auto" }, () => setMsg("Голос диктора выбран — нажмите «Пересобрать»."))}>Вернуть голос диктора</button>
             </p>
           )}

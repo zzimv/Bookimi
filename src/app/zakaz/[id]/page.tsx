@@ -11,6 +11,7 @@ import { METHOD_TITLES } from "@/lib/shipping";
 import { OrderTimeline } from "../OrderTimeline";
 import { ThanksPanel } from "../ThanksPanel";
 import { journeyOrder } from "../journey-data";
+import { canChangeOrder, CHANGE_LOCKED_TEXT, SUPPORT_HREF } from "@/lib/order-change";
 
 const COPY_STATUS: Record<string, string> = {
   DRAFT: "сочиним после оплаты",
@@ -94,6 +95,19 @@ export default async function Page({ params }: { params: Promise<{ id: string }>
           </ol>
           </details>
         </div>
+      )}
+
+      {/* rev 10: до оплаты — «Изменить заказ» и «Изменить адрес доставки»; после оплаты — через поддержку */}
+      {print && bookId && canChangeOrder(order).ok && (
+        <div className="row order-change" style={{ marginTop: 12 }} data-order-change="open">
+          <Link className="btn btn--ghost btn--sm" href={`/kniga/${bookId}/kupit?izmenit=${order.id}`}>Изменить заказ</Link>
+          <Link className="btn btn--ghost btn--sm" href={`/kniga/${bookId}/kupit?izmenit=${order.id}&chto=dostavka`}>Изменить адрес доставки</Link>
+        </div>
+      )}
+      {print && order.paidAt && !["DELIVERED", "CANCELLED", "REFUNDED"].includes(order.status) && (
+        <p className="small order-change__lock" style={{ marginTop: 12 }} data-change-locked>
+          {CHANGE_LOCKED_TEXT.replace(/поддержку$/, "")}<Link href={SUPPORT_HREF}>поддержку</Link>
+        </p>
       )}
 
       {pending && (

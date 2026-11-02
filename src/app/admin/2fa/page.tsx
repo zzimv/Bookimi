@@ -1,6 +1,6 @@
 import QRCode from "qrcode";
 import { redirect } from "next/navigation";
-import { currentSession, isStaffRole } from "@/lib/auth";
+import { currentStaffSession as currentSession, isStaffRole } from "@/lib/auth";
 import { decrypt } from "@/lib/crypto";
 import { safeAdminNext } from "@/lib/admin";
 import { recoveryAckAction, recoveryRegenerateAction, totpSetupAction, totpVerifyAction } from "../actions";

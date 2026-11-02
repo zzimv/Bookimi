@@ -30,6 +30,8 @@ import { cartoonScript, type Cue } from "../../src/lib/gen/cartoon-script";
 import { plainSpread } from "../../src/lib/spread-markup";
 import { checkFirstName, FIRST_NAME_ERROR } from "../../src/lib/first-name";
 import { fullNameError, normalizeName } from "../../src/lib/names";
+import { applyBonus, bonusBalance, reviewBonusAllowed, reviewCredit, type BonusEntryLike } from "../../src/lib/bonuses";
+import { canChangeOrder, describeChange, type OrderShape } from "../../src/lib/order-change";
 
 // ───────── хранилище ─────────
 export interface DBook {
@@ -82,6 +84,12 @@ export interface DOrder {
   receipt?: boolean;
   /** Заказ только с цифровыми допами к готовой книге (мультфильм из кабинета) — книгу не перерисовываем. */
   addonsOnly?: boolean;
+  /** Выбор покупателя при оформлении — для «Изменить заказ» (rev 10). */
+  input?: CheckoutInput;
+  /** Оплачено бонусами, ₽. */
+  bonusRub?: number;
+  /** История изменений до оплаты: что поменялось и новая сумма. */
+  changes?: { at: number; lines: string[]; totalRub: number }[];
 }
 export interface DPromo {
   code: string;
@@ -113,11 +121,22 @@ export interface Store {
   cartoons?: Record<string, { consent: boolean; mode: "auto" | "own" }>;
   /** «Скоро» (storefront.soon) из админки демо; нет — как на сайте по умолчанию. */
   soon?: typeof DEFAULTS.storefront.soon;
+  /** Бонусы: журнал начислений и списаний (src/lib/bonuses.ts). */
+  bonus?: (BonusEntryLike & { note?: string })[];
+  /** Отзывы покупателя (модерация — в админке демо). */
+  reviews?: { id: string; orderId: string; rating: number; text: string; authorName: string; status: "pending" | "approved" | "rejected"; at: number }[];
+  /** Режим админа демо: кнопка «Показать всю книгу (для админа)» на превью. */
+  adminMode?: boolean;
+  /** Настройки из админки демо: «Оживление книги» продаётся (по умолчанию — «скоро»), бонусы. */
+  cartoonEnabled?: boolean;
+  bonusCfg?: Partial<typeof DEFAULTS.bonus>;
 }
 
 export const KEY = "bookimi.demo.v1";
 /** Ключи сайта в браузере, которые демо тоже чистит при «Начать сначала». */
 export const SITE_KEYS = ["bookimi.quiz.v3", "bookimi.quiz.v2", "bookimi.quiz.v1", "bookimi.heroName"];
+/** Ключи браузера, которые «Начать демо сначала» не трогает: выбранная тема. */
+export const KEEP_KEYS = ["bk_theme"];
 
 const blank = (): Store => ({
   v: 3,
@@ -146,9 +165,23 @@ export function save() {
   } catch {}
 }
 export function resetStore() {
+  // Всё, что демо и компоненты сайта хранят в браузере: localStorage (кроме темы), sessionStorage, cookie баннера
   try {
     localStorage.removeItem(KEY);
     for (const k of SITE_KEYS) localStorage.removeItem(k);
+    for (let i = localStorage.length - 1; i >= 0; i--) {
+      const k = localStorage.key(i);
+      if (k && !KEEP_KEYS.includes(k)) localStorage.removeItem(k);
+    }
+  } catch {}
+  try {
+    sessionStorage.clear();
+  } catch {}
+  try {
+    for (const c of document.cookie.split(";")) {
+      const n = c.split("=")[0].trim();
+      if (n) document.cookie = `${n}=; Max-Age=0; Path=/`;
+    }
   } catch {}
   for (const t of jobs.values()) clearTimeout(t);
   jobs.clear();
@@ -181,6 +214,7 @@ const BASE_PRICES = Object.fromEntries([...FORMATS.map((f) => [f.key, f.price]),
 const BASE_LIMITS = { ...DEFAULTS.limits, textsPerDevice: 999, textsPerIp: 999, previewsPerContact: 999, rewrites: 999, freeRedraws: 999, moodChangesPreview: 999 };
 
 const BASE_SOON = structuredClone(DEFAULTS.storefront.soon);
+const BASE_BONUS = structuredClone(DEFAULTS.bonus);
 
 export function applySettings() {
   Object.assign(DEFAULTS.seller, { fullName: "Иванова Анна Сергеевна (демо)", inn: "770012345606", email: "hello@bookimi.demo", phone: "+7 900 000-00-00" });
@@ -191,6 +225,10 @@ export function applySettings() {
   DEFAULTS.alerts.email = "owner@bookimi.demo";
   Object.assign(DEFAULTS.limits, BASE_LIMITS, S.limits);
   DEFAULTS.storefront.soon = structuredClone(S.soon ?? BASE_SOON);
+  // rev 10: «Оживление книги» — «скоро», пока не включат в админке демо; вход по SMS — показываем вкладку «Телефон»
+  DEFAULTS.cartoon.enabled = Boolean(S.cartoonEnabled);
+  DEFAULTS.auth.smsLogin = true;
+  Object.assign(DEFAULTS.bonus, BASE_BONUS, S.bonusCfg ?? {});
   for (const f of FORMATS as unknown as { key: string; price: number }[]) f.price = S.prices[f.key] ?? BASE_PRICES[f.key];
   for (const a of ADDONS as unknown as { key: string; price: number | null }[]) if (a.price !== null) a.price = S.prices[a.key] ?? BASE_PRICES[a.key];
 }
@@ -198,6 +236,14 @@ applySettings();
 
 export function setPrices(p: Record<string, number>) {
   S.prices = p;
+  applySettings();
+  commit();
+}
+/** Админка демо → «Оживление книги» продаётся или «скоро»; бонусы за отзыв; режим админа. */
+export function setDemoFlags(p: { cartoonEnabled?: boolean; adminMode?: boolean; bonusCfg?: Partial<typeof DEFAULTS.bonus> }) {
+  if (p.cartoonEnabled !== undefined) S.cartoonEnabled = p.cartoonEnabled;
+  if (p.adminMode !== undefined) S.adminMode = p.adminMode;
+  if (p.bonusCfg) S.bonusCfg = { ...S.bonusCfg, ...p.bonusCfg };
   applySettings();
   commit();
 }
@@ -488,6 +534,7 @@ export function catalogForPricing(audience?: string): { formats: CatalogFormat[]
     formats: FORMATS.filter((f) => f.kind === "PDF" || flags.printEnabled).map((f) => ({ key: f.key, kind: f.kind, title: f.title, priceRub: f.price })),
     addons: ADDONS.filter((a) => a.active && addonFits(a, audience))
       .filter((a) => flags.printEnabled || !a.print)
+      .filter((a) => DEFAULTS.cartoon.enabled || !a.key.startsWith("cartoon"))
       .filter((a) => a.key !== "audio-self" || audio.selfReadEnabled)
       .map((a) => ({
         key: a.key,
@@ -581,6 +628,30 @@ export function pdfPaidFor(bookId: string) {
     .filter((i) => i.kind === "format" && i.refKey === "pdf")
     .reduce((s, i) => s + i.priceRub, 0);
 }
+// ───────── бонусы (src/lib/bonuses.ts) ─────────
+/** Остаток бонусов сейчас. */
+export const bonusNow = () => bonusBalance(S.bonus ?? []).balance;
+export const bonusInfo = () => ({ ...bonusBalance(S.bonus ?? []), settings: { ...DEFAULTS.bonus } });
+export const reviewOf = (orderId: string) => (S.reviews ?? []).find((r) => r.orderId === orderId && r.status !== "rejected") ?? null;
+/** Получен и без отзыва — просим отзыв (баннер кабинета и «Спасибо» на странице заказа). */
+export const ordersAwaitingReview = () => S.orders.filter((o) => o.status === "DELIVERED" && !(S.reviews ?? []).some((r) => r.orderId === o.id));
+function addBonus(e: BonusEntryLike & { note?: string }) {
+  S.bonus = [...(S.bonus ?? []), e];
+}
+/** Модерация отзыва в админке демо: отклонён как спам — бонусы за него списываются обратно. */
+export function moderateReview(id: string, status: "approved" | "rejected") {
+  const r = (S.reviews ?? []).find((x) => x.id === id);
+  if (!r) return;
+  r.status = status;
+  const credited = (S.bonus ?? []).some((e) => e.kind === "review" && e.orderId === r.orderId);
+  const revoked = (S.bonus ?? []).some((e) => e.kind === "revoke" && e.orderId === r.orderId);
+  if (status === "rejected" && credited && !revoked) {
+    addBonus({ kind: "revoke", amountRub: -DEFAULTS.bonus.reviewRub, orderId: r.orderId, createdAt: Date.now(), note: "отзыв отклонён" });
+    log(`Отзыв отклонён (спам) — ${DEFAULTS.bonus.reviewRub} бонусов списаны обратно`);
+  } else log(`Отзыв ${status === "approved" ? "опубликован" : "отклонён"}`);
+  commit();
+}
+
 interface CheckoutInput {
   bookId: string;
   whoPrints: "self" | "bookimi";
@@ -592,6 +663,8 @@ interface CheckoutInput {
   saveAddress?: boolean;
   bulk?: boolean;
   addonsOnly?: boolean;
+  useBonus?: boolean;
+  changeOrderId?: string;
 }
 /** Допы книги из оплаченных заказов (как paidAddonKeys в src/lib/orders.ts). */
 export function paidAddonKeys(bookId: string) {
@@ -625,7 +698,12 @@ function priceCheckout(input: CheckoutInput) {
   );
   void books;
   const eta = input.whoPrints === "bookimi" ? etaDate(new Date(), 5, ship?.daysMax ?? 0, input.addons.includes("urgent")) : null;
-  return { quote: q, promo: promo ? { code: promo.code } : null, newbieApplied: false, ship, eta: eta ? { ready: eta.ready, eta: eta.eta, readyText: ruDate(eta.ready), etaText: ruDate(eta.eta) } : null };
+  // Бонусы: при изменении заказа — те же, что списали при оформлении (не больше новой доли); иначе — по галочке
+  const changing = input.changeOrderId ? orderById(input.changeOrderId) : null;
+  const balance = changing ? changing.bonusRub ?? 0 : bonusNow();
+  const b = applyBonus(q.totalRub, balance, DEFAULTS.bonus, changing ? (changing.bonusRub ?? 0) > 0 : input.useBonus);
+  const bonusMax = applyBonus(q.totalRub, balance, DEFAULTS.bonus, true).bonusRub;
+  return { quote: q, promo: promo ? { code: promo.code } : null, newbieApplied: false, ship, eta: eta ? { ready: eta.ready, eta: eta.eta, readyText: ruDate(eta.ready), etaText: ruDate(eta.eta) } : null, bonusRub: b.bonusRub, bonusMax };
 }
 const publicCode = () => `BK-${Array.from({ length: 6 }, () => "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"[Math.floor(Math.random() * 32)]).join("")}`;
 
@@ -670,7 +748,7 @@ export function setStatus(orderId: string, status: string, track?: string) {
   o.status = status;
   if (track && o.shipment) o.shipment.trackNumber = track;
   if (status === "DELIVERED") event("delivered");
-  log(`${o.publicCode}: статус — ${status}${track ? `, трек ${track}` : ""} · уведомление покупателю`);
+  log(`${o.publicCode}: статус — ${status}${track ? `, трек ${track}` : ""} · уведомление покупателю${status === "DELIVERED" && DEFAULTS.bonus.enabled ? ` с просьбой об отзыве (+${DEFAULTS.bonus.reviewRub} бонусов)` : ""}`);
   commit();
 }
 
@@ -749,6 +827,66 @@ function priceBulk(input: CheckoutInput) {
   void bulkPct;
   const eta = input.whoPrints === "bookimi" ? etaDate(new Date(), 5, ship?.daysMax ?? 0) : null;
   return { quote: qq, promo: promo && !qq.bulkApplied ? { code: promo.code } : null, newbieApplied: false, ship, eta: eta ? { ready: eta.ready, eta: eta.eta, readyText: ruDate(eta.ready), etaText: ruDate(eta.eta) } : null };
+}
+
+/** Получатель и доставка — как схема Checkout на сайте (zRecipientName, адрес, пункт СДЭК). */
+function checkDelivery(input: CheckoutInput): R | null {
+  input.contact = { ...input.contact, name: normalizeName(input.contact?.name ?? "") };
+  if (input.whoPrints !== "bookimi") return null;
+  if (!input.shipping) return err("Выберите доставку");
+  input.shipping.address = cleanAddress(input.shipping.method, input.shipping.address ?? { city: "" });
+  const bad = addressError(input.shipping.method, input.shipping.address);
+  if (bad) return err(bad);
+  const badName = fullNameError(input.contact.name);
+  if (badName) return err(badName);
+  if (!input.contact.phone) return err("Укажите телефон получателя");
+  if (input.shipping.method === "cdek_pvz") {
+    const a = input.shipping.address;
+    const point = demoPvz(a.city, a.region).find((p) => p.code === a.pvzCode);
+    if (!point) return err("Пункт выдачи не найден в этом городе — выберите его заново");
+    a.pvzAddress = point.address;
+  }
+  return null;
+}
+
+const shapeOf = (i: CheckoutInput | undefined, o: DOrder): OrderShape => ({
+  formatKey: i?.formatKey ?? o.items.find((x) => x.kind === "format")?.refKey,
+  addons: i?.addons ?? o.items.filter((x) => x.kind === "addon").map((x) => x.refKey),
+  method: i?.shipping?.method ?? o.shipment?.method,
+  address: i?.shipping?.address ?? o.shipment?.address,
+  contactName: i?.contact?.name ?? o.contactName,
+  contactPhone: i?.contact?.phone ?? o.contactPhone,
+});
+const TITLES = () => ({ ...Object.fromEntries([...FORMATS.map((f) => [f.key, f.title]), ...ADDONS.map((a) => [a.key, a.title.split(":")[0]])]), cdek_pvz: "СДЭК до пункта", cdek_courier: "курьер СДЭК", pochta: "Почта России", yandex: "Яндекс Доставка" });
+
+/** «Изменить заказ» (src/lib/order-change.ts): только до оплаты — пересчёт и новая сумма к оплате. */
+function changeOrder(o: DOrder, input: CheckoutInput): R {
+  const can = canChangeOrder(o);
+  if (!can.ok) return err(can.reason, 409);
+  input = { ...input, bookId: o.bookId, whoPrints: "bookimi", changeOrderId: o.id, bulk: undefined, addonsOnly: undefined };
+  const invalid = checkDelivery(input);
+  if (invalid) return invalid;
+  const priced = priceCheckout(input);
+  if (priced.quote.errors.length) return err(priced.quote.errors.join("; "));
+  const qq = priced.quote;
+  const bonusRub = priced.bonusRub ?? 0;
+  const lines = describeChange(shapeOf(o.input, o), shapeOf(input, o), TITLES());
+  if (!lines.length) return ok({ ok: true, unchanged: true });
+  const title = bookById(o.bookId)?.text?.title ?? "Персональная книга";
+  o.items = qq.lines.map((l) => ({ kind: l.kind, refKey: l.key, title: l.kind === "format" ? `Изготовление персонализированной книги «${title}» на заказ: ${l.title}` : `Изготовление на заказ: ${l.title}`, priceRub: l.priceRub }));
+  Object.assign(o, { subtotalRub: qq.subtotalRub, discountRub: qq.discountRub, pdfCreditRub: qq.pdfCreditRub, shippingRub: qq.shippingRub, totalRub: qq.totalRub - bonusRub, contactName: input.contact.name, contactPhone: input.contact.phone ?? o.contactPhone, input: structuredClone({ ...input, changeOrderId: undefined }) });
+  if (bonusRub < (o.bonusRub ?? 0)) {
+    // Сумма уменьшилась и бонусов в неё входит меньше — лишние бонусы возвращаем на счёт
+    const back = (o.bonusRub ?? 0) - bonusRub;
+    addBonus({ kind: "return", amountRub: back, orderId: `${o.id}:${Date.now()}`, createdAt: Date.now(), expiresAt: Date.now() + DEFAULTS.bonus.expiryDays * 86400_000, note: `изменение ${o.publicCode}` });
+    o.bonusRub = bonusRub;
+  }
+  if (input.shipping) o.shipment = { ...o.shipment, method: input.shipping.method, address: input.shipping.address, etaDate: priced.eta?.eta.getTime() };
+  if (priced.eta) o.readyDate = priced.eta.ready.getTime();
+  o.changes = [...(o.changes ?? []), { at: Date.now(), lines, totalRub: o.totalRub }];
+  log(`${o.publicCode}: заказ изменён до оплаты — ${lines.join("; ")} · новая сумма ${o.totalRub.toLocaleString("ru-RU")} ₽`);
+  commit();
+  return ok({ ok: true, lines, totalRub: o.totalRub });
 }
 
 // ───────── API ─────────
@@ -967,7 +1105,74 @@ async function handle(method: string, path: string, q: URLSearchParams, body: un
     return cartoonApi(book, method, seg[4], q, body);
   }
 
+  // ───── вход через внешние аккаунты (демо: имитация, без сети) и вкладка «Телефон» ─────
+  if (path === "/api/auth/providers") {
+    return ok({ oauth: DEMO_OAUTH.map((p) => ({ ...p, demo: true })), smsLogin: DEFAULTS.auth.smsLogin });
+  }
+  if (path === "/api/auth/oauth-demo" && method === "POST") {
+    const p = DEMO_OAUTH.find((x) => x.key === b0?.provider);
+    if (!p) return err("Неизвестный сервис входа");
+    const email = `anna.demo@${p.domain}`;
+    const same = S.user?.email === email;
+    S.user = { email, phone: same ? S.user!.phone : "", firstName: same ? S.user!.firstName ?? "Анна" : "Анна", name: same ? S.user!.name : undefined, marketing: same ? S.user!.marketing : false };
+    log(`Вход через ${p.title} (демо): ${email} — телефон и «Как к вам обращаться» спросим одним шагом`);
+    commit();
+    return ok({ ok: true, email, firstName: S.user.firstName, needs: { phone: DEFAULTS.auth.phoneRequired && !S.user.phone, consent: !S.consent.pd } });
+  }
+  if (path === "/api/auth/complete" && method === "POST") {
+    if (!S.user) return err("Войдите", 401);
+    let phone = "";
+    if (b0?.phone) {
+      phone = normalizePhone(String(b0.phone)) ?? "";
+      if (!phone) return err("Укажите мобильный номер: +7 9XX XXX-XX-XX");
+    } else if (DEFAULTS.auth.phoneRequired && !S.user.phone) return err("Укажите мобильный телефон — он нужен для связи по заказу");
+    const fn = checkFirstName(b0?.firstName as string | undefined);
+    if (fn === false) return err(FIRST_NAME_ERROR);
+    if (!S.consent.pd) {
+      if (!b0?.consentPd) return err("Отметьте согласие на обработку персональных данных");
+      S.consent.pd = true;
+    }
+    if (phone) S.user.phone = phone;
+    if (fn) S.user.firstName = fn;
+    log(`Профиль дополнен после входа через внешний аккаунт${phone ? `: ${phone}` : ""}${fn ? `, «${fn}»` : ""}`);
+    commit();
+    return ok({ ok: true, role: "CUSTOMER" });
+  }
+  if (path === "/api/me/bonuses") {
+    if (!S.user) return err("Войдите", 401);
+    return ok(bonusInfo());
+  }
+  if (path === "/api/reviews" && method === "POST") {
+    if (!S.user) return err("Войдите", 401);
+    const text = String(b0?.text ?? "").trim();
+    const authorName = String(b0?.authorName ?? "").trim();
+    if (text.length < 10 || authorName.length < 2) return err("Заполните отзыв");
+    const paidOrders = S.orders.filter((o) => o.paidAt && !["CANCELLED", "REFUNDED"].includes(o.status));
+    if (!paidOrders.length) return err("Отзыв можно оставить после покупки", 403);
+    const reviewed = new Set((S.reviews ?? []).map((r) => r.orderId));
+    const o = b0?.orderId ? paidOrders.find((x) => x.id === b0.orderId) : paidOrders.find((x) => !reviewed.has(x.id) && x.status === "DELIVERED") ?? paidOrders.find((x) => !reviewed.has(x.id));
+    if (!o || reviewed.has(o.id)) return err("Спасибо! Отзыв на этот заказ уже есть", 409);
+    const r = { id: uuid(), orderId: o.id, rating: Number(b0?.rating ?? 5), text, authorName: normalizeName(authorName), status: "pending" as const, at: Date.now() };
+    S.reviews = [...(S.reviews ?? []), r];
+    // Бонусы — сразу (решение rev 10), если заказ получен и за него ещё не начисляли; отклонят как спам — спишем
+    const can = reviewBonusAllowed(o, S.bonus ?? [], o.id, DEFAULTS.bonus);
+    if (can.ok) addBonus({ ...reviewCredit(o.id, DEFAULTS.bonus), note: `отзыв о заказе ${o.publicCode}` });
+    log(`Отзыв о заказе ${o.publicCode} — на модерации${can.ok ? ` · +${can.rub} бонусов покупателю` : ""}`);
+    commit();
+    return ok({ ok: true, bonusRub: can.ok ? can.rub : 0 });
+  }
+
   if (path === "/api/auth/request" && method === "POST") {
+    if (b0?.target && !b0?.email) {
+      // Вкладка «Телефон»: код по SMS (в демо — на экране)
+      const phone = normalizePhone(String(b0.target)) ?? "";
+      if (!phone) return err("Укажите мобильный номер: +7 9XX XXX-XX-XX");
+      if (!hit(phone, "otp", 10)) return err("Слишком много попыток. Попробуйте через час.", 429);
+      S.otp = { email: "", phone, code: String(Math.floor(100000 + Math.random() * 900000)) };
+      log(`Код входа по SMS для ${phone} — показан на экране (демо)`);
+      commit();
+      return ok({ ok: true, demoCode: S.otp.code, needsConsent: !S.consent.pd });
+    }
     const email = String(b0?.email ?? "").trim().toLowerCase();
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(email)) return err("Проверьте адрес почты");
     let phone = "";
@@ -982,6 +1187,20 @@ async function handle(method: string, path: string, q: URLSearchParams, body: un
     log(`Код входа для ${email} — показан на экране (демо-режим; на сайте приходит письмом)`);
     commit();
     return ok({ ok: true, demoCode: S.otp.code, needsConsent: !S.consent.pd });
+  }
+  if (path === "/api/auth/verify" && method === "POST" && b0?.target && !b0?.email) {
+    const phone = normalizePhone(String(b0.target)) ?? "";
+    if (!b0?.consentPd && !S.consent.pd) return err("Отметьте согласие на обработку персональных данных");
+    if (!S.otp || S.otp.phone !== phone || S.otp.email || String(b0?.code) !== S.otp.code) return err("Неверный или устаревший код");
+    const fn = checkFirstName(b0?.firstName as string | undefined);
+    if (fn === false) return err(FIRST_NAME_ERROR);
+    const same = S.user?.phone === phone;
+    S.user = { email: same ? S.user!.email : "", phone, firstName: fn || (same ? S.user!.firstName : undefined), name: same ? S.user!.name : undefined, marketing: Boolean(b0?.marketing) };
+    if (b0?.consentPd) S.consent.pd = true;
+    S.otp = null;
+    log(`Вход по SMS-коду: ${phone}`);
+    commit();
+    return ok({ ok: true, role: "CUSTOMER" });
   }
   if (path === "/api/auth/verify" && method === "POST") {
     const email = String(b0?.email ?? "").trim().toLowerCase();
@@ -1025,23 +1244,8 @@ async function handle(method: string, path: string, q: URLSearchParams, body: un
     const input = b0 as unknown as CheckoutInput;
     const book = bookById(input.bookId);
     if (!book) return err("Не найдено", 404);
-    // Как схема Checkout на сайте (zRecipientName): «анна петрова» → «Анна Петрова»
-    input.contact = { ...input.contact, name: normalizeName(input.contact?.name ?? "") };
-    if (input.whoPrints === "bookimi") {
-      if (!input.shipping) return err("Выберите доставку");
-      input.shipping.address = cleanAddress(input.shipping.method, input.shipping.address ?? { city: "" });
-      const bad = addressError(input.shipping.method, input.shipping.address);
-      if (bad) return err(bad);
-      const badName = fullNameError(input.contact.name);
-      if (badName) return err(badName);
-      if (!input.contact.phone) return err("Укажите телефон получателя");
-      if (input.shipping.method === "cdek_pvz") {
-        const a = input.shipping.address;
-        const point = demoPvz(a.city, a.region).find((p) => p.code === a.pvzCode);
-        if (!point) return err("Пункт выдачи не найден в этом городе — выберите его заново");
-        a.pvzAddress = point.address;
-      }
-    }
+    const invalid = checkDelivery(input);
+    if (invalid) return invalid;
     if (input.addonsOnly && (!book.paidFull || input.whoPrints !== "self")) return err("Докупить можно к уже оплаченной книге");
     const priced = input.bulk ? priceBulk(input) : priceCheckout(input);
     if (priced.quote.errors.length) return err(priced.quote.errors.join("; "));
@@ -1073,13 +1277,19 @@ async function handle(method: string, path: string, q: URLSearchParams, body: un
           : undefined,
       status: "PENDING_PAYMENT",
       addonsOnly: input.addonsOnly || undefined,
+      input: input.bulk || input.addonsOnly ? undefined : structuredClone({ ...input, changeOrderId: undefined }),
+      bonusRub: (priced as { bonusRub?: number }).bonusRub || undefined,
     };
+    if (o.bonusRub) {
+      o.totalRub -= o.bonusRub;
+      addBonus({ kind: "spend", amountRub: -o.bonusRub, orderId: o.id, createdAt: Date.now(), note: `заказ ${o.publicCode}` });
+    }
     if (input.contact.name && S.user && !S.user.name) S.user.name = input.contact.name;
     if (input.whoPrints === "bookimi" && input.shipping && input.saveAddress !== false) {
       S.addresses = addToAddressBook(S.addresses, { ...input.shipping.address, id: uuid().slice(0, 12), savedAt: new Date().toISOString(), method: input.shipping.method, name: input.contact.name, phone: input.contact.phone ?? "" });
     }
     S.orders.unshift(o);
-    log(`Заказ ${o.publicCode} оформлен: ${o.totalRub.toLocaleString("ru-RU")} ₽ (${o.whoPrints === "self" ? "PDF" : "печать"}${o.promo ? `, промокод ${o.promo}` : ""}) · уведомление «Заказ оформлен»`);
+    log(`Заказ ${o.publicCode} оформлен: ${o.totalRub.toLocaleString("ru-RU")} ₽ (${o.whoPrints === "self" ? "PDF" : "печать"}${o.promo ? `, промокод ${o.promo}` : ""}${o.bonusRub ? `, бонусами ${o.bonusRub} ₽` : ""}) · уведомление «Заказ оформлен»`);
     commit();
     return ok({ orderId: o.id });
   }
@@ -1087,6 +1297,10 @@ async function handle(method: string, path: string, q: URLSearchParams, body: un
   if (seg[1] === "orders" && seg[2]) {
     const o = orderById(seg[2]);
     if (!o) return err("Не найдено", 404);
+    if (seg[3] === "change" && method === "POST") {
+      if (!S.user) return err("Войдите по коду", 401);
+      return changeOrder(o, b0 as unknown as CheckoutInput);
+    }
     if (method === "GET") return ok({ status: o.status });
     if (b0?.action === "pay") {
       if (!(await canAcceptPayments())) return err("Приём оплаты пока выключен");
@@ -1216,6 +1430,14 @@ function bookAction(book: DBook, b: Record<string, unknown>): R {
   }
   return err("Некорректный запрос");
 }
+
+/** Кнопки входа демо (на сайте — src/lib/oauth.ts, включаются ключами в окружении). */
+const DEMO_OAUTH = [
+  { key: "vkid", title: "VK ID", short: "VK", color: "#0077ff", domain: "vk.com" },
+  { key: "yandex", title: "Яндекс ID", short: "Я", color: "#fc3f1d", domain: "yandex.ru" },
+  { key: "mailru", title: "Mail.ru", short: "@", color: "#005ff9", domain: "mail.ru" },
+  { key: "google", title: "Google", short: "G", color: "#ffffff", domain: "gmail.com" },
+];
 
 // ───────── «Мои данные»: выгрузка ─────────
 export function exportData() {

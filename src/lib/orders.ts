@@ -8,7 +8,7 @@ import { issueReceipt, cancelReceipts } from "./npd";
 import { newbieDiscountPct, onOrderPaid } from "./referral";
 import { notifySafe, alertOwner, orderHeroAcc } from "./notify";
 import { track } from "./events";
-import { shipQuote, type ShipAddress, type ShipMethod } from "./shipping";
+import { shipQuote, shippingMethodError, verifyPvz, type ShipAddress, type ShipMethod } from "./shipping";
 import { hmac } from "./crypto";
 import { addToAddressBook, cleanAddress, parseAddressBook } from "./delivery";
 import { addonFits, audienceOfParams } from "./addons-core";
@@ -157,8 +157,12 @@ async function priceBulk(userId: string, input: CheckoutInput) {
     },
     formats,
   );
-  const promoWins = !q.bulkApplied && !!promo && (promoPct >= newbie || (promo.amountOffRub ?? 0) > 0);
   const printHouse = await db.printHouse.findFirst({ where: { isActive: true } });
+  if (input.whoPrints === "bookimi" && input.shipping) {
+    const e = await shippingMethodError(input.shipping.method, printHouse?.pickupAddress);
+    if (e) q.errors.push(e);
+  }
+  const promoWins = !q.bulkApplied && !!promo && (promoPct >= newbie || (promo.amountOffRub ?? 0) > 0);
   const eta = input.whoPrints === "bookimi" ? etaDate(new Date(), printHouse?.leadDaysMax ?? 5, shipInfo?.daysMax ?? 0) : null;
   return {
     quote: q,
@@ -206,6 +210,11 @@ export async function priceCheckout(userId: string, input: CheckoutInput) {
   );
   const q = picked.quote;
   const printHouse = await db.printHouse.findFirst({ where: { isActive: true } });
+  // Выключенный способ доставки и самовывоз без адреса типографии — отказ на сервере (не только в форме)
+  if (input.whoPrints === "bookimi" && input.shipping) {
+    const e = await shippingMethodError(input.shipping.method, printHouse?.pickupAddress);
+    if (e) q.errors.push(e);
+  }
   const urgent = input.addons.includes("urgent");
   const eta =
     input.whoPrints === "bookimi" ? etaDate(new Date(), printHouse?.leadDaysMax ?? 5, shipInfo?.daysMax ?? 0, urgent) : null;
@@ -229,7 +238,12 @@ export async function createOrder(userId: string, input: CheckoutInput) {
   const title = (book.text as { title?: string } | null)?.title ?? "Персональная книга";
   // «Для каждого»: строка i — книга i (главная, затем копии по порядку списка группы)
   const bulkIds = input.bulk ? [book.id, ...(await (await import("./bulk-server")).ensureBulkCopies(book)).map((b) => b.id)] : null;
-  const ship = input.shipping ? { method: input.shipping.method, address: cleanAddress(input.shipping.method, input.shipping.address) } : null;
+  let ship = input.shipping ? { method: input.shipping.method, address: cleanAddress(input.shipping.method, input.shipping.address) } : null;
+  if (input.whoPrints === "bookimi" && ship?.method === "cdek_pvz") {
+    const v = await verifyPvz(ship.address);
+    if (!v.ok) throw new Error(v.error);
+    ship = { ...ship, address: v.address };
+  }
   const order = await db.order.create({
     data: {
       publicCode: publicCode(),
@@ -338,15 +352,26 @@ export async function startPayment(order: Order, method: string): Promise<Paymen
   return res.view;
 }
 
-/** Покупатель нажал «Я оплатил(а)» — заказ ждёт подтверждения оператором. */
+export class ClaimRejected extends Error {}
+
+/**
+ * Покупатель нажал «Я оплатил(а)» — заказ ждёт подтверждения оператором. Только если покупатель выбрал перевод
+ * (есть незавершённый платёж «transfer») и заказ ждёт оплаты; иначе — понятный отказ, заказ не зависает.
+ * Алерт владельцу — не чаще 3 в час от одного покупателя (остальные видны на дашборде «Перевод: проверить»).
+ */
 export async function claimTransfer(orderId: string, userId: string) {
-  const o = await db.order.findFirst({ where: { id: orderId, userId, status: "PENDING_PAYMENT" } });
-  if (!o) return null;
+  const o = await db.order.findFirst({ where: { id: orderId, userId } });
+  if (!o || o.status !== "PENDING_PAYMENT") return null;
+  const pay = await db.payment.findFirst({ where: { orderId: o.id, provider: "transfer", status: { in: ["created", "pending"] } } });
+  if (!pay) throw new ClaimRejected("Сначала выберите оплату переводом — тогда появятся реквизиты и кнопка «Я оплатил(а)»");
+  if (o.expiresAt && o.expiresAt < new Date()) throw new ClaimRejected("Срок оплаты переводом истёк — выберите способ оплаты заново");
   const r = await db.order.updateMany({ where: { id: o.id, status: "PENDING_PAYMENT" }, data: { status: "AWAITING_CONFIRMATION" } });
   if (r.count !== 1) return null;
   const up = await db.order.findUniqueOrThrow({ where: { id: o.id } });
   await notifySafe(userId, "transfer_waiting", { code: o.publicCode });
-  await alertOwner("Перевод на подтверждении", `Заказ ${o.publicCode}, ${o.totalRub} ₽. Проверьте поступление и подтвердите в админке.`).catch(() => {});
+  const recent = await db.auditLog.count({ where: { action: "transfer.claim", details: { path: ["userId"], equals: userId }, createdAt: { gte: new Date(Date.now() - 3600_000) } } });
+  await audit(null, "transfer.claim", "order", o.id, { userId, alerted: recent < 3 });
+  if (recent < 3) await alertOwner("Перевод на подтверждении", `Заказ ${o.publicCode}, ${o.totalRub} ₽. Проверьте поступление и подтвердите в админке.`).catch(() => {});
   return up;
 }
 
@@ -501,6 +526,13 @@ export const STATUS_FLOW: OrderStatus[] = ["PAID", "IN_PRINT", "PACKED", "SHIPPE
 export async function setStatus(orderId: string, status: OrderStatus, operatorId?: string, track_?: string) {
   const order = await db.order.update({ where: { id: orderId }, data: { status }, include: { shipment: true } });
   if (track_ && order.shipment) await db.shipment.update({ where: { orderId }, data: { trackNumber: track_, status: "in_transit" } });
+  // Готово к отправке (типография упаковала): заказ в СДЭК — автоматически при подключённых ключах
+  if (status === "PACKED" && !track_ && order.shipment && !order.shipment.trackNumber && order.shipment.method.startsWith("cdek_")) {
+    const { createCdekShipment } = await import("./print");
+    await createCdekShipment(orderId).catch((e) =>
+      alertOwner("СДЭК: заказ на доставку не создан", `${order.publicCode}: ${(e as Error).message}. Создайте отправление вручную и внесите трек.`).catch(() => {}),
+    );
+  }
   if (operatorId) await audit(operatorId, "order.status", "order", orderId, { status, track: track_ });
   await notifySafe(order.userId, track_ ? "track" : "status", {
     code: order.publicCode,
@@ -511,7 +543,12 @@ export async function setStatus(orderId: string, status: OrderStatus, operatorId
     eta: order.shipment?.etaDate ? ruDate(order.shipment.etaDate) : "",
     ready: order.readyDate ? ruDate(order.readyDate) : "",
   });
-  if (status === "DELIVERED") await track("delivered", { userId: order.userId, props: { orderId } });
+  if (status === "DELIVERED") {
+    await track("delivered", { userId: order.userId, props: { orderId } });
+    // ИП + ЮKassa: чек зачёта предоплаты при выдаче печатной книги
+    const { yookassaSettlement } = await import("./payments");
+    await yookassaSettlement(orderId).catch((e) => alertOwner("Чек зачёта предоплаты не отправлен", `${order.publicCode}: ${(e as Error).message}. Сформируйте его в личном кабинете ЮKassa.`).catch(() => {}));
+  }
 }
 
 export async function audit(actorId: string | null, action: string, entity: string, entityId?: string, details?: object) {
@@ -534,4 +571,19 @@ export async function checkNpdLimit() {
     await db.auditLog.create({ data: { action: key, entity: "alert" } });
     await alertOwner(`Лимит НПД: ${Math.floor(pct)}%`, `Доход с 1 января — ${income.toLocaleString("ru-RU")} ₽ из ${tax.npdYearLimitRub.toLocaleString("ru-RU")} ₽. Пора готовить переход на ИП.`);
   }
+}
+
+/**
+ * Можно ли оформлять книгу: после превью (PREVIEW_READY и дальше) — всегда; без превью — если текст утверждён
+ * (TEXT_APPROVED), а дневной лимит превью покупателя исчерпан: «купите без ожидания» — иллюстрации нарисуем
+ * после оплаты. Сотрудники ограничены так же (тест покупки без превью — через лимит).
+ */
+export async function checkoutAllowed(book: { status: string }, user: { id: string; email: string | null; phone: string | null }): Promise<{ ok: boolean; withoutPreview: boolean }> {
+  if (["PREVIEW_READY", "FULL_QUEUED", "FULL_READY"].includes(book.status)) return { ok: true, withoutPreview: false };
+  if (book.status !== "TEXT_APPROVED") return { ok: false, withoutPreview: false };
+  const { used } = await import("./limits");
+  const limits = await cfg("limits");
+  const contact = user.email ?? user.phone ?? user.id;
+  const ok = (await used(contact, "preview")) >= limits.previewsPerContact;
+  return { ok, withoutPreview: ok };
 }

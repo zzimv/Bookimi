@@ -21,7 +21,7 @@ export default async function Page({ params }: { params: Promise<{ id: string }>
     return (
       <div className="panel">
         <h1 style={{ fontSize: "var(--fs-xl)" }}>Озвучить своим голосом</h1>
-        <p>Эта возможность — дополнение к мультфильму по книге. Добавить её можно на странице книги.</p>
+        <p>Эта возможность — дополнение к «Оживлению книги». Добавить её можно на странице книги.</p>
         <Link className="btn btn--primary btn--sm" href={`/kabinet/kniga/${id}`}>К книге</Link>
       </div>
     );
@@ -32,7 +32,7 @@ export default async function Page({ params }: { params: Promise<{ id: string }>
     <>
       <p className="small"><Link href={`/kabinet/kniga/${id}`}>← {title}</Link></p>
       <h1 style={{ fontSize: "var(--fs-xl)" }}>Озвучить своим голосом</h1>
-      <p>Прочитайте мультфильм сами — {cues.length || 14} коротких реплик, на всё уйдёт минут десять. Сцены подстроятся под ваш голос.</p>
+      <p>Озвучьте ролик сами — {cues.length || 14} коротких реплик, на всё уйдёт минут десять. Сцены подстроятся под ваш голос.</p>
 
       <div className="panel">
         <b>С чего начать</b>
@@ -66,7 +66,7 @@ export default async function Page({ params }: { params: Promise<{ id: string }>
           busy={c.status === "QUEUED" || c.status === "RENDERING"}
         />
       ) : (
-        <div className="muted-panel" style={{ marginTop: 16 }}>Сценарий появится, когда соберётся первый мультфильм с диктором — обычно через несколько минут после готовности книги.</div>
+        <div className="muted-panel" style={{ marginTop: 16 }}>Сценарий появится, когда соберётся первый ролик с диктором — обычно через несколько минут после готовности книги.</div>
       )}
     </>
   );

@@ -63,6 +63,13 @@ services:
     environment:
       DOMAIN: ${DOMAIN}
       EXTRA_DOMAINS: ${EXTRA_DOMAINS:-www.${DOMAIN}}
+      # Админка: свой хост, белый список IP (CIDR через пробел) и подсеть VPN; базовая авторизация — по флагу
+      ADMIN_HOST: ${ADMIN_HOST:-admin.${DOMAIN}}
+      ADMIN_ALLOW_IPS: ${ADMIN_ALLOW_IPS:-127.0.0.1/32}
+      ADMIN_VPN_SUBNET: ${ADMIN_VPN_SUBNET:-10.13.13.0/24}
+      ADMIN_BASIC_AUTH: ${ADMIN_BASIC_AUTH:-off}
+      ADMIN_BASIC_USER: ${ADMIN_BASIC_USER:-staff}
+      ADMIN_BASIC_HASH: ${ADMIN_BASIC_HASH:-}
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
       - caddy_data:/data
@@ -70,6 +77,34 @@ services:
     depends_on:
       - web
     mem_limit: 64m
+    restart: unless-stopped
+    logging: *logging
+
+  # VPN для сотрудников (README, «Безопасность админки»): профиль vpn — docker compose --profile vpn up -d wireguard.
+  # Сеть хоста: клиенты получают адреса 10.13.13.x, и Caddy видит именно их (для ADMIN_VPN_SUBNET).
+  wireguard:
+    image: lscr.io/linuxserver/wireguard:1.0.20210914
+    profiles: ["vpn"]
+    network_mode: host
+    cap_add:
+      - NET_ADMIN
+      - SYS_MODULE
+    environment:
+      PUID: "1000"
+      PGID: "1000"
+      TZ: Europe/Moscow
+      SERVERURL: ${WG_SERVER_URL:-${DOMAIN}}
+      SERVERPORT: "51820"
+      PEERS: ${WG_PEERS:-owner,operator}
+      INTERNAL_SUBNET: 10.13.13.0
+      # Через туннель — только VPN и сам сервер (админка), остальной интернет — напрямую
+      ALLOWEDIPS: 10.13.13.0/24,${WG_SERVER_PUBLIC_IP:-0.0.0.0}/32
+      PERSISTENTKEEPALIVE_PEERS: all
+    volumes:
+      - ./wireguard:/config
+      - /lib/modules:/lib/modules:ro
+    sysctls:
+      - net.ipv4.conf.all.src_valid_mark=1
     restart: unless-stopped
     logging: *logging
 

@@ -1,3 +1,4 @@
+import { og } from "@/lib/og";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { Breadcrumbs, JsonLd, StickyCta } from "@/components/Layout";
@@ -12,6 +13,7 @@ export const metadata: Metadata = {
   description:
     "Ближайшие праздники и до какого дня заказать печатную именную книгу, чтобы она успела: Новый год, Рождество, Старый Новый год, дни рождения детей, подростков, взрослых и питомцев. PDF — в тот же день.",
   alternates: { canonical: "/prazdniki" },
+  ...og({ title: "Ближайшие праздники: книга в подарок к Новому году, Рождеству и дню рождения", description: "До какого дня заказать печатную именную книгу, чтобы она успела к празднику.", path: "/prazdniki" }),
 };
 
 export default async function Page() {
