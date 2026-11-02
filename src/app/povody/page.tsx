@@ -4,20 +4,21 @@ import Link from "next/link";
 import { Breadcrumbs, StickyCta } from "@/components/Layout";
 import { OCCASIONS as OCCASION_KEYS } from "@/content/profiles";
 import { getOccasions } from "@/lib/catalog";
-import { AUDIENCE_PAGES } from "@/lib/storefront";
+import { AUDIENCE_PAGES, getSoon } from "@/lib/storefront";
 
 export const revalidate = 300;
 
 export const metadata: Metadata = {
-  title: "Книга в подарок к поводу: день рождения, Новый год, годовщина и другие",
-  description: "Персональная книга к любому поводу: день рождения, Новый год, выпускной, 8 Марта, годовщина, юбилей, день питомца. Или впишем ваш собственный повод.",
+  title: "Сказка в подарок к поводу: день рождения, Новый год, выпускной и другие",
+  description: "Персональная сказка для ребёнка к любому поводу: день рождения, Новый год, выпускной в саду, первый класс, рождение брата или сестры. Или впишем ваш собственный повод.",
   alternates: { canonical: "/povody" },
-  ...og({ title: "Книга в подарок к поводу", description: "Персональная книга к любому поводу: день рождения, Новый год, выпускной, 8 Марта, годовщина, юбилей, день питомца.", path: "/povody" }),
+  ...og({ title: "Сказка в подарок к поводу", description: "Персональная сказка для ребёнка к любому поводу: день рождения, Новый год, выпускной в саду, первый класс.", path: "/povody" }),
 };
 
 export default async function Page() {
-  const pages = await getOccasions();
-  const groups = AUDIENCE_PAGES.map((a) => ({
+  const [pages, soon] = await Promise.all([getOccasions(), getSoon()]);
+  // Аудитории «скоро» — без своих поводов (их книги пока не продаются)
+  const groups = AUDIENCE_PAGES.filter((a) => !soon.audiences.includes(a.key)).map((a) => ({
     a,
     list: OCCASION_KEYS.filter((o) => o.audiences.includes(a.key) && pages.some((p) => p.slug === o.key)),
   }));
@@ -30,7 +31,7 @@ export default async function Page() {
           <p className="lead">Любую книгу можно подарить к любому поводу: праздник появится на первой и последней страницах. А если вашего повода нет в списке — впишем свой.</p>
           {groups.map(({ a, list }) => (
             <div key={a.key} style={{ marginBottom: 32 }}>
-              <h2 className="grid-sub">{a.nav}</h2>
+              {groups.length > 1 && <h2 className="grid-sub">{a.nav}</h2>}
               <div className="occasions">
                 {list.map((o) => (
                   <Link key={o.key} href={`/povod/${o.key}`} className="occasion">

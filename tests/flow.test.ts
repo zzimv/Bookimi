@@ -156,7 +156,7 @@ describe("книга для каждого в группе", () => {
     });
     expect(groupChildren(a).map((c) => c.name)).toEqual(["Маша", "Петя", "Аня", "Саша"]);
     const c = bulkCopyAnswers(a, 3, "Для {ГЕРОЙ.род}");
-    expect(c.hero).toMatchObject({ name: "Саша", gender: "girl", ageGroup: "6-7" });
+    expect(c.hero).toMatchObject({ name: "Саша", gender: "girl", ageGroup: "5-7" }); // старое «6-7» → 5–7 лет
     expect(c.group!.members.map((m) => m.name)).toEqual(["Маша", "Петя", "Аня"]);
     expect(c.group!.members[0].description).toContain("рыжие");
     expect(c.group!.adults[0].name).toBe("Мария Ивановна");

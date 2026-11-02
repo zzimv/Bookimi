@@ -9,7 +9,7 @@ import { deleteHolidayAction, moveHolidayAction, saveHolidayAction, toggleHolida
 
 export default async function Page() {
   const u = await requireAdmin("holidays");
-  const [items, lead, stories] = await Promise.all([getHolidays(), getLeadTimes(), getStories()]);
+  const [items, lead, stories] = await Promise.all([getHolidays(), getLeadTimes(), getStories({ includeSoon: true })]);
   return (
     <>
       <h1 style={{ fontSize: "var(--fs-xl)" }}>Праздники</h1>

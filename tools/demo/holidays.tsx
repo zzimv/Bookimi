@@ -66,7 +66,7 @@ const actions = {
 };
 
 export async function AdminHolidays() {
-  const [lead, stories] = await Promise.all([getLeadTimes(), getStories()]);
+  const [lead, stories] = await Promise.all([getLeadTimes(), getStories({ includeSoon: true })]);
   return (
     <>
       <h1 style={{ fontSize: "var(--fs-xl)" }}>Праздники</h1>

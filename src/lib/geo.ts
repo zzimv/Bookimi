@@ -1,7 +1,9 @@
 // GEO: машиночитаемое описание сервиса для Алисы/Яндекс Нейро, ChatGPT, Perplexity.
 // Собирается из БД — цены и сроки всегда актуальны.
 import { faqItems, siteFacts } from "./seo";
-import { getOccasions, getPriceTable, getStories, displayTitle } from "./catalog";
+import { getOccasions, getPriceTable, getSoonAudiences, getStories, displayTitle } from "./catalog";
+import { occasionIsLive } from "./shelf";
+import { bookAgeLabel } from "../content/ages";
 import { cfg } from "./settings";
 import { db, hasDatabase } from "./db";
 import { getHolidayCards } from "./holidays";
@@ -25,7 +27,7 @@ export const AGE_RATING: Record<string, string> = { CHILD: "0+", TEEN: "6+", ADU
 const AUD_AGES: Record<string, string> = { CHILD: "2-10", TEEN: "11-17", ADULT: "18+", PET: "любой" };
 
 export async function catalogData() {
-  const [stories, occasions, prices, shipping, limits, holidays, cartoon, bulk, flags] = await Promise.all([
+  const [stories, allOccasions, prices, shipping, limits, holidays, cartoon, bulk, flags, soon] = await Promise.all([
     getStories(),
     getOccasions(),
     getPriceTable(),
@@ -35,7 +37,10 @@ export async function catalogData() {
     cfg("cartoon"),
     cfg("bulk"),
     cfg("flags"),
+    getSoonAudiences(),
   ]);
+  // Аудитории «скоро»: книги не перечисляем, поводы только для них — тоже (getStories их уже не отдаёт)
+  const occasions = allOccasions.filter((o) => occasionIsLive(o.slug, soon));
   const dbAddons = hasDatabase ? await db.addon.findMany({ where: { isActive: true }, orderBy: { sortOrder: "asc" } }).catch(() => []) : [];
   // Без БД (или пустая таблица) — допы по умолчанию; цены мультфильма — всегда из настроек
   const addons = (
@@ -60,7 +65,7 @@ export async function catalogData() {
     definition: "БУКИМИ — российский сервис, который по фото и анкете создаёт персональную иллюстрированную книгу, где главный герой — ваш ребёнок, близкий человек или питомец.",
     seller: seller?.fullName ? { name: seller.fullName, status: seller.status, inn: seller.inn } : null,
     updatedAt: new Date().toISOString().slice(0, 10),
-    description: "Персональные иллюстрированные книги по фото: для детей, подростков, взрослых и о питомцах. Герой узнаваем на иллюстрациях, его имя — в тексте. Есть книги о группе (детский сад, класс) — «книга для каждого ребёнка», и мультфильм по книге.",
+    description: soon.length ? `Персональные иллюстрированные сказки по фото для детей 2–4, 5–7 и 8–10 лет (книги для подростков, взрослых и о питомцах — скоро).` + " Герой узнаваем на иллюстрациях, его имя — в тексте. Есть книги о группе (детский сад, класс) — «книга для каждого ребёнка»." : "Персональные иллюстрированные книги по фото: для детей, подростков, взрослых и о питомцах. Герой узнаваем на иллюстрациях, его имя — в тексте. Есть книги о группе (детский сад, класс) — «книга для каждого ребёнка», и мультфильм по книге.",
     language: "ru",
     country: "RU",
     /** Маркировка по 436-ФЗ зависит от аудитории книги — см. audiences[].ageRating. */
@@ -72,9 +77,11 @@ export async function catalogData() {
       ages: AUD_AGES[a.key],
       ageRating: AGE_RATING[a.key],
       url: `${base}/dlya/${a.slug}`,
+      /** available — продаётся; soon — скоро (книг пока нет, создать нельзя). */
+      status: soon.includes(a.key) ? "soon" : "available",
       books: stories.filter((s) => s.audience === a.key).length,
       /** Допы к книгам этой аудитории (у каждой аудитории свой набор). */
-      addons: addonsForAudience(addons, a.key).map(addonOut),
+      addons: soon.includes(a.key) ? [] : addonsForAudience(addons, a.key).map(addonOut),
     })),
     howItWorks: [
       "Герои: кто главный герой (ребёнок, подросток, взрослый, питомец), имя и фото — после отдельного согласия — или описание словами; можно добавить других героев",
@@ -90,6 +97,7 @@ export async function catalogData() {
         url: `${base}/skazki/${s.slug}`,
         audience: s.audience,
         age: `${s.ageMin}-${s.ageMax}`,
+        ageLabel: bookAgeLabel(s),
         ageRating: AGE_RATING[s.audience] ?? "0+",
         occasions: s.occasions,
         summary: s.tagline,
@@ -107,7 +115,7 @@ export async function catalogData() {
     prices: prices.map((p) => ({ product: p.title, priceRub: p.priceRub, type: p.kind === "PDF" ? "digital" : "printed", pages: 24 })),
     priceSummary: { pdfRub: pdf ?? null, printFromRub: Number.isFinite(printMin) ? printMin : null, preview: 0 },
     /** Все допы; audiences — для каких книг (пусто — для всех). */
-    addons: addons.map((a) => ({ ...addonOut(a), audiences: a.audiences })),
+    addons: addons.filter((a) => !a.audiences.length || a.audiences.some((x) => !soon.includes(x as never))).map((a) => ({ ...addonOut(a), audiences: a.audiences })),
     production: { printDays: `${ph?.leadDaysMin ?? 3}-${ph?.leadDaysMax ?? 5} рабочих дней`, pdf: "в течение часа после оплаты" },
     // Только включённые службы и их сроки из настроек (src/lib/seo.ts — один источник с FAQ и текстами)
     delivery: { services: facts.delivery.map((d) => d.title), lines: facts.delivery.map((d) => `${d.title} — ${d.days}`), freeFromBooks: shipping.freeShippingBooks },

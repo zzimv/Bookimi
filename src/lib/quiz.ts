@@ -4,6 +4,7 @@
 import { AnswersV2, heroKindFor, type AnswersV2T } from "../content/answers";
 import { OCCASIONS, SEGMENTS, type AudienceKey } from "../content/profiles";
 import { dedicationsFor } from "./dedications";
+import { KID_AGE_GROUPS, kidGroupByAge, kidGroupByKey } from "../content/ages";
 
 export { AnswersV2, ContactV2, normalizePhone, extraGender } from "../content/answers";
 
@@ -11,12 +12,9 @@ export { AnswersV2, ContactV2, normalizePhone, extraGender } from "../content/an
 export const Answers = AnswersV2;
 export type QuizAnswers = AnswersV2T;
 
-export const AGE_GROUPS = [
-  { key: "2-3", label: "2–3 года", age: 3 },
-  { key: "4-5", label: "4–5 лет", age: 5 },
-  { key: "6-7", label: "6–7 лет", age: 7 },
-  { key: "8-9", label: "8–9 лет", age: 9 },
-] as const;
+/** Возраст ребёнка в анкете: строго 2–4, 5–7, 8–10 (src/content/ages.ts) — как фильтры каталога и группы книг. */
+export const AGE_GROUPS = KID_AGE_GROUPS.map((g) => ({ key: g.key, label: g.label, age: g.age, segment: g.segment }));
+export { KID_AGE_GROUPS, kidGroupByKey, kidGroupOf, bookAgeLabel } from "../content/ages";
 
 export const HAIR = ["светлые", "русые", "каштановые", "тёмные", "рыжие", "чёрные"];
 export const HAIR_ADULT = [...HAIR, "седые", "с проседью"];
@@ -96,7 +94,7 @@ export function heroAge(a: Pick<QuizAnswers, "hero" | "audience">) {
     const b = new Date(a.hero.birthDate);
     if (!isNaN(+b)) return Math.max(a.audience === "PET" ? 0 : 1, Math.floor((Date.now() - +b) / (365.25 * 86400_000)));
   }
-  const g = AGE_GROUPS.find((x) => x.key === a.hero.ageGroup)?.age;
+  const g = kidGroupByKey(a.hero.ageGroup)?.age;
   return g ?? DEFAULT_AGE[(a.audience ?? "CHILD") as AudienceKey];
 }
 
@@ -112,6 +110,12 @@ export function segmentFor(a: QuizAnswers, plotSegments: string[] = []) {
   const explicit = all.find((s) => s.id === a.segment);
   if (explicit) return explicit;
   const pool = plotSegments.length ? all.filter((s) => plotSegments.includes(s.id)) : all;
+  // Дети: группа анкеты → сегмент 1:1 (у детской книги ровно одна группа — она и главнее)
+  if (a.audience === "CHILD") {
+    const byPlot = pool.length === 1 && plotSegments.length ? pool[0] : undefined;
+    const g = kidGroupByKey(a.hero.ageGroup) ?? kidGroupByAge(heroAge(a));
+    return byPlot ?? all.find((s) => s.id === g.segment) ?? all[0];
+  }
   const age = heroAge(a);
   if (a.audience === "PET") {
     const sp = a.pet.species === "cat" ? "pet-cat" : "pet-dog";

@@ -275,7 +275,7 @@ const html = `<!doctype html>
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>БУКИМИ демо rev 10</title>
+<title>БУКИМИ демо rev 11</title>
 <meta name="description" content="Интерактивный демо-стенд БУКИМИ: витрина, анкета, книга, оплата, кабинет и админка — без сервера.">
 <meta name="claude:viewport-fit-sides" content="cover">
 <script>${themeScript}</script>

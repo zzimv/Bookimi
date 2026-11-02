@@ -4,7 +4,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { db, hasDatabase } from "./db";
 import { cfg } from "./settings";
-import { soonAudiences } from "./shelf";
+import { occasionIsLive, soonAudiences } from "./shelf";
 import { getApprovedReviews, type PublicStory } from "./catalog";
 import { OCCASIONS as OCCASION_KEYS, SEGMENTS, type AudienceKey } from "../content/profiles";
 import { getNearestHoliday } from "./holidays";
@@ -18,7 +18,7 @@ export const AUDIENCE_PAGES: { slug: string; key: AudienceKey; nav: string; /** 
     nav: "Детям",
     menu: "Дети",
     h1: "Сказки, где ваш ребёнок — главный герой",
-    lead: "Для малышей 2–4 лет — тихие сказки на ночь и повторялки, для 5–10 лет — приключения, загадки и стихи. Имя, внешность и любимые игрушки ребёнка — на каждой странице.",
+    lead: "Для 2–4 лет — тихие сказки на ночь и повторялки, для 5–7 лет — приключения и праздники, для 8–10 лет — загадки, детективы и стихи. Имя, внешность и любимые игрушки ребёнка — на каждой странице.",
     title: "Персональные сказки для детей 2–10 лет",
     description: "Именная книга, где ребёнок — главный герой: сказки на ночь, приключения, стихи. Бесплатное превью, PDF 990 ₽, печать от 2 490 ₽.",
     hero: "ребёнок",
@@ -161,6 +161,8 @@ export async function getSeason(now = new Date()): Promise<Season | null> {
   const near = s.mode === "auto" ? await getNearestHoliday(now).catch(() => null) : null;
   const key = s.mode === "manual" ? s.occasion : (near?.calc.holiday.occasionKey ?? seasonByDate(now));
   if (!key) return null;
+  // Сезон только аудиторий «скоро» (14 Февраля — взрослым) не рекламируем: его книг на витрине нет
+  if (!occasionIsLive(key, soonAudiences((await cfg("storefront")).soon))) return null;
   const o = OCCASION_KEYS.find((x) => x.key === key);
   if (!o && !near) return null;
   const label = near?.calc.holiday.title ?? o!.label;

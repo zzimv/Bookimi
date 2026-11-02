@@ -765,7 +765,7 @@ export const drawPet: DemoHeroDrawer = (o) => {
   const k = 1.18 * (kind === "dog" || kind === "cat" ? spec.size : kind === "turtle" ? 0.75 : kind === "bird" ? 0.7 : 0.72);
   const sx = o.flip ? -o.scale * k : o.scale * k;
   const gy = o.y + 190 * o.scale;
-  return `<g transform="translate(${f(o.x)} ${f(gy)}) scale(${f(sx * 1000) / 1000} ${f(o.scale * k * 1000) / 1000}) translate(0 -190)">${body}</g>`;
+  return `<g data-species="${kind}" transform="translate(${f(o.x)} ${f(gy)}) scale(${f(sx * 1000) / 1000} ${f(o.scale * k * 1000) / 1000}) translate(0 -190)">${body}</g>`;
 };
 
 // ---------------------------------------------------------------------------

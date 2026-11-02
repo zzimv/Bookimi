@@ -13,6 +13,9 @@ import { METHOD_TITLES } from "../../src/lib/shipping";
 import { ADDONS, FORMATS } from "../../src/lib/catalog-defaults";
 import { audiencesLabel } from "../../src/lib/addons-core";
 import { DEFAULTS, getReadiness } from "../../src/lib/settings";
+import { PLOTS } from "../../src/content/registry";
+import { titleForCatalog } from "../../src/content/title";
+import { bookAgeLabel } from "../../src/content/ages";
 import { addPromo, bookById, confirmTransfer, moderateReview, mskDay, orderById, pageUrl, resetLimits, S, setDemoFlags, setLimits, setPrices, setSoon, setStatus, spentTodayRub, STATUS_FLOW, togglePromo } from "./api";
 import { DemoFullBook } from "./fullbook";
 import { AUDIENCE_PAGES } from "../../src/lib/storefront";
@@ -540,6 +543,16 @@ export function AdminCatalog() {
         <button className="btn btn--primary btn--sm" data-demo="save-prices">Сохранить цены</button>
         {msg && <p className="ok small">{msg}</p>}
       </form>
+      <h2 style={{ fontSize: "var(--fs-lg)", marginTop: 24 }}>Сюжеты</h2>
+      <p className="muted small">Книги аудиторий «скоро» (Настройки → Витрина) покупатель не видит нигде; здесь они остаются с отметкой.</p>
+      <ul className="panel" data-demo="admin-plots" style={{ listStyle: "none", display: "grid", gap: 6 }}>
+        {PLOTS.map((pl) => (
+          <li key={pl.slug} data-plot={pl.slug} data-soon={DEFAULTS.storefront.soon[pl.audience] ? "1" : undefined}>
+            {titleForCatalog(pl.title, pl.audience)} <span className="muted small">· {AUDIENCE_RU[pl.audience]} · {bookAgeLabel({ audience: pl.audience, ageMin: pl.ageMin ?? 0, ageMax: pl.ageMax ?? 0, segments: pl.segments })}</span>
+            {DEFAULTS.storefront.soon[pl.audience] && <> <span className="soon-badge">скоро</span></>}
+          </li>
+        ))}
+      </ul>
     </>
   );
 }

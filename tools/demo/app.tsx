@@ -13,6 +13,7 @@ import OccasionsPage from "../../src/app/povody/page";
 import OccasionPage from "../../src/app/povod/[slug]/page";
 import SozdatPage from "../../src/app/sozdat/page";
 import PrazdnikiPage from "../../src/app/prazdniki/page";
+import VozrastPage from "../../src/app/vozrast/[slug]/page";
 import { AdminHolidays, DemoGeroi, resetHolidays } from "./holidays";
 import NotFound from "../../src/app/not-found";
 import { exportData, installApi, onAccountDeleted, onStoreChange, resetLimits, resetStore, resumeJobs, S, setDemoFlags, svgUrl } from "./api";
@@ -21,6 +22,7 @@ import { DemoPay, KabinetBook, KabinetDannye, KabinetHome, KabinetLayout, Kabine
 import { AdminCatalog, AdminDashboard, AdminHome, AdminJournal, AdminLayout, AdminOrder, AdminOrders, AdminPromos, AdminReviews, AdminSettings, AdminTransfers } from "./admin";
 import { bindRouter, currentPath, currentQuery, currentUrl, demoHref, NotFoundError, push, RedirectError } from "./router";
 import { DEFAULTS } from "../../src/lib/settings";
+import { normalizeName } from "../../src/lib/declension";
 
 // Демо показывает и пробные стили картинок (значок «пробный»); на сайте они скрыты до настройки art.showTrialStyles
 DEFAULTS.art.showTrialStyles = true;
@@ -62,7 +64,7 @@ function say(t: string) {
 }
 
 // ───────── маршруты ─────────
-const LEGAL = /^\/(oferta|politika|soglasie|vozvrat|cookies|kontakty|blog|otpiska|chek|vozrast|demo-receipt|api\/books\/[^/]+\/download)/;
+const LEGAL = /^\/(oferta|politika|soglasie|vozvrat|cookies|kontakty|blog|otpiska|chek|demo-receipt|api\/books\/[^/]+\/download)/;
 const CAB_TITLES: Record<string, string> = { geroi: "Мои герои", drug: "Приведи друга", uvedomleniya: "Уведомления", dannye: "Мои данные", podderzhka: "Поддержка", otzyv: "Отзыв о книге" };
 
 function page(path: string, q: Record<string, string>) {
@@ -77,6 +79,8 @@ function page(path: string, q: Record<string, string>) {
       return <AudiencePage params={params({ audience: p[1] ?? "" })} />;
     case "povody":
       return <OccasionsPage />;
+    case "vozrast":
+      return <VozrastPage params={params({ slug: p[1] ?? "" })} />;
     case "prazdniki":
       return <PrazdnikiPage />;
     case "povod":
@@ -179,7 +183,7 @@ function View() {
       <div className="demo-bar">
         <div className="wrap demo-bar__in">
           <span className="demo-bar__text">
-            <b>Демо-стенд <span className="demo-rev">rev 10</span>.</b> <span className="demo-bar__long">Всё работает в этом окне: оплата понарошку, фото не покидает браузер, письма не отправляются. На сайте админка — только на admin.&lt;домен&gt; и только через VPN.</span>
+            <b>Демо-стенд <span className="demo-rev">rev 11</span>.</b> <span className="demo-bar__long">Всё работает в этом окне: оплата понарошку, фото не покидает браузер, письма не отправляются. На сайте админка — только на admin.&lt;домен&gt; и только через VPN.</span>
           </span>
           <nav className="demo-tabs" aria-label="Демо">
             <a href="#/" aria-current={!admin ? "page" : undefined}>Сайт</a>
@@ -307,7 +311,7 @@ document.addEventListener(
 
 // Имя на обложках (NamePreview пишет в localStorage) — применить при загрузке, как на сайте
 try {
-  const n = (localStorage.getItem("bookimi.heroName") ?? "").replace(/[^A-Za-zА-Яа-яЁё\- ]/g, "").slice(0, 20);
+  const n = normalizeName((localStorage.getItem("bookimi.heroName") ?? "").replace(/[^A-Za-zА-Яа-яЁё\- ]/g, "").slice(0, 20));
   if (n) {
     document.documentElement.style.setProperty("--hero-name", `"${n}"`);
     document.documentElement.classList.add("has-name");

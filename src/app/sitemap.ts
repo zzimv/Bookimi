@@ -1,5 +1,6 @@
 import type { MetadataRoute } from "next";
-import { getOccasions, getStories } from "@/lib/catalog";
+import { getOccasions, getSoonAudiences, getStories } from "@/lib/catalog";
+import { occasionIsLive } from "@/lib/shelf";
 import { AGE_PAGES } from "@/lib/catalog-defaults";
 import { db, hasDatabase } from "@/lib/db";
 import { LEGAL } from "@/lib/legal";
@@ -12,7 +13,9 @@ export const SITE_UPDATED = new Date("2026-11-02T00:00:00+03:00");
 
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const base = `https://${process.env.DOMAIN ?? "bookimi.ru"}`;
-  const [stories, occasions] = await Promise.all([getStories(), getOccasions()]);
+  const [stories, allOccasions, soon] = await Promise.all([getStories(), getOccasions(), getSoonAudiences()]);
+  // Поводы только аудиторий «скоро» (их страницы отвечают 404) — не в карте сайта
+  const occasions = allOccasions.filter((o) => occasionIsLive(o.slug, soon));
   const posts = hasDatabase ? await db.blogPost.findMany({ where: { publishedAt: { not: null } }, select: { slug: true, updatedAt: true } }).catch(() => []) : [];
   // lastmod — из дат изменения (сюжет, повод, статья, тексты документов), а не «сейчас»: иначе Яндекс перестаёт ему верить
   const [storyDates, occDates, legalSet] = hasDatabase

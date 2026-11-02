@@ -7,6 +7,7 @@ import { Breadcrumbs, JsonLd, StickyCta } from "@/components/Layout";
 import { Faq } from "@/components/Sections";
 import { getMinPrice, getOccasion, getOccasions } from "@/lib/catalog";
 import { getSoon, printDeadlineLine } from "@/lib/storefront";
+import { occasionIsLive } from "@/lib/shelf";
 import { cfg } from "@/lib/settings";
 import { faqItems, fillFacts, siteFacts } from "@/lib/seo";
 
@@ -35,8 +36,10 @@ export default async function Page({ params }: { params: Promise<{ slug: string 
   if (!occasion) notFound();
   // Разделы повода — как в анкете (plotSections): написанные к поводу, «Своя история», «Тоже подойдут», остальные
   const [sections, soon] = await Promise.all([sectionedStories(occasion.slug), getSoon()]);
+  // Повод только аудиторий «скоро» (14 Февраля, юбилей, день питомца…): страницы нет, пока аудитория не запущена
+  if (!occasionIsLive(occasion.slug, soon.audiences)) notFound();
   // Повод одной аудитории («Юбилей» — взрослые, «День питомца» — питомцы): анкета открывается сразу для неё
-  const auds = OCCASION_KEYS.find((o) => o.key === occasion.slug)?.audiences ?? [];
+  const auds = (OCCASION_KEYS.find((o) => o.key === occasion.slug)?.audiences ?? []).filter((x) => !soon.audiences.includes(x));
   const dlya = auds.length === 1 ? (auds[0] as AudienceKey) : undefined;
   const deadline = printDeadlineLine(occasion.slug, (await cfg("season")).printDeadline);
 

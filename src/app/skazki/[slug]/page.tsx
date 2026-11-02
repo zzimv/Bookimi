@@ -27,7 +27,7 @@ export async function generateMetadata({ params }: { params: Promise<{ slug: str
   const s = await getStory(slug);
   if (!s) return {};
   const title = s.seoTitle ?? `${displayTitle(s.title, s.audience)} — персональная книга`;
-  const description = s.seoDescription ?? `${s.tagline} ${ageLabel(s.ageMin, s.ageMax, s.audience)}. Бесплатное превью, PDF 990 ₽, печатная книга от 2 490 ₽.`;
+  const description = s.seoDescription ?? `${s.tagline} ${ageLabel(s.ageMin, s.ageMax, s.audience, s.segments)}. Бесплатное превью, PDF 990 ₽, печатная книга от 2 490 ₽.`;
   return { title, description, alternates: { canonical: `/skazki/${s.slug}` }, ...og({ title, description, slug: s.slug, path: `/skazki/${s.slug}`, alt: `Обложка-пример: ${displayTitle(s.title, s.audience)}` }) };
 }
 
@@ -100,8 +100,17 @@ export default async function Page({ params }: { params: Promise<{ slug: string 
           <p className="product__tag small muted">Обложка-пример. В вашей книге герой будет похож на себя — по фото или описанию.</p>
         </div>
         <div className="product__info">
-          <p className="eyebrow">{ageLabel(story.ageMin, story.ageMax, story.audience)}</p>
-          <h1>{title}</h1>
+          <p className="eyebrow">{ageLabel(story.ageMin, story.ageMax, story.audience, story.segments)}</p>
+          <h1 data-title={title}>
+            {story.title.startsWith("[Имя]") ? (
+              <>
+                <span className="name-slot" data-ph={HERO_WORD[story.audience]} />
+                {story.title.slice("[Имя]".length)}
+              </>
+            ) : (
+              title
+            )}
+          </h1>
           <p className="lead">{story.tagline}</p>
           <NamePreview label={NAME_LABEL[story.audience]} placeholder={NAME_PH[story.audience]} hint="Имя сразу появится на обложке" />
           <div className="product__price">

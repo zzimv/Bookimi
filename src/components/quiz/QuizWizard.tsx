@@ -12,7 +12,7 @@ import { useRouter } from "next/navigation";
 import { Cover } from "@/components/Cover";
 import { api, goal } from "@/lib/client";
 import {
-  ADULT_AGES, AGE_GROUPS, AUDIENCE_EXTRA_ROLES, CLOTHES, dedicationsFor, EXTRA_ROLE_LABELS, FUR, HAIR, HAIR_ADULT, HAIRSTYLE, INTERESTS, occasionChips, SKIN, TEEN_INTERESTS,
+  ADULT_AGES, AGE_GROUPS, AUDIENCE_EXTRA_ROLES, bookAgeLabel, kidGroupByKey, kidGroupOf, CLOTHES, dedicationsFor, EXTRA_ROLE_LABELS, FUR, HAIR, HAIR_ADULT, HAIRSTYLE, INTERESTS, occasionChips, SKIN, TEEN_INTERESTS,
   type QuizAnswers,
 } from "@/lib/quiz";
 import { fillTags, normalizeName } from "@/lib/declension";
@@ -206,6 +206,7 @@ export function QuizWizard({
   presetOccasion = false,
   photoEnabled = true,
   bulkTiers = DEFAULT_BULK_TIERS,
+  soon = [],
 }: {
   stories: QuizStory[];
   styles: QuizStyle[];
@@ -221,6 +222,8 @@ export function QuizWizard({
   /** Приём фото включён (Настройки → flags.photoUploadEnabled). Иначе — только описание. */
   photoEnabled?: boolean;
   bulkTiers?: BulkTier[];
+  /** Аудитории «скоро» (storefront.soon): их не предлагаем в «Кто герой?». */
+  soon?: AudienceKey[];
 }) {
   const router = useRouter();
   const [a, setA] = useState<Draft>(() => { const e = empty(initial.audience); return { ...e, ...initial, hero: { ...e.hero, ...initial.hero }, group: { members: [], adults: [], ...(initial.group ?? {}) } }; });
@@ -389,15 +392,28 @@ export function QuizWizard({
 
   const age = typeof a.hero.age === "number" ? a.hero.age : undefined;
   const heroAgeNum = aud === "CHILD" ? AGE_GROUPS.find((g) => g.key === a.hero.ageGroup)?.age : age;
+  // Дети: книга написана для одной группы (2–4, 5–7, 8–10) — выбрана группа, предлагаем только её книги
+  const kidGroup = aud === "CHILD" ? kidGroupByKey(a.hero.ageGroup) : undefined;
+  const lockedKidGroup = locked && aud === "CHILD" && story ? kidGroupOf(story.segments) : undefined;
+  useEffect(() => {
+    // Книга выбрана заранее (страница книги) — возраст анкеты = группа этой книги
+    if (lockedKidGroup && a.hero.ageGroup !== lockedKidGroup.key) hero({ ageGroup: lockedKidGroup.key });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [lockedKidGroup, a.hero.ageGroup]);
+  useEffect(() => {
+    // Аудитория «скоро» (старый черновик, ссылка) — анкета открывается для ребёнка
+    if (loaded && soon.includes(aud)) chooseAudience("CHILD");
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loaded, aud]);
 
   // Шаг «Книга»: те же разделы повода, что на сайте (sections.ts), с учётом возраста героя
   const occ = occChosen ? a.occasion.key : "bez";
   const sections = useMemo(() => {
     const byAud = stories.filter((s) => s.audience === aud);
-    const byAge = heroAgeNum !== undefined && (aud === "CHILD" || aud === "TEEN") ? byAud.filter((s) => s.ageMin <= heroAgeNum && heroAgeNum <= s.ageMax) : byAud;
+    const byAge = kidGroup ? byAud.filter((s) => kidGroupOf(s.segments)?.key === kidGroup.key) : heroAgeNum !== undefined && aud === "TEEN" ? byAud.filter((s) => s.ageMin <= heroAgeNum && heroAgeNum <= s.ageMax) : byAud;
     const pool = (byAge.length ? byAge : byAud).map((s) => ({ ...s, core: s.core ?? [], hooks: s.hooks ?? [] }));
     return sectionsOf(pool, occ);
-  }, [stories, aud, heroAgeNum, occ]);
+  }, [stories, aud, heroAgeNum, kidGroup, occ]);
 
   const audStyles = useMemo(() => {
     const list = styles.filter((s) => !s.audiences || s.audiences.includes(aud));
@@ -457,6 +473,7 @@ export function QuizWizard({
       if (aud === "CHILD" && !a.hero.ageGroup && !a.hero.birthDate) return "Укажите возраст или дату рождения";
       if (aud === "TEEN" && (a.hero.age === undefined || a.hero.age < 11 || a.hero.age > 17)) return "Укажите возраст: от 11 до 17 лет";
       if (!extrasNamed()) return "Укажите имя каждого героя (для «своего варианта» — кто это) или уберите лишнего";
+      if (a.extras.some((e) => e.role === "pet" && !e.species)) return "Кто ваш питомец: кошка, собака или другое?";
     }
     if (s === "occasion" && occChosen && a.occasion.key === "svoj" && !a.occasion.custom?.trim()) return "Напишите, какой у вас повод";
     if (s === "book") {
@@ -563,7 +580,7 @@ export function QuizWizard({
         <span className="choice__badges">
           {badge && <span className={`badge ${badge === "к вашему поводу" ? "badge--gold" : ""}`}>{badge}</span>}
           {s.group && <span className="badge">вся {s.group.label === "класс" ? "класс" : "группа"} — до {s.group.max}</span>}
-          {(aud === "CHILD" || aud === "TEEN") && <span className="badge">{s.ageMin}–{s.ageMax} лет</span>}
+          {(aud === "CHILD" || aud === "TEEN") && <span className="badge">{bookAgeLabel({ audience: aud, ageMin: s.ageMin, ageMax: s.ageMax, segments: s.segments })}</span>}
         </span>
       </div>
     </button>
@@ -702,7 +719,12 @@ export function QuizWizard({
                 {!locked && !presetAudience && (
                   <>
                     <span className="label">Кто герой?</span>
-                    <Chips name="kind" label="Кто герой" items={KIND_CARDS.map((k) => ({ key: k.key, label: k.label }))} value={aud} onChange={(v) => v && chooseAudience(v as AudienceKey)} />
+                    {KIND_CARDS.filter((k) => !soon.includes(k.key)).length > 1 ? (
+                      <Chips name="kind" label="Кто герой" items={KIND_CARDS.filter((k) => !soon.includes(k.key)).map((k) => ({ key: k.key, label: k.label }))} value={aud} onChange={(v) => v && chooseAudience(v as AudienceKey)} />
+                    ) : (
+                      <p className="small muted" data-kind-only={aud}>Ребёнок 2–10 лет. Книги для подростков, взрослых и питомцев — скоро.</p>
+                    )}
+                    {soon.length > 0 && KIND_CARDS.filter((k) => !soon.includes(k.key)).length > 1 && <p className="small muted">Скоро: {KIND_CARDS.filter((k) => soon.includes(k.key)).map((k) => k.label.toLowerCase()).join(", ")}.</p>}
                   </>
                 )}
                 <div className="grid2">
@@ -731,7 +753,8 @@ export function QuizWizard({
                 {aud === "CHILD" && (
                   <>
                     <span className="label">Возраст <span className="req">*</span></span>
-                    <Chips name="age" label="Возраст" items={AGE_GROUPS.map((g) => ({ key: g.key, label: g.label }))} value={(a.hero.ageGroup ?? "") as "2-3"} onChange={(v) => hero({ ageGroup: (v || undefined) as "2-3" })} />
+                    <Chips name="age" label="Возраст" items={AGE_GROUPS.filter((g) => !lockedKidGroup || g.key === lockedKidGroup.key).map((g) => ({ key: g.key, label: g.label }))} value={(a.hero.ageGroup ?? "") as "2-4"} onChange={(v) => hero({ ageGroup: (v || undefined) as "2-4" })} />
+                    {lockedKidGroup && <small className="muted" data-age-locked>Текст этой книги написан для детей {lockedKidGroup.label.replace("года", "лет")}.</small>}
                     <details className="more" open={Boolean(a.hero.birthDate)}>
                       <summary>или указать дату рождения</summary>
                       <label className="field" style={{ maxWidth: 260 }}>
@@ -797,12 +820,28 @@ export function QuizWizard({
                   <fieldset className="hero-card hero-card--extra" key={i} data-extra={i}>
                     <legend>{required ? EXTRA_ROLE_LABELS[e.role] ?? "Герой" : `Ещё герой ${i + 1}`}</legend>
                     {!required && (
-                      <Chips name={`role-${i}`} label="Кто это" items={roleOptions.map((r) => ({ key: r, label: aud === "PET" && r === "pet" ? "Ещё питомец" : EXTRA_ROLE_LABELS[r] ?? r }))} value={e.role} onChange={(v) => setExtra(i, { role: ((v as string) || e.role) as Extra["role"], gender: undefined })} />
+                      <Chips name={`role-${i}`} label="Кто это" items={roleOptions.map((r) => ({ key: r, label: aud === "PET" && r === "pet" ? "Ещё питомец" : EXTRA_ROLE_LABELS[r] ?? r }))} value={e.role} onChange={(v) => setExtra(i, { role: ((v as string) || e.role) as Extra["role"], gender: undefined, species: undefined })} />
                     )}
                     {e.role === "custom" && (
                       <label className="field">
                         <span>Кто или что это <span className="req">*</span></span>
                         <input className="input" name={`extra-what-${i}`} maxLength={60} value={e.what ?? ""} onChange={(ev) => setExtra(i, { what: ev.target.value })} placeholder="Дерево, робот, машинка, облако, плюшевый заяц" />
+                      </label>
+                    )}
+                    {/* Питомец: вид обязателен — по нему и текст («кошка Мурка»), и рисунок */}
+                    {e.role === "pet" && (
+                      <Chips name={`extra-species-${i}`} label="Кто это" items={[{ key: "cat", label: "Кошка" }, { key: "dog", label: "Собака" }, { key: "other", label: "Другое" }]} value={(e.species ?? "") as "cat"} onChange={(v) => setExtra(i, { species: (v || undefined) as Extra["species"] })} />
+                    )}
+                    {e.role === "pet" && e.species === "other" && (
+                      <label className="field">
+                        <span>Какой это питомец</span>
+                        <input className="input" name={`extra-what-${i}`} maxLength={60} value={e.what ?? ""} onChange={(ev) => setExtra(i, { what: ev.target.value })} placeholder="Попугай, хомяк, кролик, черепаха" />
+                      </label>
+                    )}
+                    {e.role === "toy" && (
+                      <label className="field">
+                        <span>Что за игрушка</span>
+                        <input className="input" name={`extra-what-${i}`} maxLength={60} value={e.what ?? ""} onChange={(ev) => setExtra(i, { what: ev.target.value })} placeholder="Плюшевый заяц, мишка, кукла" />
                       </label>
                     )}
                     <label className="field">

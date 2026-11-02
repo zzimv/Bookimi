@@ -8,6 +8,7 @@ import "../lib/zod-ru";
 import { zName, zNameOpt } from "../lib/names";
 import { EXTRA_ROLES, GROUP_ADULT_ROLES, GROUP_MAX_LIMIT, HERO_KIND_BY_AUDIENCE, type HeroKind } from "./types";
 import type { AudienceKey } from "./profiles";
+import { KID_AGE_KEYS, normalizeAgeGroup } from "./ages";
 
 const str = (max: number) => z.string().trim().max(max);
 /** Имя: всегда с заглавной буквы («маша» → «Маша»), склоняется отдельно в declension.ts. Нормализация — src/lib/names.ts. */
@@ -95,6 +96,12 @@ export const AnswersV2 = z.preprocess(
     if (!raw || typeof raw !== "object") return raw;
     const o = { ...(raw as Record<string, unknown>) };
     if (o.artStyle === undefined && typeof o.style === "string") o.artStyle = o.style;
+    // Возраст ребёнка: старые группы анкеты (2-3, 4-5, 6-7, 8-9) → 2-4, 5-7, 8-10
+    if (o.hero && typeof o.hero === "object") {
+      const h = o.hero as Record<string, unknown>;
+      if (h.ageGroup !== undefined && h.ageGroup !== null && h.ageGroup !== "") o.hero = { ...h, ageGroup: normalizeAgeGroup(h.ageGroup) ?? h.ageGroup };
+      else if (h.ageGroup === null || h.ageGroup === "") o.hero = { ...h, ageGroup: undefined };
+    }
     return o;
   },
   z.object({
@@ -107,7 +114,8 @@ export const AnswersV2 = z.preprocess(
       name: zName(30, "Укажите имя", "free"),
       nickname: nameOpt(30),
       gender: Gender,
-      ageGroup: z.enum(["2-3", "4-5", "6-7", "8-9"]).optional(),
+      /** Возрастная группа ребёнка: 2–4, 5–7, 8–10 (старые 2-3/4-5/6-7/8-9 переводятся в preprocess). */
+      ageGroup: z.enum(KID_AGE_KEYS).optional(),
       birthDate: str(10).optional().default(""),
       /** Возраст числом (подростки, взрослые, питомцы). */
       age: z.number().int().min(0).max(120).optional(),

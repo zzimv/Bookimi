@@ -10,10 +10,10 @@ import { SoonBanner } from "@/components/Soon";
 import { og } from "@/lib/og";
 
 export const metadata: Metadata = {
-  title: "Все книги: детям, подросткам, взрослым и о питомцах",
-  description: "Персональные книги для детей, подростков, взрослых и о питомцах: сказки, приключения, истории любви и семейные былины. Превью бесплатно, PDF 990 ₽.",
+  title: "Все сказки: персональные книги для детей 2–4, 5–7 и 8–10 лет",
+  description: "Персональные сказки, где ребёнок — главный герой: для 2–4, 5–7 и 8–10 лет. Сказки на ночь, приключения, стихи, книги для группы детского сада и класса. Превью бесплатно, PDF 990 ₽.",
   alternates: { canonical: "/skazki" },
-  ...og({ title: "Все книги БУКИМИ: детям, подросткам, взрослым и о питомцах", description: "Персональные книги: сказки, приключения, истории любви и семейные былины. Превью бесплатно.", path: "/skazki" }),
+  ...og({ title: "Все сказки БУКИМИ: для детей 2–4, 5–7 и 8–10 лет", description: "Персональные сказки, где ребёнок — главный герой. Превью бесплатно.", path: "/skazki" }),
 };
 
 export default async function Page({ searchParams }: { searchParams: Promise<SP> }) {
@@ -44,7 +44,7 @@ export default async function Page({ searchParams }: { searchParams: Promise<SP>
               ? `Повод — «${occ.label}». Сначала книги, написанные к нему; в любую другую мы впишем ваш повод.`
               : "Выберите историю — имя, внешность и увлечения героя мы вплетём в каждую страницу."}
           </p>
-          <CatalogNav q={q} />
+          <CatalogNav q={q} soon={soon.audiences} />
           <p className="small muted" aria-live="polite">
             {total} {total % 10 === 1 && total % 100 !== 11 ? "книга" : [2, 3, 4].includes(total % 10) && ![12, 13, 14].includes(total % 100) ? "книги" : "книг"}
           </p>

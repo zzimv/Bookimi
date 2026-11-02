@@ -6,6 +6,7 @@
 import { AUDIENCES, ART_STYLE_IDS, OCCASIONS, SEGMENTS, TEXT_STYLE_IDS, type AudienceKey } from "./profiles";
 import { TEXT_STYLES } from "./text-styles";
 import { KIDS_PLOTS } from "./plots/kids";
+import { KIDS_MORE_PLOTS } from "./plots/kids-more";
 import { TEEN_PLOTS } from "./plots/teens";
 import { ADULT_PLOTS } from "./plots/adults";
 import { PET_PLOTS } from "./plots/pets";
@@ -19,6 +20,7 @@ import { PET_ART_STYLES, PET_THEMES } from "./art/pets";
 import { TRIAL_ART_STYLES } from "./art/trial";
 import { ART_STYLES, artStyle, heroDrawer, themeFor, themesByKey } from "./art/index";
 import { GENERIC_HOOKS, occasionText } from "./occasions";
+import { kidGroupBySegment } from "./ages";
 import { titleTemplate } from "./title";
 import { relevanceOf, sectionsOf, type Relevance, type SectionPlot, type Sections } from "./sections";
 import {
@@ -53,7 +55,7 @@ import {
 
 export { TEXT_STYLES, ART_STYLES, MOODS, themesByKey, themeFor, heroDrawer, artStyle, occasionText };
 
-export const PLOTS: Plot[] = [...KIDS_PLOTS, ...KIDS_GROUP_PLOTS, ...TEEN_PLOTS, ...TEEN_GROUP_PLOTS, ...ADULT_PLOTS, ...PET_PLOTS, ...NEWYEAR_PLOTS];
+export const PLOTS: Plot[] = [...KIDS_PLOTS, ...KIDS_MORE_PLOTS, ...KIDS_GROUP_PLOTS, ...TEEN_PLOTS, ...TEEN_GROUP_PLOTS, ...ADULT_PLOTS, ...PET_PLOTS, ...NEWYEAR_PLOTS];
 
 /** Минимум сюжетов по аудиториям (Definition of Done контент-агентов). */
 export const PLOT_TARGETS: Record<AudienceKey, number> = { CHILD: 9, TEEN: 5, ADULT: 5, PET: 4 };
@@ -389,6 +391,13 @@ export function validateContent(opts: { strict?: boolean } = {}): ContentReport 
     if (!p.title || !p.tagline || !p.description) errors.push(`${at}: нет title/tagline/description`);
     if (p.audience === "CHILD" || p.audience === "TEEN") {
       if (p.ageMin === undefined || p.ageMax === undefined || p.ageMin > p.ageMax) errors.push(`${at}: нужны ageMin ≤ ageMax`);
+    }
+    // Детская книга — ровно одна возрастная группа (2–4, 5–7 или 8–10): текст фиксирован и написан для неё
+    if (p.audience === "CHILD") {
+      const kids = p.segments.filter((s) => s.startsWith("kids-"));
+      const g = kids.length === 1 && p.segments.length === 1 ? kidGroupBySegment(kids[0]) : undefined;
+      if (!g) errors.push(`${at}: у детской книги ровно один сегмент kids-2-4 / kids-5-7 / kids-8-10 (сейчас: ${p.segments.join(", ") || "нет"})`);
+      else if (p.ageMin !== g.min || p.ageMax !== g.max) errors.push(`${at}: возраст ${p.ageMin}–${p.ageMax}, а у группы ${g.segment} — ${g.min}–${g.max}`);
     }
     if (!p.occasions.length) errors.push(`${at}: нет поводов`);
     for (const o of p.occasions) {

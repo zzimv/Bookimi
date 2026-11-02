@@ -2,6 +2,8 @@
 import Link from "next/link";
 import { OCCASIONS as OCCASION_KEYS, type AudienceKey } from "@/content/profiles";
 import { AUDIENCE_PAGES, segmentChips } from "@/lib/storefront";
+import { occasionIsLive } from "@/lib/shelf";
+import { SoonBadge } from "./Soon";
 
 export interface CatalogQuery {
   audience?: AudienceKey;
@@ -18,34 +20,42 @@ export function catalogHref(q: CatalogQuery, base = "/skazki") {
   return s ? `${base}?${s}` : base;
 }
 
-export function CatalogNav({ q, showAudience = true }: { q: CatalogQuery; showAudience?: boolean }) {
-  const occasions = OCCASION_KEYS.filter((o) => o.key !== "svoj" && o.key !== "bez" && (!q.audience || o.audiences.includes(q.audience)));
+/** soon — аудитории «скоро»: вкладка со значком ведёт на страницу аудитории, их поводы и сегменты не предлагаем. */
+export function CatalogNav({ q, showAudience = true, soon = [] }: { q: CatalogQuery; showAudience?: boolean; soon?: AudienceKey[] }) {
+  const audSoon = Boolean(q.audience && soon.includes(q.audience));
+  // Продаётся одна аудитория (сейчас — дети): чипсы возраста видны сразу, и без выбора вкладки
+  const live = AUDIENCE_PAGES.map((a) => a.key).filter((k) => !soon.includes(k));
+  const chipAud = q.audience ?? (live.length === 1 ? live[0] : undefined);
+  const occasions = audSoon
+    ? []
+    : OCCASION_KEYS.filter((o) => o.key !== "svoj" && o.key !== "bez" && (q.audience ? o.audiences.includes(q.audience) : occasionIsLive(o.key, soon)));
   return (
     <div className="cnav">
       {showAudience && (
         <nav className="tabs" aria-label="Для кого">
           <Link href={catalogHref({ segments: [], povod: q.povod })} aria-current={!q.audience ? "page" : undefined}>Все</Link>
           {AUDIENCE_PAGES.map((a) => (
-            <Link key={a.key} href={catalogHref({ audience: a.key, segments: [], povod: q.povod })} aria-current={q.audience === a.key ? "page" : undefined}>
+            <Link key={a.key} href={soon.includes(a.key) ? `/dlya/${a.slug}` : catalogHref({ audience: a.key, segments: [], povod: q.povod })} aria-current={q.audience === a.key ? "page" : undefined} data-soon={soon.includes(a.key) || undefined}>
               {a.nav}
+              {soon.includes(a.key) && <SoonBadge />}
             </Link>
           ))}
         </nav>
       )}
-      {q.audience && (
-        <div className="filters" role="group" aria-label="Кому именно">
+      {chipAud && !audSoon && (
+        <div className="filters" role="group" aria-label={chipAud === "CHILD" ? "Возраст" : "Кому именно"}>
           <Link className="chip" href={catalogHref({ ...q, segments: [] })} aria-current={!q.segments.length ? "true" : undefined}>Все</Link>
-          {segmentChips(q.audience).map((s) => {
+          {segmentChips(chipAud).map((s) => {
             const on = q.segments.includes(s.id);
             return (
-              <Link key={s.id} className="chip" title={s.title} href={catalogHref({ ...q, segments: on ? [] : [s.id] })} aria-current={on ? "true" : undefined}>
+              <Link key={s.id} className="chip" title={s.title} data-segment={s.id} href={catalogHref({ ...q, audience: chipAud, segments: on ? [] : [s.id] })} aria-current={on ? "true" : undefined}>
                 {s.label}
               </Link>
             );
           })}
         </div>
       )}
-      <div className="filters filters--scroll" role="group" aria-label="Повод">
+      {occasions.length > 0 && <div className="filters filters--scroll" role="group" aria-label="Повод">
         <span className="filters__label">Повод:</span>
         <Link className="chip" href={catalogHref({ ...q, povod: undefined })} aria-current={!q.povod ? "true" : undefined}>Любой</Link>
         {occasions.map((o) => (
@@ -53,7 +63,7 @@ export function CatalogNav({ q, showAudience = true }: { q: CatalogQuery; showAu
             {o.label}
           </Link>
         ))}
-      </div>
+      </div>}
     </div>
   );
 }

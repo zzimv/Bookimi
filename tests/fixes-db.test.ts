@@ -633,8 +633,21 @@ d("исправления по отчёту 30.10: БД", async () => {
     const teen = await books.POST(
       new Request("http://localhost/api/books", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ answers: { audience: "TEEN", hero: { name: "Петя", gender: "boy", age: 10 }, story: { idea: "про космос" } } }) }),
     );
-    expect(teen.status).toBe(400);
-    expect(((await teen.json()) as { error: string }).error).toMatch(/от 11 до 17/);
+    // Подростки по умолчанию «скоро» (02.11.2026): книга не создаётся, ответ — вежливое «скоро»
+    expect(teen.status).toBe(403);
+    expect(((await teen.json()) as { error: string }).error).toMatch(/Скоро/);
+    // Аудиторию запустили — снова работает проверка возраста 11–17
+    const { DEFAULTS: D } = await import("@/lib/settings");
+    await saveSetting("storefront", { soon: { ...D.storefront.soon, TEEN: false } });
+    try {
+      const teen2 = await books.POST(
+        new Request("http://localhost/api/books", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ answers: { audience: "TEEN", hero: { name: "Петя", gender: "boy", age: 10 }, story: { idea: "про космос" } } }) }),
+      );
+      expect(teen2.status).toBe(400);
+      expect(((await teen2.json()) as { error: string }).error).toMatch(/от 11 до 17/);
+    } finally {
+      await saveSetting("storefront", { soon: D.storefront.soon });
+    }
   });
 
   // ── 16. Имя ──

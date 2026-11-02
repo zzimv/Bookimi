@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { kidGroupByKey } from "@/content/ages";
 import { db } from "@/lib/db";
 import { userOrLogin } from "@/lib/auth";
 import { upcomingBirthdays } from "@/lib/holidays-core";
@@ -25,7 +26,7 @@ export default async function Page() {
         {uniq.map((h) => (
           <div className="panel" key={h.id}>
             <h3>{normalizeName(h.name)}{h.nickname ? ` (${normalizeName(h.nickname)})` : ""}</h3>
-            <p className="small muted">{h.gender === "girl" ? "Девочка" : "Мальчик"}{h.ageGroup ? `, ${h.ageGroup} лет` : ""}{h.interests.length ? ` · ${h.interests.join(", ")}` : ""}</p>
+            <p className="small muted">{h.gender === "girl" ? "Девочка" : "Мальчик"}{kidGroupByKey(h.ageGroup) ? `, ${kidGroupByKey(h.ageGroup)!.label}` : ""}{h.interests.length ? ` · ${h.interests.join(", ")}` : ""}</p>
             <Link className="btn btn--primary btn--sm" href={`/sozdat?geroj=${h.id}`}>Новая книга с этим героем</Link>
           </div>
         ))}

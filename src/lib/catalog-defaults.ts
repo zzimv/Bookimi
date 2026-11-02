@@ -60,7 +60,7 @@ const OCCASION_PAGES: OccasionDefault[] = [
     title: "Первый класс",
     h1: "Книга к первому классу с вашим ребёнком в роли героя",
     intro:
-      "Сказка о смелости и новых друзьях — чтобы первый звонок встречать с улыбкой. Подходит детям 6–7 лет.",
+      "Сказка о смелости и новых друзьях — чтобы первый звонок встречать с улыбкой. Подходит детям 5–7 лет.",
   },
   {
     slug: "rozhdenie-brata-ili-sestry",
@@ -178,10 +178,11 @@ export const OCCASIONS: OccasionDefault[] = OCCASION_KEYS.filter((o) => o.key !=
 );
 
 
+/** Страницы возраста — ровно группы детских книг (2–4, 5–7, 8–10; src/content/ages.ts). aliases — старые адреса. */
 export const AGE_PAGES = [
-  { slug: "2-4-goda", title: "Книги для детей 2–4 лет", min: 2, max: 4 },
-  { slug: "5-7-let", title: "Книги для детей 5–7 лет", min: 5, max: 7 },
-  { slug: "8-9-let", title: "Книги для детей 8–9 лет", min: 8, max: 9 },
+  { slug: "2-4-goda", title: "Книги для детей 2–4 лет", label: "2–4 года", segment: "kids-2-4", min: 2, max: 4, aliases: [] as string[] },
+  { slug: "5-7-let", title: "Книги для детей 5–7 лет", label: "5–7 лет", segment: "kids-5-7", min: 5, max: 7, aliases: [] as string[] },
+  { slug: "8-10-let", title: "Книги для детей 8–10 лет", label: "8–10 лет", segment: "kids-8-10", min: 8, max: 10, aliases: ["8-9-let"] },
 ];
 
 export const FORMATS = [

@@ -11,6 +11,7 @@ import type { Plot, TextStyle } from "../../content/types";
 import { appearanceLine, exactAge, extraGender, EXTRA_ROLE_LABELS, heroAge, segmentFor, type QuizAnswers } from "../quiz";
 import { fillTags, guessGender, resolveGroupBlocks, type TagContext } from "../declension";
 import { personsOf, redactForText } from "./redact";
+import { extraMentions, extraVoiceFor } from "./extras";
 
 export interface StoryText {
   title: string;
@@ -80,6 +81,13 @@ export function extrasNamedByPlot(spreads: { text: string }[], count: number): S
   const all = spreads.map((s) => s.text).join("\n");
   if (/\{ДОПЫ[.}]/.test(all)) return new Set(Array.from({ length: count }, (_, i) => i + 1));
   return new Set([1, 2, 3].filter((n) => new RegExp(`\\{ДОП${n}[.}]`).test(all)));
+}
+
+/** Сколько разворотов сюжета уже называют доп. героя n ({ДОПn.*} или {ДОПЫ.*}). */
+export function extrasMentionedByPlot(spreads: { text: string }[], count: number): Map<number, number> {
+  const m = new Map<number, number>();
+  for (let n = 1; n <= Math.min(count, 3); n++) m.set(n, spreads.filter((s) => new RegExp(`\\{ДОП(${n}|Ы)[.}]`).test(s.text)).length);
+  return m;
 }
 
 /** Строка-обращение для стихов: «— {ДОП1.им}!», «— {ДОП2.им} и {ДОП3.им}!» (кроме меток — одно слово «и»). */
@@ -282,13 +290,21 @@ export class DemoTextProvider implements TextProvider {
       const interest = [...a.interests, a.interestCustom].map((x) => INTEREST_LINES[x?.toLowerCase?.() ?? ""]).find(Boolean);
       if (interest) spreads[1].text += " " + interest;
     }
+    // Детские книги: каждый доп. герой — минимум трижды (начало, середина, финал) готовыми фразами по роли (extras.ts),
+    // во всех голосах: проза — фразой в конце разворота, колыбельные и цепочки — тихой строкой, стихи — загадкой с именем
+    // отдельной строкой. Сюжет, который сам называет {ДОПn}, получает столько фраз, сколько не хватает до трёх.
+    if (a.audience === "CHILD" && a.extras.length) {
+      const voice = extraVoiceFor(base.textStyle, verse);
+      const sep = voice === "prose" || base.textStyle === "gentle-bedtime" ? " " : "\n";
+      for (const m of extraMentions(a.extras, voice, variant, extrasMentionedByPlot(base.spreads, a.extras.length))) spreads[m.spread].text += sep + m.text;
+    }
     // Доп. герои, которых сюжет не называет (по слотам: 2-й и 3-й — даже если 1-й уже в сюжете)
     const named = extrasNamedByPlot(base.spreads, a.extras.length);
-    if (a.extras.length && !rhythm) {
+    if (a.audience !== "CHILD" && a.extras.length && !rhythm) {
       for (const [i, line] of extraLines(a.extras, variant, named)) spreads[i].text += " " + line;
     }
     // Стихи и цепочки: не названные сюжетом доп. герои — отдельной строкой-обращением вне метра («— {ДОП2.им}!»)
-    if (a.extras.length && rhythm) {
+    if (a.audience !== "CHILD" && a.extras.length && rhythm) {
       const line = extrasAddressLine(a.extras.length, named);
       if (line) spreads[1].text += `\n${line}`;
     }
@@ -356,7 +372,7 @@ export function brief(a: QuizAnswers, plot: Plot | null, style: TextStyle | null
   if (look) lines.push(`Внешность (для описаний сцен): ${look}.`);
   lines.push(
     a.extras.length
-      ? `Дополнительные герои: ${a.extras.map((e, i) => `{ДОП${i + 1}} — ${EXTRA_ROLE_LABELS[e.role] ?? e.role}${e.what ? ` (${clean(e.what)})` : ""}${e.description ? `: ${clean(e.description)}` : ""}`).join("; ")}. Все вместе — {ДОПЫ}. Каждого назови хотя бы раз там, где он(а) уместен(на) по сцене${style?.verse ? " (в стихах — отдельной строкой-обращением: «— {ДОП2.им}!»)" : ""}.`
+      ? `Дополнительные герои: ${a.extras.map((e, i) => `{ДОП${i + 1}} — ${EXTRA_ROLE_LABELS[e.role] ?? e.role}${e.what ? ` (${clean(e.what)})` : ""}${e.description ? `: ${clean(e.description)}` : ""}`).join("; ")}. Все вместе — {ДОПЫ}. Каждого назови не меньше трёх раз — в начале, в середине и в финале, на разных разворотах${style?.verse ? " (в стихах — отдельной строкой-обращением: «— {ДОП2.им}!»)" : ""}.`
       : "Дополнительных героев нет.",
   );
   const grp = groupOf(a, plot);

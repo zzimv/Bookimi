@@ -47,7 +47,7 @@ describe("анкета v2 → книга", () => {
     expect(r.raw.spreads).toHaveLength(12);
   });
   it("возраст по аудитории и старые ответы", () => {
-    expect(heroAge(AnswersV2.parse({ hero: { name: "А", gender: "boy", ageGroup: "6-7" } }))).toBe(7);
+    expect(heroAge(AnswersV2.parse({ hero: { name: "А", gender: "boy", ageGroup: "6-7" } }))).toBe(6); // старое «6–7» → группа 5–7 лет
     expect(heroAge(AnswersV2.parse({ audience: "ADULT", hero: { name: "А", gender: "boy" } }))).toBe(35);
   });
 });
@@ -86,10 +86,13 @@ describe("промпт картинок", () => {
 
 describe("каталог и PDF", () => {
   it("без БД — все сюжеты реестра с полями движка", async () => {
-    const all = await getStories();
+    // Покупателю — только продающиеся аудитории (по умолчанию дети); админке — все сюжеты
+    const all = await getStories({ includeSoon: true });
     expect(all).toHaveLength(PLOTS.length);
+    expect(await getStories()).toHaveLength(PLOTS.filter((p) => p.audience === "CHILD").length);
     expect(all.every((s) => s.coverColors && s.extras && s.artStyles.length)).toBe(true);
-    expect((await getStories({ audience: "PET" })).every((s) => s.audience === "PET")).toBe(true);
+    expect((await getStories({ audience: "PET", includeSoon: true })).every((s) => s.audience === "PET")).toBe(true);
+    expect(await getStories({ audience: "PET" })).toEqual([]);
     const ny = await getStoriesForOccasion("novyj-god", "CHILD");
     expect(ny[0].occasions[0]).toBe("novyj-god");
     // Публичный срез без системных промптов и планов

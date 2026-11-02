@@ -8,9 +8,11 @@ import { moodsFor } from "../../src/content/moods";
 import { ART_STYLE_IDS } from "../../src/content/profiles";
 import { HERO_KIND_BY_AUDIENCE, type DemoExtra, type DemoLook, type HeroKind } from "../../src/content/types";
 import { extraDrawKind } from "../../src/content/art/index";
+import { extraPetLook, extraThing } from "../../src/lib/gen/extras";
 import { renderDemoSpread, watermark } from "../../src/content/art/render";
 import { declineName, guessGender } from "../../src/lib/declension";
 import { normalizePhone } from "../../src/content/answers";
+import { soonAudiences, soonCreateError } from "../../src/lib/shelf";
 import { etaDate, quote, ruDate, type CatalogAddon, type CatalogFormat } from "../../src/lib/pricing";
 import { ADDONS, FORMATS } from "../../src/lib/catalog-defaults";
 import { addonFits, audienceOfParams } from "../../src/lib/addons-core";
@@ -158,6 +160,8 @@ export let S: Store = blank();
 try {
   const saved = JSON.parse(localStorage.getItem(KEY) ?? "null");
   if (saved?.v === 3) S = { ...blank(), ...saved };
+  // rev 11: «скоро» для подростков, взрослых и питомцев — новые значения по умолчанию; старые отметки админки демо (rev ≤ 10) сбрасываем
+  if (S.soon && !(S as { soonRev?: number }).soonRev) S.soon = undefined;
 } catch {}
 export function save() {
   try {
@@ -250,6 +254,7 @@ export function setDemoFlags(p: { cartoonEnabled?: boolean; adminMode?: boolean;
 /** Админка демо → «Скоро»: аудитории и книги полки. */
 export function setSoon(soon: typeof DEFAULTS.storefront.soon | undefined) {
   S.soon = soon;
+  (S as { soonRev?: number }).soonRev = 11;
   applySettings();
   commit();
 }
@@ -323,7 +328,7 @@ const EXTRA_AGE: Record<string, number> = { mom: 35, dad: 37, grandma: 68, grand
 function extraLook(e: ExtraV2T, a: QuizAnswers): DemoLook {
   const g = extraGender(e, guessGender);
   const age = e.role === "partner" ? heroAge(a) : e.role === "child" || e.role === "grandchild" ? 7 : EXTRA_AGE[e.role];
-  return { gender: g === "n" ? undefined : g, age, species: e.species, thing: e.what || (e.role === "toy" ? e.name : undefined), furColor: e.role === "pet" ? e.description : undefined };
+  return { gender: g === "n" ? undefined : g, age, ...extraPetLook(e), thing: extraThing(e) };
 }
 const IDEA_THEME: Record<string, string> = { CHILD: "dragon", TEEN: "city-night", ADULT: "home", PET: "pet-home" };
 export function plotInfo(a: QuizAnswers) {
@@ -902,6 +907,7 @@ async function handle(method: string, path: string, q: URLSearchParams, body: un
   if (path === "/api/ideas" && method === "POST") {
     const a = AnswersV2.safeParse((b0 as { answers?: unknown })?.answers);
     if (!a.success) return err("Заполните анкету");
+    if (soonAudiences(DEFAULTS.storefront.soon).includes(a.data.audience)) return err(soonCreateError(a.data.audience), 403);
     return ok({ ideas: await new DemoTextProvider().ideas(String(b0?.idea ?? ""), a.data) });
   }
 
@@ -953,6 +959,8 @@ async function handle(method: string, path: string, q: URLSearchParams, body: un
     const parsed = AnswersV2.safeParse(b0?.answers);
     if (!parsed.success) return err(parsed.error.issues[0]?.message ?? "Заполните обязательные шаги");
     const a = parsed.data;
+    // Аудитория «скоро» (storefront.soon) — как /api/books на сайте: книгу не создаём
+    if (soonAudiences(DEFAULTS.storefront.soon).includes(a.audience)) return err(soonCreateError(a.audience), 403);
     const plot = plotForAnswers(a);
     if (plot && plot.audience !== a.audience) return err("Этот сюжет для другой аудитории — выберите сюжет из списка");
     if (plot && a.extras.length < plot.extras.min) return err(plot.extras.note ?? `Для этого сюжета нужно добавить героев: не меньше ${plot.extras.min}`);

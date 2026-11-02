@@ -21,6 +21,7 @@ export type Relevance = "core" | "fits" | "generic";
 export const STRONG_OCCASIONS = [
   "vypusknoj-v-sadu",
   "pervyj-klass",
+  "okonchanie-nachalnoj-shkoly",
   "vypusknoj-v-shkole",
   "rozhdenie-brata-ili-sestry",
   "svadba",

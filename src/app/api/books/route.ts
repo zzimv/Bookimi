@@ -16,6 +16,7 @@ import { attachPhotosToBook } from "@/lib/draft";
 import { ensureBulkCopies } from "@/lib/bulk-server";
 import { isStaff } from "@/lib/staff";
 import { groupMembersMax } from "@/content/registry";
+import { soonAudiences, soonCreateError } from "@/lib/shelf";
 
 const Input = z.object({
   answers: z.unknown(),
@@ -33,6 +34,9 @@ export async function POST(req: Request) {
   const parsed = AnswersV2.safeParse(b.answers);
   if (!parsed.success) return err(parsed.error.issues[0]?.message ?? "Заполните обязательные шаги");
   const a = parsed.data;
+  // Аудитория «скоро» (storefront.soon): книги не создаём
+  const soonList = soonAudiences((await cfg("storefront")).soon);
+  if (soonList.includes(a.audience)) return err(soonCreateError(a.audience), 403);
   // Сюжет должен подходить аудитории; доп. героев — не меньше, чем требует сюжет (пара, хозяева питомца…)
   const plot = a.story.slug ? plotBySlug(a.story.slug) : null;
   if (plot && plot.audience !== a.audience) return err("Этот сюжет для другой аудитории — выберите сюжет из списка");

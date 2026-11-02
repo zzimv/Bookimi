@@ -14,6 +14,7 @@ import { imageProvider, type HeroRef, type ImageResult, type SceneJob } from "./
 import { watermark } from "../../content/art/render";
 import { mood as moodById } from "../../content/registry";
 import { artStyle, extraDrawKind } from "../../content/art/index";
+import { extraPetLook, extraThing } from "./extras";
 import { HERO_KIND_BY_AUDIENCE, type DemoLook, type HeroKind } from "../../content/types";
 import type { ExtraV2T } from "../../content/answers";
 import { guessGender, normalizeName } from "../declension";
@@ -115,7 +116,8 @@ export function extraLook(e: ExtraV2T, a: QuizAnswers, style?: string, i = 0): D
   const age = e.role === "partner" ? heroAge(a) : e.role === "child" || e.role === "grandchild" ? 7 : EXTRA_AGE[e.role];
   // Свой цвет одежды у каждого доп. героя (сдвиг по палитре — не как у главного), тоже на всю книгу
   const outfit = outfitFor(`${a.hero.name}|${a.audience}`, style, i + 1);
-  return { gender: g === "n" ? undefined : g, age, outfit, species: e.species, thing: e.what || (e.role === "toy" ? e.name : undefined), furColor: e.role === "pet" ? e.description : undefined };
+  // Питомец: вид — из анкеты (Кошка / Собака / Другое), иначе по описанию и кличке; порода и окрас — из описания
+  return { gender: g === "n" ? undefined : g, age, outfit, ...extraPetLook(e), thing: extraThing(e) };
 }
 
 async function heroesFor(book: Book, a: QuizAnswers): Promise<HeroRef[]> {

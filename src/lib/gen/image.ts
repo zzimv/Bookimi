@@ -187,6 +187,47 @@ export function filterNegative(negative: string, kind: HeroKind, scene: string) 
     .join(", ");
 }
 
+const SPECIES_EN: [RegExp, string][] = [
+  [/^cat$/, "a pet cat (a real cat, not a dog)"],
+  [/^dog$/, "a pet dog (a real dog, not a cat)"],
+  [/крол|заяц|rabbit|bunny/i, "a pet rabbit"],
+  [/хомя|морск|шиншил|крыс|мыш|hamster|guinea|rat|mouse/i, "a small pet rodent"],
+  [/попуг|птиц|канар|parrot|bird/i, "a pet bird"],
+  [/черепах|turtle|tortoise/i, "a pet turtle"],
+];
+
+/**
+ * Кто доп. герой — по-английски, без имён (имена в промпт не уходят): роль, пол, возраст, вид питомца, предмет.
+ * «the hero's mother, an adult woman», «a pet cat (a real cat, not a dog)», «the hero's favourite toy: …».
+ */
+export function extraPromptWho(h: HeroRef, heroKind: HeroKind): string {
+  const look = h.look ?? {};
+  const girl = look.gender === "girl";
+  const kid = heroKind === "child" ? "child" : heroKind === "teen" ? "teenager" : "person";
+  switch (h.role) {
+    case "mom":
+      return "the hero's mother, an adult woman";
+    case "dad":
+      return "the hero's father, an adult man";
+    case "grandma":
+      return "the hero's grandmother, an elderly woman";
+    case "grandpa":
+      return "the hero's grandfather, an elderly man";
+    case "sibling":
+      return `the hero's ${girl ? "sister" : "brother"}, a ${girl ? "girl" : "boy"} (${kid})`;
+    case "friend":
+      return `the hero's friend, a ${girl ? "girl" : "boy"} (${kid})`;
+    case "pet": {
+      const sp = String(look.species ?? "");
+      return SPECIES_EN.find(([re]) => re.test(sp))?.[1] ?? "the family pet (a small animal)";
+    }
+    case "toy":
+      return "the hero's favourite toy, drawn as a toy object";
+  }
+  if (h.drawKind === "custom") return `a friendly ${h.role}, drawn as an object, not a person`;
+  return h.role;
+}
+
 /** Полный промпт сцены для GPU: стиль + сцена + герой + доп. герои + настроение. */
 export function scenePrompt(job: SceneJob): { prompt: string; negative: string } {
   const kind = job.plot.heroKind;
@@ -195,14 +236,14 @@ export function scenePrompt(job: SceneJob): { prompt: string; negative: string }
   const st = stylePrompt(artStyle(job.style), job.style, kind, withPhoto);
   const extras = job.heroes
     .slice(1)
-    .map((h) => `${h.role}${h.description ? `: ${h.description}` : ""}`)
+    .map((h) => `${extraPromptWho(h, kind)}${h.description ? ` (${h.description})` : ""}`)
     .join("; ");
   const refs = withPhoto ? "The first images are references of the main hero (photo and character sheet). Draw this same hero. " : "";
   const prompt = [
     `${refs}Scene: ${job.scene}.`,
     st.own ? "" : identityFor(kind, job.age, job.gender, withPhoto),
     main?.description ? `Main hero details: ${main.description}.` : "",
-    extras ? `Also in the scene: ${extras}.` : "",
+    extras ? `Also in the scene, each clearly visible next to the main hero: ${extras}.` : "",
     `Style: ${st.prompt}`,
     identityClause(kind, withPhoto),
     "Leave calm space at the edges for page cropping.",

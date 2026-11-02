@@ -15,7 +15,7 @@ export const revalidate = 300;
 // Главная: canonical и свои OG (на остальных страницах — их собственные)
 export const metadata: Metadata = {
   alternates: { canonical: "/" },
-  ...og({ title: "БУКИМИ — книга, где главный герой тот, кого вы любите", description: "Персональная книга по фото: ребёнок, подросток, близкий взрослый или питомец — главный герой. Бесплатное превью за 5 минут.", path: "/" }),
+  ...og({ title: "БУКИМИ — книга, где главный герой тот, кого вы любите", description: "Персональная сказка по фото, где ваш ребёнок 2–10 лет — главный герой. Бесплатное превью за 5 минут.", path: "/" }),
 };
 
 // Главная: промо-полоса и меню (layout) → первый экран с полкой книг (макет владелицы, rev 06; полка заменила
@@ -23,9 +23,8 @@ export const metadata: Metadata = {
 // «Кто мы» и вопросы → подписка (только если настроен промокод) → подвал.
 export default async function Home() {
   const [stories, minPrice, season, rating, newsletter, soon] = await Promise.all([getStories(), getMinPrice(), getSeason(), getRating(), getNewsletter(), getSoon()]);
-  // «Самые любимые» — из того, что уже продаётся (аудитории «скоро» — только если больше нечего показать)
-  const open = stories.filter((s) => !soon.audiences.includes(s.audience));
-  const favorites = pickFavorites(open.length >= 4 ? open : stories, season?.occasion);
+  // «Самые любимые» — только то, что продаётся: книги аудиторий «скоро» getStories не отдаёт
+  const favorites = pickFavorites(stories, season?.occasion);
   const domain = process.env.DOMAIN ?? "bookimi.ru";
   const seller = await getSeller().catch(() => ({ email: "", phone: "" }));
   // AggregateRating — только по реальным опубликованным отзывам
@@ -54,7 +53,7 @@ export default async function Home() {
       <HomeHero shelf={shelfLinks(soon.soon)} rating={rating} />
       <Favorites stories={favorites} minPrice={minPrice} />
       <PhotoShowcase />
-      <FiveMinutes />
+      <FiveMinutes count={stories.filter((s) => s.slug !== "svoya-ideya").length} soon={soon.audiences} />
       <Reviews />
       <AboutUs />
       <Faq items={faqItems(await siteFacts())} jsonLd />

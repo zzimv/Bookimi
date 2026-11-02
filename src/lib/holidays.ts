@@ -2,7 +2,8 @@
 // из настроек, книги для карточек из каталога. Расчёты — в holidays-core.ts (чистые функции).
 import { db, hasDatabase } from "./db";
 import { cfg, getSetting, saveSetting } from "./settings";
-import { getStories, type PublicStory } from "./catalog";
+import { getSoonAudiences, getStories, type PublicStory } from "./catalog";
+import { occasionIsLive, visiblePlots } from "./shelf";
 import { OCCASIONS, type AudienceKey } from "../content/profiles";
 import {
   DEFAULT_LEAD,
@@ -111,9 +112,13 @@ export interface HolidayCard {
   audiences: { label: string; href: string }[];
 }
 
-/** Карточки для /prazdniki (и демо): чистая сборка из расчёта и каталога. */
-export function buildHolidayCards(calcs: HolidayCalc[], stories: PublicStory[], now: Date, lead: LeadTimes): HolidayCard[] {
-  const list = stories.filter((s) => s.slug !== SVOYA_IDEYA);
+/**
+ * Карточки для /prazdniki (и демо): чистая сборка из расчёта и каталога. soon — аудитории «скоро»: их книги и ссылки
+ * не показываем, праздник только для них (14 Февраля, День матери…) скрываем целиком.
+ */
+export function buildHolidayCards(calcs: HolidayCalc[], stories: PublicStory[], now: Date, lead: LeadTimes, soon: AudienceKey[] = []): HolidayCard[] {
+  const list = visiblePlots(stories, soon).filter((s) => s.slug !== SVOYA_IDEYA);
+  calcs = calcs.filter((c) => occasionIsLive(c.holiday.occasionKey, soon));
   const known = new Set(OCCASIONS.map((o) => o.key));
   const ty = new Date(mskToday(now) * 86400_000).getUTCFullYear();
   return calcs.map((c) => {
@@ -124,7 +129,7 @@ export function buildHolidayCards(calcs: HolidayCalc[], stories: PublicStory[], 
     const isKnown = known.has(h.occasionKey);
     const audiences = always
       ? (Object.keys(AUDIENCE_SLUG) as AudienceKey[])
-          .filter((a) => OCCASIONS.find((o) => o.key === h.occasionKey)?.audiences.includes(a) ?? true)
+          .filter((a) => !soon.includes(a) && (OCCASIONS.find((o) => o.key === h.occasionKey)?.audiences.includes(a) ?? true))
           .map((a) => ({ label: AUDIENCE_SLUG[a].label, href: `/skazki?povod=${h.occasionKey}&dlya=${AUDIENCE_SLUG[a].slug}` }))
       : [];
     const yearOf = c.date != null ? new Date(c.date * 86400_000).getUTCFullYear() : ty;
@@ -149,13 +154,13 @@ export function buildHolidayCards(calcs: HolidayCalc[], stories: PublicStory[], 
 }
 
 export async function getHolidayCards(now = new Date()): Promise<HolidayCard[]> {
-  const [items, lead, stories] = await Promise.all([getHolidays(), getLeadTimes(), getStories()]);
-  return buildHolidayCards(upcomingHolidays(items, now, lead), stories, now, lead);
+  const [items, lead, stories, soon] = await Promise.all([getHolidays(), getLeadTimes(), getStories(), getSoonAudiences()]);
+  return buildHolidayCards(upcomingHolidays(items, now, lead), stories, now, lead, soon);
 }
 
-/** Ближайший праздник с датой — для кнопки на главной и полосы промо. */
+/** Ближайший праздник с датой — для кнопки на главной и полосы промо (только праздники продающихся аудиторий). */
 export async function getNearestHoliday(now = new Date()) {
-  const [items, lead] = await Promise.all([getHolidays(), getLeadTimes()]);
-  const c = nearestHoliday(items, now, lead);
+  const [items, lead, soon] = await Promise.all([getHolidays(), getLeadTimes(), getSoonAudiences()]);
+  const c = nearestHoliday(items.filter((h) => occasionIsLive(h.occasionKey, soon)), now, lead);
   return c ? { calc: c, lead } : null;
 }

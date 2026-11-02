@@ -7,6 +7,9 @@ import { themeFor } from "../content/art/index";
 import type { AudienceKey } from "../content/profiles";
 import { titleForCatalog } from "../content/title";
 import type { HeroKind, Plot, PlotExtras } from "../content/types";
+import { bookAgeLabel, kidGroupOf } from "../content/ages";
+import { cfg } from "./settings";
+import { soonAudiences, visiblePlots } from "./shelf";
 
 // Публичный срез каталога: без шаблонов текста, системных промптов и планов сцен (они остаются на сервере).
 // Источник — таблица Story (правится в админке); если БД пуста или недоступна — сюжеты из реестра контента.
@@ -78,16 +81,40 @@ function fromPlot(p: Plot): PublicStory {
   };
 }
 
-const fallbackStories: PublicStory[] = PLOTS.map(fromPlot);
+const fallbackStories: PublicStory[] = PLOTS.map(fromPlot).map((s) => strictKidAges(s));
 
 export interface StoryFilter {
   audience?: AudienceKey;
   segment?: string;
+  /** Админка: показать и книги аудиторий «скоро» (покупателю они не видны нигде). */
+  includeSoon?: boolean;
 }
 
-const applyFilter = (list: PublicStory[], f: StoryFilter) =>
-  list.filter((s) => (!f.audience || s.audience === f.audience) && (!f.segment || s.segments.includes(f.segment)));
+/** Аудитории «скоро» из настроек (storefront.soon). */
+export async function getSoonAudiences(): Promise<AudienceKey[]> {
+  try {
+    return soonAudiences((await cfg("storefront")).soon);
+  } catch {
+    return [];
+  }
+}
 
+/**
+ * Детская книга — ровно одна возрастная группа (2–4, 5–7, 8–10): сегмент и возраст берём из реестра, даже если в
+ * таблице Story остались старые значения (до seed) — покупатель видит ровно ту группу, для которой написан текст.
+ */
+function strictKidAges(s: PublicStory, plot?: Plot): PublicStory {
+  if (s.audience !== "CHILD") return s;
+  const g = kidGroupOf(plot?.audience === "CHILD" ? plot.segments : s.segments);
+  return g ? { ...s, segments: [g.segment], ageMin: g.min, ageMax: g.max } : s;
+}
+
+async function applyFilter(list: PublicStory[], f: StoryFilter) {
+  const soon = f.includeSoon ? [] : await getSoonAudiences();
+  return visiblePlots(list, soon).filter((s) => (!f.audience || s.audience === f.audience) && (!f.segment || s.segments.includes(f.segment)));
+}
+
+/** Книги для покупателя: без аудиторий «скоро». Админке — getStories({ includeSoon: true }). */
 export async function getStories(f: StoryFilter = {}): Promise<PublicStory[]> {
   if (!hasDatabase) return applyFilter(fallbackStories, f);
   try {
@@ -124,7 +151,7 @@ export async function getStories(f: StoryFilter = {}): Promise<PublicStory[]> {
           seoTitle: r.seoTitle,
           seoDescription: r.seoDescription,
         };
-      }),
+      }).map((s) => strictKidAges(s, bySlug.get(s.slug))),
       f,
     );
   } catch {
@@ -132,8 +159,9 @@ export async function getStories(f: StoryFilter = {}): Promise<PublicStory[]> {
   }
 }
 
-export async function getStory(slug: string) {
-  return (await getStories()).find((s) => s.slug === slug) ?? null;
+/** Книга для покупателя (книги аудиторий «скоро» — null, страница отвечает 404). */
+export async function getStory(slug: string, opts: { includeSoon?: boolean } = {}) {
+  return (await getStories({ includeSoon: opts.includeSoon })).find((s) => s.slug === slug) ?? null;
 }
 
 /**
@@ -166,8 +194,9 @@ export async function getOccasion(slug: string) {
   return (await getOccasions()).find((o) => o.slug === slug) ?? null;
 }
 
+/** Страница возраста; старый адрес /vozrast/8-9-let — та же страница 8–10 лет (canonical — новый). */
 export function getAgePage(slug: string) {
-  return AGE_PAGES.find((a) => a.slug === slug) ?? null;
+  return AGE_PAGES.find((a) => a.slug === slug || (a.aliases as readonly string[]).includes(slug)) ?? null;
 }
 
 /** Минимальная цена «от N ₽» для карточки — из БД. */
@@ -226,12 +255,9 @@ export async function getApprovedReviews() {
   }
 }
 
-export function ageLabel(min: number, max: number, audience: AudienceKey = "CHILD") {
-  if (audience === "ADULT") return "Для взрослых";
-  if (audience === "PET") return "Собакам и кошкам";
-  const n = max % 100;
-  const unit = n % 10 >= 2 && n % 10 <= 4 && (n < 12 || n > 14) ? "года" : "лет";
-  return `${min}–${max} ${unit}`;
+/** Возраст книги для покупателя: дети — ровно «2–4 года», «5–7 лет», «8–10 лет» (src/content/ages.ts). */
+export function ageLabel(min: number, max: number, audience: AudienceKey = "CHILD", segments?: string[]) {
+  return bookAgeLabel({ audience, ageMin: min, ageMax: max, segments });
 }
 
 export const HERO_WORD: Record<AudienceKey, string> = { CHILD: "Ваш ребёнок", TEEN: "Ваш герой", ADULT: "Ваш герой", PET: "Ваш питомец" };

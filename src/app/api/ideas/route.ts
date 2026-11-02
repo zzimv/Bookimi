@@ -6,6 +6,7 @@ import { cfg } from "@/lib/settings";
 import { textProvider } from "@/lib/gen/text";
 import { checkInputs } from "@/lib/moderation";
 import { hit } from "@/lib/limits";
+import { soonAudiences, soonCreateError } from "@/lib/shelf";
 
 // «Своя идея»: 1–2 предложения → 3 варианта сюжета на выбор.
 export async function POST(req: Request) {
@@ -16,6 +17,8 @@ export async function POST(req: Request) {
   if (checkInputs([b.idea])) return err("Уберите недопустимые слова или ссылки");
   if (!(await hit(await deviceKey(), "ideas", 10))) return err("На сегодня идей достаточно — выберите один из вариантов", 429);
   const a = AnswersV2.safeParse(b.answers);
+  // Аудитория «скоро» (storefront.soon): идей не придумываем — книгу всё равно не создать
+  if (a.success && soonAudiences((await cfg("storefront")).soon).includes(a.data.audience)) return err(soonCreateError(a.data.audience), 403);
   const ai = await cfg("ai");
   try {
     const ideas = await textProvider(ai.text).ideas(b.idea, a.success ? a.data : AnswersV2.parse({ hero: { name: "-", gender: "boy" } }));

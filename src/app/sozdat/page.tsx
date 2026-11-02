@@ -6,7 +6,8 @@ import { currentUser } from "@/lib/auth";
 import { ART_STYLE_IDS, OCCASIONS, SEGMENTS } from "@/content/profiles";
 import { visibleArtStyleIds } from "@/content/art/index";
 import { cfg } from "@/lib/settings";
-import { audienceFromParam, SVOYA_IDEYA } from "@/lib/storefront";
+import { audienceFromParam, getSoon, SVOYA_IDEYA } from "@/lib/storefront";
+import { SoonCreate } from "@/components/Soon";
 import { moodSwatch } from "@/lib/mood-swatch";
 import { MOODS } from "@/content/moods";
 import { plotBySlug, sectionPlot } from "@/content/registry";
@@ -56,8 +57,11 @@ function groupInfo(slug: string) {
 
 export default async function Page({ searchParams }: { searchParams: Promise<Record<string, string | undefined>> }) {
   const sp = await searchParams;
-  const [all, styles, flags, bulk] = await Promise.all([getStories(), quizStyles(), cfg("flags"), cfg("bulk")]);
+  const [all, styles, flags, bulk, soon] = await Promise.all([getStories(), quizStyles(), cfg("flags"), cfg("bulk"), getSoon()]);
   const stories = all.filter((s) => s.slug !== SVOYA_IDEYA);
+  // Аудитория «скоро» (storefront.soon): ни анкеты, ни книги — вежливое «скоро» (ссылка ?dlya= или книга этой аудитории)
+  const askedSoon = audienceFromParam(sp.dlya) ?? (sp.skazka ? plotBySlug(sp.skazka)?.audience : undefined);
+  if (askedSoon && soon.audiences.includes(askedSoon)) return <SoonCreate audience={askedSoon} />;
   const initial: Record<string, unknown> = {};
   // ?dlya=ADULT|TEEN|PET|CHILD (или detyam/podrostkam/…) — аудитория; ?skazka=<slug> — книга (аудитория берётся из неё);
   // ?povod=<ключ> — повод; ?pol=, ?segment= — см. ниже. Книга выбрана → анкета не спрашивает ни повод, ни сюжет.
@@ -113,6 +117,7 @@ export default async function Page({ searchParams }: { searchParams: Promise<Rec
       captchaKey={process.env.YANDEX_SMARTCAPTCHA_CLIENT_KEY || undefined}
       photoEnabled={flags.photoUploadEnabled}
       bulkTiers={bulk.enabled ? bulk.tiers : []}
+      soon={soon.audiences}
     />
   );
 }

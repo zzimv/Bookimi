@@ -125,7 +125,13 @@ export function PhotoShowcase() {
   );
 }
 
-export function FiveMinutes() {
+const WHO_SOON: Record<string, string> = { TEEN: "подростков", ADULT: "взрослых", PET: "питомцев" };
+
+/** count — сколько книг продаётся; soon — аудитории «скоро» (их книги не показываем, только упоминаем «скоро»). */
+export function FiveMinutes({ count = 30, soon = [] }: { count?: number; soon?: string[] }) {
+  const kidsOnly = ["TEEN", "ADULT", "PET"].every((k) => soon.includes(k));
+  const later = soon.filter((k) => WHO_SOON[k]).map((k) => WHO_SOON[k]);
+  const laterText = later.length ? ` Книги для ${later.length > 1 ? `${later.slice(0, -1).join(", ")} и ${later[later.length - 1]}` : later[0]} — скоро.` : "";
   return (
     <section className="section section--sage" id="kak" aria-labelledby="five-h">
       <div className="wrap">
@@ -133,7 +139,9 @@ export function FiveMinutes() {
         <ol className="steps steps--4">
           <li>
             <strong>Выберите книгу</strong>
-            30 историй для детей, подростков, взрослых и питомцев — к любому поводу.
+            {kidsOnly
+              ? `${count} ${plural(count, "сказка", "сказки", "сказок")} для детей 2–4, 5–7 и 8–10 лет — к любому поводу.${laterText}`
+              : `${count} ${plural(count, "история", "истории", "историй")} — к любому поводу.${laterText}`}
           </li>
           <li>
             <strong>Расскажите о герое</strong>

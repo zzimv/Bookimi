@@ -11,6 +11,7 @@ import { faqItems, fillFacts, siteFacts } from "@/lib/seo";
 import { OCCASIONS as OCCASION_KEYS } from "@/content/profiles";
 import { AUDIENCE_PAGES, catalogStories, getSoon, segmentChips } from "@/lib/storefront";
 import { SoonBanner } from "@/components/Soon";
+import { SOON_SHORT } from "@/lib/shelf";
 
 export const revalidate = 300;
 
@@ -31,10 +32,10 @@ export default async function Page({ params }: { params: Promise<{ audience: str
   const a = AUDIENCE_PAGES.find((x) => x.slug === audience);
   if (!a) notFound();
   const [stories, minPrice, soon] = await Promise.all([getStories({ audience: a.key }), getMinPrice(), getSoon()]);
-  // «Скоро» (storefront.soon): примеры видны, «Создать» выключены, почту не собираем
+  // «Скоро» (storefront.soon): плашка, «Создать» выключена, книг этой аудитории не показываем, почту не собираем
   const isSoon = soon.audiences.includes(a.key);
-  const list = catalogStories(stories);
-  const occasions = OCCASION_KEYS.filter((o) => o.audiences.includes(a.key) && o.key !== "svoj" && o.key !== "bez");
+  const list = isSoon ? [] : catalogStories(stories);
+  const occasions = isSoon ? [] : OCCASION_KEYS.filter((o) => o.audiences.includes(a.key) && o.key !== "svoj" && o.key !== "bez");
   const domain = process.env.DOMAIN ?? "bookimi.ru";
 
   return (
@@ -53,13 +54,20 @@ export default async function Page({ params }: { params: Promise<{ audience: str
           {isSoon && <SoonBanner audience={a.key} />}
           <h1>{a.h1}</h1>
           <p className="lead">{a.lead}</p>
-          <div className="filters" role="group" aria-label="Кому именно">
+          {isSoon && (
+            <p style={{ display: "flex", gap: 12, flexWrap: "wrap" }} data-soon-actions>
+              <button type="button" className="btn btn--primary" disabled aria-describedby="aud-soon">Создать книгу</button>
+              <Link href="/dlya/detyam" className="btn btn--ghost">Сказки для детей 2–10 лет</Link>
+            </p>
+          )}
+          {isSoon && <p className="small muted" id="aud-soon">{SOON_SHORT}</p>}
+          {!isSoon && <div className="filters" role="group" aria-label="Кому именно">
             {segmentChips(a.key).map((s) => (
               <Link key={s.id} className="chip" href={catalogHref({ audience: a.key, segments: [s.id] })} title={s.title}>
                 {s.label}
               </Link>
             ))}
-          </div>
+          </div>}
           <div className="grid">
             {list.map((s) => (
               <BookCard key={s.slug} story={s} minPrice={minPrice} soon={isSoon} />
@@ -67,7 +75,7 @@ export default async function Page({ params }: { params: Promise<{ audience: str
           </div>
         </div>
       </section>
-      <section className="section section--sage">
+      {occasions.length > 0 && <section className="section section--sage">
         <div className="wrap">
           <h2>Подарок к поводу</h2>
           <div className="occasions">
@@ -79,7 +87,7 @@ export default async function Page({ params }: { params: Promise<{ audience: str
             ))}
           </div>
         </div>
-      </section>
+      </section>}
       <Faq items={faqItems(await siteFacts())} />
       <StickyCta href={`/sozdat?dlya=${a.key}`} soon={isSoon} />
     </>

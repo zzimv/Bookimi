@@ -2,15 +2,18 @@ import { db } from "@/lib/db";
 import { requireAdmin } from "@/lib/admin";
 import { addonAction, formatAction, storyAction, styleAction } from "../../actions";
 import { ADDON_AUDIENCES, ADDON_AUDIENCE_LABEL } from "@/lib/addons-core";
+import { getSoonAudiences } from "@/lib/catalog";
+import type { AudienceKey } from "@/content/profiles";
 
 export default async function Page({ searchParams }: { searchParams: Promise<{ error?: string }> }) {
   await requireAdmin("catalog");
   const { error } = await searchParams;
-  const [stories, formats, addons, styles] = await Promise.all([
+  const [stories, formats, addons, styles, soon] = await Promise.all([
     db.story.findMany({ orderBy: { sortOrder: "asc" } }),
     db.productFormat.findMany({ orderBy: { sortOrder: "asc" } }),
     db.addon.findMany({ orderBy: { sortOrder: "asc" } }),
     db.illustrationStyle.findMany({ orderBy: { sortOrder: "asc" } }),
+    getSoonAudiences(),
   ]);
   const hid = (v: string) => <input type="hidden" name="id" value={v} />;
   return (
@@ -103,7 +106,7 @@ export default async function Page({ searchParams }: { searchParams: Promise<{ e
       <h2 style={{ fontSize: "var(--fs-lg)", marginTop: 24 }}>Сюжеты</h2>
       {stories.map((s) => (
         <details key={s.id} className="panel edit">
-          <summary>{s.sortOrder + 1}. {s.title} {!s.isActive && <span className="badge badge--gold">скрыт</span>}</summary>
+          <summary>{s.sortOrder + 1}. {s.title} {!s.isActive && <span className="badge badge--gold">скрыт</span>}{soon.includes(s.audience as AudienceKey) && <> <span className="soon-badge" title="Аудитория «скоро» (Настройки → Витрина): покупатель книгу не видит">скоро</span></>}</summary>
           <form action={storyAction} style={{ marginTop: 12 }}>
             {hid(s.id)}
             <label className="field"><span>Название ([Имя] подставится)</span><input className="input" name="title" defaultValue={s.title} /></label>

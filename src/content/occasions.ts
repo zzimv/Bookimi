@@ -49,6 +49,12 @@ export const GENERIC_HOOKS: Record<string, OccasionHook> = {
     openingScene: "a cozy room with a cradle and a tiny sleeping baby",
     closingScene: "a gentle family moment with a tiny baby in a blanket",
   },
+  "okonchanie-nachalnoj-shkoly": {
+    opening: "Позади четыре года начальной школы — и {ГЕРОЙ.им} уже совсем не тот первоклассник, что когда-то робко входил в класс.",
+    closing: "Пока, начальная школа! Здравствуй, пятый класс, {ЛАСКОВО.им}!",
+    openingScene: "a primary school classroom in late May with balloons and a festive ribbon",
+    closingScene: "a primary school graduation celebration with balloons, ribbons and a class photo",
+  },
   "vypusknoj-v-shkole": {
     opening: "Школа позади: впереди выпускной, лето и целая жизнь, которую {ГЕРОЙ.им} напишет {Р:сам|сама}.",
     closing: "С выпуском, {ЛАСКОВО.им}! Дальше — своя дорога, и она обязательно будет интересной.",
@@ -190,6 +196,7 @@ export const OCCASION_WORDS: Record<string, OccasionWord> = {
   "vypusknoj-v-sadu": { им: "выпускной в детском саду", род: "выпускного в детском саду", дат: "выпускному в детском саду", вин: "выпускной в детском саду", тв: "выпускным в детском саду", пр: "выпускном в детском саду", gender: "m" },
   "pervyj-klass": { им: "первое сентября", род: "первого сентября", дат: "первому сентября", вин: "первое сентября", тв: "первым сентября", пр: "первом сентября", gender: "n" },
   "rozhdenie-brata-ili-sestry": { им: "рождение братика или сестрёнки", род: "рождения братика или сестрёнки", дат: "рождению братика или сестрёнки", вин: "рождение братика или сестрёнки", тв: "рождением братика или сестрёнки", пр: "рождении братика или сестрёнки", gender: "n" },
+  "okonchanie-nachalnoj-shkoly": { им: "окончание начальной школы", род: "окончания начальной школы", дат: "окончанию начальной школы", вин: "окончание начальной школы", тв: "окончанием начальной школы", пр: "окончании начальной школы", gender: "n" },
   "vypusknoj-v-shkole": { им: "выпускной", род: "выпускного", дат: "выпускному", вин: "выпускной", тв: "выпускным", пр: "выпускном", gender: "m" },
   "8-marta": fixed("8 Марта"),
   "23-fevralya": fixed("23 Февраля"),

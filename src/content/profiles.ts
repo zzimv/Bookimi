@@ -79,6 +79,7 @@ export const OCCASIONS: { key: string; label: string; audiences: AudienceKey[]; 
   { key: "vypusknoj-v-sadu", label: "Выпускной в детском саду", audiences: ["CHILD"], season: "май" },
   { key: "pervyj-klass", label: "Первый класс", audiences: ["CHILD"], season: "август–сентябрь" },
   { key: "rozhdenie-brata-ili-sestry", label: "Рождение брата или сестры", audiences: ["CHILD"] },
+  { key: "okonchanie-nachalnoj-shkoly", label: "Окончание начальной школы", audiences: ["CHILD"], season: "май" },
   { key: "vypusknoj-v-shkole", label: "Выпускной в школе", audiences: ["TEEN"], season: "май–июнь" },
   { key: "8-marta", label: "8 Марта", audiences: ["ADULT", "TEEN"], season: "март" },
   { key: "23-fevralya", label: "23 Февраля", audiences: ["ADULT", "TEEN"], season: "февраль" },
@@ -531,7 +532,7 @@ export const SEGMENTS: Segment[] = [
       "подарок «не для малышей», которым можно похвастаться",
       "поддержать увлечение (космос, динозавры, спорт)",
     ],
-    occasions: ["den-rozhdeniya", "novyj-god", "pervyj-klass", "bez"],
+    occasions: ["den-rozhdeniya", "novyj-god", "okonchanie-nachalnoj-shkoly", "pervyj-klass", "bez"],
     readingSituation: "Ребёнок читает сам, иногда вслух родителям; книга стоит на полке и показывается друзьям.",
     text: {
       wordsPerSpread: [50, 90],

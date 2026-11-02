@@ -83,7 +83,7 @@ export async function Header() {
 }
 
 export async function Footer() {
-  const seller = await getSeller();
+  const [seller, { soon }] = await Promise.all([getSeller(), getSoon()]);
   const ok = sellerIsComplete(seller);
   const year = new Date().getFullYear();
   return (
@@ -113,12 +113,14 @@ export async function Footer() {
           <ul>
             <li><Link href="/skazki">Все книги</Link></li>
             {AUDIENCE_PAGES.map((a) => (
-              <li key={a.slug}><Link href={`/dlya/${a.slug}`}>{a.nav}</Link></li>
+              <li key={a.slug}><Link href={`/dlya/${a.slug}`}>{a.nav}{soon[a.key] && <> <SoonBadge /></>}</Link></li>
             ))}
             <li><Link href="/povody">Все поводы</Link></li>
             <li><Link href="/prazdniki">Ближайшие праздники</Link></li>
             <li><Link href="/povod/novyj-god">На Новый год</Link></li>
             <li><Link href="/vozrast/2-4-goda">Для детей 2–4 лет</Link></li>
+            <li><Link href="/vozrast/5-7-let">Для детей 5–7 лет</Link></li>
+            <li><Link href="/vozrast/8-10-let">Для детей 8–10 лет</Link></li>
             <li><Link href="/blog">Блог</Link></li>
             <li><Link href="/kabinet">Личный кабинет</Link></li>
             <li><Link href="/kontakty">Контакты</Link></li>

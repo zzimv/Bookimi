@@ -273,9 +273,15 @@ export function renderDemoSpread(o: DemoRenderOpts): string {
   const dir = left ? -1 : 1;
   const heroHw = halfWidth(heroKind) * heroScale;
   let edge = heroHw;
-  const placed = (o.extras ?? []).slice(0, 3).map((e, i) => {
-    const kind = e.kind ?? extraDrawKind(e.role, heroKind);
-    const scale = heroScale * extraScale(kind, heroKind, e.role);
+  const list = (o.extras ?? []).slice(0, 3);
+  const kinds = list.map((e) => e.kind ?? extraDrawKind(e.role, heroKind));
+  // Все доп. герои — в кадре (на квадратной обложке три взрослых или три питомца иначе не влезают): ужимаем их,
+  // пока группа шире кадра; главный герой остаётся своего размера
+  const need = kinds.reduce((w, k, i) => w + 2 * halfWidth(k) * heroScale * extraScale(k, heroKind, list[i].role), 0);
+  const fit = Math.min(1, Math.max(0.4, (W - 24 - 2 * heroHw - list.length * GAP) / Math.max(1, need)));
+  const placed = list.map((e, i) => {
+    const kind = kinds[i];
+    const scale = heroScale * extraScale(kind, heroKind, e.role) * fit;
     const hw = halfWidth(kind) * scale;
     const dx = edge + GAP + hw;
     edge = dx + hw;
@@ -289,7 +295,8 @@ export function renderDemoSpread(o: DemoRenderOpts): string {
     // Люди рядом с питомцем стоят чуть дальше (выше по кадру) — питомец остаётся главным
     const feet = heroFeet - (heroKind === "pet" && kind !== "pet" ? 34 : 10);
     const drawKind = kind === "toy" || kind === "custom" ? heroKind : kind;
-    return heroDrawer(kind)({ kind: drawKind, look: e.look, x: heroX + dir * dx, y: feet - 190 * scale, scale, style, index: idx + i + 1, flip: !left });
+    // Метка для проверок и мультфильма: какой доп. герой и как нарисован
+    return `<g data-extra="${i + 1}" data-kind="${kind}">${heroDrawer(kind)({ kind: drawKind, look: e.look, x: heroX + dir * dx, y: feet - 190 * scale, scale, style, index: idx + i + 1, flip: !left })}</g>`;
   });
   // Группа: рядами по сторонам, вне полосы героя и доп. героев
   const zoneLo = dir > 0 ? heroX - heroHw : heroX - edge;

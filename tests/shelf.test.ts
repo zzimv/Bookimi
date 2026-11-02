@@ -8,11 +8,12 @@ import { PLOTS } from "../src/content/registry";
 const q = (href: string) => Object.fromEntries(new URLSearchParams(href.split("?")[1] ?? ""));
 const byId = (id: string) => SHELF.find((s) => s.id === id)!;
 const clone = (): SoonSettings => structuredClone(DEFAULTS.storefront.soon);
-/** Отметки «скоро» как на макете 30.10 — для проверки механизма (по умолчанию теперь всё открыто). */
-const mockup = (): SoonSettings => {
+/** Отметки «скоро» по умолчанию (02.11.2026): продаются только детские книги. */
+const mockup = (): SoonSettings => clone();
+/** Всё открыто — как до 02.11. */
+const allOpen = (): SoonSettings => {
   const s = clone();
-  s.TEEN = s.ADULT = s.PET = true;
-  for (const id of ["babushka", "mama", "papa", "pitomec", "dedushka", "lyubimomu", "podruge"]) s.shelf[id] = true;
+  s.TEEN = s.ADULT = s.PET = false;
   return s;
 };
 
@@ -61,23 +62,25 @@ describe("полка на главной (rev 06)", () => {
     }
   });
 
-  it("по умолчанию «скоро» нет: все аудитории и книги полки открыты", () => {
+  it("по умолчанию продаются только дети: подростки, взрослые и питомцы — «скоро», их книги полки — «скоро»", () => {
     const soon = DEFAULTS.storefront.soon;
-    expect(soonAudiences(soon)).toEqual([]);
-    expect(shelfLinks(soon).filter((s) => s.soon)).toEqual([]);
-    expect(shelfLinks(mockup()).filter((s) => s.soon).map((s) => s.id)).toEqual(["babushka", "mama", "papa", "pitomec", "dedushka", "lyubimomu", "podruge"]);
+    expect(soonAudiences(soon)).toEqual(["TEEN", "ADULT", "PET"]);
+    expect(shelfLinks(soon).filter((s) => s.soon).map((s) => s.id)).toEqual(["babushka", "mama", "papa", "pitomec", "dedushka", "lyubimomu", "podruge"]);
+    expect(shelfLinks(allOpen()).filter((s) => s.soon)).toEqual([]);
     // В настройках есть отметка для каждой книги полки — иначе её не выключить в админке
     expect(Object.keys(soon.shelf).sort()).toEqual(SHELF.map((s) => s.id).sort());
   });
 
-  it("книга «скоро» ведёт к примерам (без анкеты), снятая отметка — в анкету", () => {
+  it("книга «скоро» ведёт на страницу аудитории «скоро» (без анкеты); запущенная аудитория — в анкету", () => {
     const soon = mockup();
     const mama = shelfLinks(soon).find((s) => s.id === "mama")!;
-    expect(mama.to).toBe("/skazki?dlya=vzroslym&segment=adult-parent");
+    expect(mama.to).toBe("/dlya/vzroslym");
     expect(mama.to).not.toMatch(/sozdat/);
     expect(shelfLinks(soon).find((s) => s.id === "pitomec")!.to).toBe("/dlya/pitomcam");
-    soon.shelf.mama = false;
+    soon.ADULT = false;
     expect(shelfLinks(soon).find((s) => s.id === "mama")!.to).toBe(byId("mama").href);
+    soon.shelf.mama = true; // отдельная отметка книги полки — тоже «скоро»
+    expect(shelfLinks(soon).find((s) => s.id === "mama")!.soon).toBe(true);
     for (const it of shelfLinks(soon)) if (it.soon) expect(audienceFromParam(q(it.to).dlya) ?? audienceFromParam(it.to.split("/").pop()), it.id).toBe(it.audience);
   });
 
@@ -86,7 +89,7 @@ describe("полка на главной (rev 06)", () => {
     soon.ADULT = false;
     soon.TEEN = false;
     expect(soonAudiences(soon)).toEqual(["PET"]);
-    expect(soonNote("ADULT")).toBe("Скоро — книги для взрослых готовим к запуску. Сейчас можно посмотреть примеры");
+    expect(soonNote("ADULT")).toBe("Скоро — книги для взрослых готовим к запуску. Сейчас можно создать сказку для ребёнка 2–10 лет");
     expect(soonNote("PET")).not.toMatch(/почт|email/i);
   });
 
