@@ -183,7 +183,7 @@ function View() {
       <div className="demo-bar">
         <div className="wrap demo-bar__in">
           <span className="demo-bar__text">
-            <b>Демо-стенд <span className="demo-rev">rev 11</span>.</b> <span className="demo-bar__long">Всё работает в этом окне: оплата понарошку, фото не покидает браузер, письма не отправляются. На сайте админка — только на admin.&lt;домен&gt; и только через VPN.</span>
+            <b>Демо-стенд <span className="demo-rev">rev 12</span>.</b> <span className="demo-bar__long">Всё работает в этом окне: оплата понарошку, фото не покидает браузер, письма не отправляются. На сайте админка — только на admin.&lt;домен&gt; и только через VPN.</span>
           </span>
           <nav className="demo-tabs" aria-label="Демо">
             <a href="#/" aria-current={!admin ? "page" : undefined}>Сайт</a>

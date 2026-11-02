@@ -81,12 +81,11 @@ function Spine({ it }: { it: ShelfLink }) {
       href={it.to}
       className={`spine${v.ink ? " spine--light" : ""}`}
       style={vars({ "--c": v.c, "--ink": v.ink ?? "#fff", "--w": v.w, "--h": v.h })}
-      aria-label={it.soon ? `${it.label} — скоро` : `${it.label} — создать`}
+      aria-label={`${it.label} — создать`}
       data-shelf={it.id}
     >
       <span className="spine__band" aria-hidden="true" />
       <span className="spine__title" aria-hidden="true">{it.title}</span>
-      {it.soon && <span className="spine__soon" aria-hidden="true">скоро</span>}
       <span className="spine__star" aria-hidden="true">★</span>
     </Link>
   );
@@ -99,13 +98,12 @@ function FaceCover({ it }: { it: ShelfLink }) {
       href={it.to}
       className="facecover"
       style={vars({ "--c": v.c, "--w": v.w, "--h": v.h })}
-      aria-label={it.soon ? `${it.label} — скоро` : `${it.label} — создать`}
+      aria-label={`${it.label} — создать`}
       data-shelf={it.id}
     >
       <span className="facecover__lead" aria-hidden="true">{it.coverLead}</span>
       <span className="facecover__title" aria-hidden="true">{it.title}</span>
       {it.id === "novyj-god" ? <TreeArt /> : <KiteArt />}
-      {it.soon && <span className="spine__soon facecover__soon" aria-hidden="true">скоро</span>}
     </Link>
   );
 }

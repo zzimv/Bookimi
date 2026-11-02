@@ -30,6 +30,7 @@ import { DEFAULT_BULK_TIERS, type BulkTier } from "@/lib/bulk";
 import { PhotoSlot, type ConsentState, type PhotoView } from "./PhotoSlot";
 import { GroupStep, type DraftAdult, type DraftMember, type QuizGroup } from "./GroupStep";
 import { FlowLegal } from "@/components/FlowLegal";
+import { speciesFromText } from "@/lib/gen/extras";
 
 export interface QuizStory {
   slug: string;
@@ -473,7 +474,7 @@ export function QuizWizard({
       if (aud === "CHILD" && !a.hero.ageGroup && !a.hero.birthDate) return "Укажите возраст или дату рождения";
       if (aud === "TEEN" && (a.hero.age === undefined || a.hero.age < 11 || a.hero.age > 17)) return "Укажите возраст: от 11 до 17 лет";
       if (!extrasNamed()) return "Укажите имя каждого героя (для «своего варианта» — кто это) или уберите лишнего";
-      if (a.extras.some((e) => e.role === "pet" && !e.species)) return "Кто ваш питомец: кошка, собака или другое?";
+      // Вид питомца не блокирует «Дальше»: не выбран и не понятен из описания — в тексте нейтральное «питомец»
     }
     if (s === "occasion" && occChosen && a.occasion.key === "svoj" && !a.occasion.custom?.trim()) return "Напишите, какой у вас повод";
     if (s === "book") {
@@ -830,7 +831,10 @@ export function QuizWizard({
                     )}
                     {/* Питомец: вид обязателен — по нему и текст («кошка Мурка»), и рисунок */}
                     {e.role === "pet" && (
-                      <Chips name={`extra-species-${i}`} label="Кто это" items={[{ key: "cat", label: "Кошка" }, { key: "dog", label: "Собака" }, { key: "other", label: "Другое" }]} value={(e.species ?? "") as "cat"} onChange={(v) => setExtra(i, { species: (v || undefined) as Extra["species"] })} />
+                      <span className="label">Кошка или собака?</span>
+                    )}
+                    {e.role === "pet" && (
+                      <Chips name={`extra-species-${i}`} label="Кошка или собака" items={[{ key: "cat", label: "Кошка" }, { key: "dog", label: "Собака" }, { key: "other", label: "Другое" }]} value={(e.species ?? "") as "cat"} onChange={(v) => setExtra(i, { species: (v || undefined) as Extra["species"] })} />
                     )}
                     {e.role === "pet" && e.species === "other" && (
                       <label className="field">
@@ -846,7 +850,7 @@ export function QuizWizard({
                     )}
                     <label className="field">
                       <span>{e.role === "pet" ? "Кличка" : e.role === "custom" || e.role === "toy" ? "Как зовут (если есть имя)" : "Имя"}{e.role !== "custom" && <span className="req"> *</span>}</span>
-                      <input className="input ym-disable-keys" name={`extra-name-${i}`} autoComplete="off" maxLength={30} value={e.name} onChange={(ev) => setExtra(i, { name: ev.target.value })} onBlur={() => setExtra(i, { name: normalizeName(e.name) })} placeholder={e.role === "custom" ? "Например, Дуб Дубыч" : e.role === "mom" ? "Например, мама Оля" : "Например, Аня"} />
+                      <input className="input ym-disable-keys" name={`extra-name-${i}`} autoComplete="off" maxLength={30} value={e.name} onChange={(ev) => setExtra(i, { name: ev.target.value })} onBlur={() => setExtra(i, { name: normalizeName(e.name) })} placeholder={e.role === "custom" ? "Например, Дуб Дубыч" : e.role === "mom" ? "Например, мама Оля" : e.role === "pet" ? "Например, Пушок" : e.role === "toy" ? "Например, Зайка" : "Например, Аня"} />
                       <NameHint value={e.name} onFix={(v) => setExtra(i, { name: v })} />
                     </label>
                     {!HUMAN_ROLES.includes(e.role) && (
@@ -871,7 +875,12 @@ export function QuizWizard({
                     ) : (
                       <label className="field">
                         <span>{e.role === "custom" ? "Какой он" : "Как выглядит"}</span>
-                        <input className="input" name={`extra-desc-${i}`} maxLength={200} value={e.description ?? ""} onChange={(ev) => setExtra(i, { description: ev.target.value })} placeholder={e.role === "pet" ? "Рыжий кот с белыми лапками" : e.role === "custom" ? "Старый, мудрый, с дуплом-окошком" : "Светлые волосы, очки"} />
+                        <input className="input" name={`extra-desc-${i}`} maxLength={200} value={e.description ?? ""} onChange={(ev) => {
+                          const v = ev.target.value;
+                          // «рыжий кот…» — сразу отмечаем «Кошка», чтобы не спрашивать отдельно
+                          const sp = e.role === "pet" && !e.species ? speciesFromText(v) : null;
+                          setExtra(i, { description: v, ...(sp ? { species: sp } : {}) });
+                        }} placeholder={e.role === "pet" ? "Рыжий кот с белыми лапками" : e.role === "custom" ? "Старый, мудрый, с дуплом-окошком" : "Светлые волосы, очки"} />
                         <small className="names-hint">{NAMES_HINT}</small>
                       </label>
                     )}
