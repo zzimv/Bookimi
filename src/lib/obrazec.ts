@@ -18,6 +18,8 @@ export interface SampleOpts {
   /** Роли доп. героев; undefined — обязательные по сюжету, [] — никого. */
   extras?: string[];
   wide?: boolean;
+  /** Портрет героя без сцены (выбор внешности в анкете). */
+  portrait?: boolean;
 }
 
 export function sampleUrl(o: SampleOpts) {
@@ -43,5 +45,6 @@ export function sampleUrl(o: SampleOpts) {
   put("fur", o.fur);
   if (o.extras) q.set("x", o.extras.join(","));
   put("w", o.wide);
+  put("p", o.portrait);
   return `/obrazec?${q.toString()}`;
 }

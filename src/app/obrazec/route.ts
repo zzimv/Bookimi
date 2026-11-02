@@ -2,8 +2,9 @@
 // Это не книга покупателя — образец стиля. Параметры строго из белых списков, имя в картинку не попадает.
 //   /obrazec?s=<сюжет>&i=<0..12>&st=<стиль>&m=<настроение>&k=<child|teen|adult|pet>&g=<boy|girl>&a=<возраст>
 //            &h=<волосы>&hs=<причёска>&sk=<кожа>&gl=1&fr=1&b=1&sp=<dog|cat>&br=<порода>&fur=<окрас>&x=<роли через запятую>&w=1
+//   &p=1 — портрет героя без сцены (выбор внешности картинкой в анкете, rev 13)
 import { plotBySlug, PLOTS } from "@/content/registry";
-import { renderDemoSpread } from "@/content/art/render";
+import { renderDemoCharacter, renderDemoSpread } from "@/content/art/render";
 import { ART_STYLE_IDS } from "@/content/profiles";
 import { MOODS } from "@/content/moods";
 import { EXTRA_ROLES, HERO_KIND_BY_AUDIENCE, type DemoExtra, type DemoLook, type HeroKind } from "@/content/types";
@@ -73,7 +74,9 @@ export function GET(req: Request) {
     look: role === "partner" ? { gender: look.gender === "girl" ? "boy" : "girl", age: look.age, hair: ["тёмные", "русые", "светлые"][(seed + i) % 3] } : { gender: (seed + i) % 2 ? "boy" : "girl", age: 34, hair: ["каштановые", "светлые", "тёмные"][(seed + i) % 3] },
   }));
 
-  const svg = renderDemoSpread({
+  const svg = q.get("p") === "1" && kind !== "pet"
+    ? renderDemoCharacter({ kind, look, artStyle: style })
+    : renderDemoSpread({
     plot: { slug: plot.slug, theme: plot.theme, heroKind: kind },
     spreadIndex: idx,
     artStyle: style,

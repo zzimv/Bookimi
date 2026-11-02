@@ -31,6 +31,8 @@ import { dedicationText, groupOf } from "../../src/lib/gen/text";
 import { cartoonScript, type Cue } from "../../src/lib/gen/cartoon-script";
 import { plainSpread } from "../../src/lib/spread-markup";
 import { checkFirstName, FIRST_NAME_ERROR } from "../../src/lib/first-name";
+import { layoutOf } from "../../src/lib/book-layout";
+import { applyLayoutEdit, LayoutEdit, NAME_AFTER_PAY } from "../../src/lib/book-edit";
 import { fullNameError, normalizeName } from "../../src/lib/names";
 import { applyBonus, bonusBalance, reviewBonusAllowed, reviewCredit, type BonusEntryLike } from "../../src/lib/bonuses";
 import { canChangeOrder, describeChange, type OrderShape } from "../../src/lib/order-change";
@@ -44,6 +46,8 @@ export interface DBook {
   progress: number;
   error: string | null;
   text: StoryText | null;
+  /** Текст с метками имени — для «Изменить имя» в превью (rev 13). */
+  textRaw?: StoryText | null;
   rewritesLeft: number;
   redrawsLeft: number;
   mood: string;
@@ -350,7 +354,7 @@ export function svgUrl(key: string, make: () => string) {
 export function pageUrl(b: DBook, index: number, opts: { full?: boolean } = {}) {
   const full = opts.full ?? (b.paidFull && b.status === "FULL_READY");
   const v = b.variants[index] ?? 0;
-  const key = `${b.id}|${index}|${v}|${b.mood}|${full ? "full" : "wm"}|${b.text?.title ?? ""}`;
+  const key = `${b.id}|${index}|${v}|${b.mood}|${full ? "full" : "wm"}`;
   return svgUrl(key, () => {
     const a = b.params;
     const kind = HERO_KIND_BY_AUDIENCE[a.audience];
@@ -370,7 +374,8 @@ export function pageUrl(b: DBook, index: number, opts: { full?: boolean } = {}) 
       hero: { ...heroLook(a), kind },
       extras,
       caption: "демо-иллюстрация · на сайте рисуем по фото в выбранном стиле",
-      title: index === 0 ? b.text?.title : undefined,
+      // Название на картинку не рисуем: обложку подписывает вёрстка книги (BookPreview, PDF) — как на сайте
+      title: undefined,
       ...(crowdOn ? { crowd: crowdLooks(g.members, g.adults, { kind: plot!.audience === "TEEN" ? "teen" : "child", age: heroAge(a) }), crowdLayout: plot!.spreads[idx - 1]?.text.includes("{ПЕРЕКЛИЧКА}") ? ("photo" as const) : ("around" as const) } : {}),
     });
     if (!full) svg = svg.replace(/<\/svg>\s*$/, `${watermark(index === 0 ? 1024 : 2048, 1024)}</svg>`);
@@ -417,6 +422,7 @@ async function finishJob(b: DBook, kind: JobKind) {
   const a = AnswersV2.parse(b.params);
   if (kind === "text" || (kind === "full" && !b.text)) {
     const r = await new DemoTextProvider().write(a, plotForAnswers(a), Math.max(0, 2 - b.rewritesLeft));
+    b.textRaw = r.raw;
     b.text = personalize(r.raw, a);
     if (kind === "full") return finishJob(b, "full");
     b.status = b.parentId ? "TEXT_APPROVED" : "TEXT_READY";
@@ -1021,7 +1027,10 @@ async function handle(method: string, path: string, q: URLSearchParams, body: un
         loggedIn: Boolean(S.user),
         consent: { pd: S.consent.pd, photo: S.consent.photo, group: Boolean(S.consent.group) },
         pages: book.pages.map((i) => ({ index: i, text: i === 0 ? book.text?.title ?? "" : book.text?.spreads[i - 1]?.text ?? "", url: pageUrl(book, i, { full }) })),
-        photos: photosOf(book.id).filter((p) => p.role === "main").map((p) => ({ id: p.id, url: p.url })),
+        photos: photosOf(book.id).map((p) => ({ id: p.id, role: p.role, url: p.url })),
+        hero: { name: book.params.hero.name, gender: book.params.hero.gender },
+        dedication: dedicationText(AnswersV2.parse(book.params)),
+        layout: layoutOf(book.params),
       });
     }
     if (seg.length === 3 && method === "PATCH") {
@@ -1052,8 +1061,21 @@ async function handle(method: string, path: string, q: URLSearchParams, body: un
         photos.set(book.id, photosOf(book.id).filter((p) => p.id !== q.get("photo")));
         return ok({ ok: true });
       }
-      // Загрузка фото теперь — на шаге «Герои» анкеты (/api/draft/photos)
-      return err("Фото загружаются в анкете, на шаге «Герои»", 410);
+      // Фото для страницы «Фото и посвящение» (rev 13): как есть, без обработки, одно; только в памяти вкладки
+      const fd = body as FormData;
+      if (fd?.get?.("role") !== "keepsake") return err("Фото героя загружаются в анкете, на шаге «Герои»", 410);
+      if (book.paidFull) return err("Книга уже нарисована — фото больше не нужны", 409);
+      if (!S.consent.photo || !S.consent.pd) return err("Сначала дайте согласие на обработку фото", 403);
+      const file = fd.get("file");
+      if (!(file instanceof File)) return err("Выберите файл");
+      if (file.size > 15 * 1024 * 1024) return err("Файл больше 15 МБ");
+      if (!/^image\/(jpeg|png|webp|heic|heif)$/.test(file.type)) return err("Подойдёт JPG, PNG или WebP");
+      for (const old of photosOf(book.id).filter((p) => p.role === "keepsake")) URL.revokeObjectURL(old.url);
+      const id = uuid();
+      photos.set(book.id, [...photosOf(book.id).filter((p) => p.role !== "keepsake"), { id, url: URL.createObjectURL(file), role: "keepsake" }]);
+      log(`Фото для страницы «Фото и посвящение» — как есть, в рамке; в демо только в памяти вкладки, на сайте удаляется через ${DEFAULTS.limits.photoTtlDays} дней`);
+      commit();
+      return ok({ id, hints: [] });
     }
     if (seg[3] === "action" && method === "POST") return bookAction(book, b0 ?? {});
   }
@@ -1426,6 +1448,25 @@ function bookAction(book: DBook, b: Record<string, unknown>): R {
         startJob(book, "full");
       }
       log(`Смена настроения: ${moodId || "как задумал художник"}`);
+      commit();
+      return ok({ ok: true });
+    }
+    case "layout": {
+      // Правки в превью (rev 13): имя, обложка, автор, фото, посвящение — та же логика, что на сайте (src/lib/book-edit.ts)
+      const e = LayoutEdit.safeParse(b);
+      if (!e.success) return err(e.error.issues[0]?.message ?? "Некорректный запрос");
+      const a = AnswersV2.parse(book.params);
+      if (e.data.name !== undefined && book.paidFull && e.data.name.trim().toLowerCase() !== a.hero.name.toLowerCase()) return err(NAME_AFTER_PAY, 409);
+      if (e.data.photoId && !photosOf(book.id).some((p) => p.id === e.data.photoId)) return err("Фото не найдено — загрузите ещё раз", 404);
+      const r = applyLayoutEdit(a, e.data);
+      if (!r.ok) return err(r.error);
+      if (r.nameChanged) {
+        if (!["TEXT_READY", "TEXT_APPROVED", "PREVIEW_READY"].includes(book.status)) return err("Подождите, пока книга будет готова, — потом имя можно поменять");
+        if (book.textRaw) book.text = personalize(book.textRaw, r.answers);
+        log(`Имя в книге: ${a.hero.name} → ${r.answers.hero.name} (текст и обложка — заново с правильными окончаниями)`);
+      }
+      book.params = r.answers;
+      if (book.paidFull) log("Правка вёрстки — PDF пересобраны (в демо PDF не собирается)");
       commit();
       return ok({ ok: true });
     }

@@ -486,7 +486,8 @@ describe("PDF и файлы допов", () => {
     const text = execFileSync("pdftotext", ["-enc", "UTF-8", f, "-"]).toString("utf8").replace(/\s+/g, " ");
     expect(text).toContain("Сказка про Машу");
     expect(text).toContain("Маше — с любовью");
-    expect(text).toContain("по имени Маша");
+    // rev 13: последняя страница — «{Имя}, эта книга — только твоя…» (src/lib/book-layout.ts)
+    expect(text).toContain("Маша, эта книга — только твоя");
     expect(text).not.toMatch(/(?<![\p{L}])маш[аиуеой](?![\p{L}])/u);
   }, 120_000);
 });

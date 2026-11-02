@@ -30,6 +30,7 @@ import { personsOf, redactForImage } from "./redact";
 import { crowdLooks } from "../../content/art/render";
 import { groupSpreadIndexes } from "../../content/registry";
 import { groupOf } from "./text";
+import { layoutOf } from "../book-layout";
 
 export class LimitReached extends Error {}
 
@@ -304,7 +305,14 @@ export async function bookPdfData(bookId: string, orderCode?: string): Promise<B
     return { data, contentType: "image/png", source: { data, contentType: "image/png" } };
   };
   const cover = book.pages.find((p) => p.index === 0);
+  // Вёрстка (rev 13): обложка, автор, фото на странице «Фото и посвящение» — как есть, если ещё не удалено
+  const layout = layoutOf(book.params);
+  const photoRow = layout.photoId ? await db.photo.findFirst({ where: { id: layout.photoId, deletedAt: null, hero: { bookId } } }) : null;
+  const photo = photoRow ? await getFile("photos", photoRow.storageKey).then((data) => ({ data, contentType: "image/jpeg" })).catch(() => null) : null;
   return {
+    coverVariant: layout.coverVariant,
+    author: layout.author,
+    photo,
     title: text.title,
     dedication: dedicationText(a),
     heroName: normalizeName(a.hero.name),

@@ -30,6 +30,9 @@ class Schema {
   optional(): any {
     return new Schema((v, p) => (v === undefined ? undefined : this._parse(v, p)));
   }
+  nullable(): any {
+    return new Schema((v, p) => (v === null ? null : this._parse(v, p)));
+  }
   default(d: any): any {
     return new Schema((v, p) => this._parse(v === undefined ? (typeof d === "function" ? d() : structuredClone(d)) : v, p));
   }

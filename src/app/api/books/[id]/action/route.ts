@@ -14,6 +14,8 @@ import { AnswersV2, heroAge } from "@/lib/quiz";
 import { moodsFor } from "@/content/moods";
 import { hasConsent } from "@/lib/consent";
 import { takeFullMood, takePreviewMood, takeRedraw, takeRewrite } from "@/lib/book-limits";
+import { applyLayoutEdit, LayoutEdit, NAME_AFTER_PAY } from "@/lib/book-edit";
+import { personalize, type StoryText } from "@/lib/gen/text";
 
 const Input = z.discriminatedUnion("action", [
   z.object({ action: z.literal("rewrite") }),
@@ -25,6 +27,8 @@ const Input = z.discriminatedUnion("action", [
   z.object({ action: z.literal("retry") }),
   // Смена настроения всех иллюстраций; "" — «как задумал художник»
   z.object({ action: z.literal("mood"), mood: z.string().trim().max(40) }),
+  // Правки в превью (rev 13): имя, обложка, автор, фото, посвящение — src/lib/book-edit.ts
+  LayoutEdit,
 ]);
 
 export async function POST(req: Request, { params }: { params: Promise<{ id: string }> }) {
@@ -155,6 +159,34 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       }
       await enqueue(QUEUES.mood, { bookId: id }, { singletonKey: `mood-${id}` });
       await track("mood_change", { anonId: anon, userId: own.user?.id, props: { bookId: id, mood: moodId || "as-drawn" } });
+      return json({ ok: true });
+    }
+    case "layout": {
+      const a = AnswersV2.safeParse(book.params);
+      if (!a.success) return err("Ответы анкеты повреждены — напишите в поддержку");
+      if (b.name !== undefined && book.paidFull && b.name.trim() && b.name.trim().toLowerCase() !== a.data.hero.name.toLowerCase()) return err(NAME_AFTER_PAY, 409);
+      if (b.photoId) {
+        // Фото — только этой книги и ещё не удалённое (удаляется по общим правилам: через 7 дней)
+        const ph = await db.photo.findFirst({ where: { id: b.photoId, deletedAt: null, hero: { bookId: id } } });
+        if (!ph) return err("Фото не найдено — загрузите ещё раз", 404);
+      }
+      const r = applyLayoutEdit(a.data, b);
+      if (!r.ok) return err(r.error);
+      const data: Record<string, unknown> = { params: r.answers as object, dedication: r.answers.dedication || null };
+      if (r.nameChanged) {
+        if (!["TEXT_READY", "TEXT_APPROVED", "PREVIEW_READY"].includes(book.status)) return err("Подождите, пока книга будет готова, — потом имя можно поменять");
+        const raw = book.textRaw as unknown as StoryText | null;
+        if (raw) {
+          const text = personalize(raw, r.answers);
+          data.text = text as object;
+          await db.bookPage.updateMany({ where: { bookId: id, index: 0 }, data: { text: text.title } });
+          for (const s of text.spreads) await db.bookPage.updateMany({ where: { bookId: id, index: s.index }, data: { text: s.text } });
+        }
+        await db.hero.updateMany({ where: { bookId: id, role: "main" }, data: { name: r.answers.hero.name, nickname: r.answers.hero.nickname || null } });
+      }
+      await db.book.update({ where: { id }, data });
+      // Оплаченная книга: перевёрстка PDF (без перерисовки картинок)
+      if (book.paidFull && book.status === "FULL_READY") await enqueue(QUEUES.redraw, { bookId: id, index: -1 });
       return json({ ok: true });
     }
     case "retry": {

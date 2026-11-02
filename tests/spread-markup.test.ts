@@ -30,6 +30,8 @@ describe("разметка разворота: стихи и комикс", () =
     const img = { data: Buffer.from(""), contentType: "image/png" };
     const { html } = bookHtml({ title: "Т", dedication: "", heroName: "Маша", cover: img, spreads: [{ text: "[Утро.]\nДЗЫНЬ!\nСтрока два", image: img }] }, { kind: "screen" });
     expect(html).toContain("white-space:pre-line");
-    expect(html).toContain('<span class="sp-cap">Утро.</span><span class="sp-line"><b class="sp-sound">ДЗЫНЬ!</b></span><span class="sp-line">Строка два</span>');
+    // rev 13: текст на картинке делится на левую и правую страницу (src/lib/book-layout.ts, splitSpread)
+    expect(html).toContain('<span class="sp-cap">Утро.</span><span class="sp-line"><b class="sp-sound">ДЗЫНЬ!</b></span></div>');
+    expect(html).toContain('<span class="sp-line">Строка два</span></div>');
   });
 });

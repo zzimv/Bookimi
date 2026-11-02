@@ -7,6 +7,9 @@ import { checkText } from "@/lib/moderation";
 import type { StoryText } from "@/lib/gen/text";
 import { anonId } from "@/lib/auth";
 import { consentState } from "@/lib/consent";
+import { AnswersV2 } from "@/lib/quiz";
+import { layoutOf } from "@/lib/book-layout";
+import { dedicationText } from "@/lib/gen/text";
 
 export const dynamic = "force-dynamic";
 
@@ -19,10 +22,11 @@ export async function GET(_: Request, { params }: { params: Promise<{ id: string
   const pages = await db.bookPage.findMany({ where: { bookId: id }, orderBy: { index: "asc" } });
   const photos = await db.photo.findMany({
     where: { hero: { bookId: id }, deletedAt: null },
-    select: { id: true, heroId: true, storageKey: true, moderation: true },
+    select: { id: true, heroId: true, storageKey: true, moderation: true, hero: { select: { role: true } } },
   });
   const full = book.paidFull && book.status === "FULL_READY";
   const consent = await consentState({ userId: own.user?.id, anonId: await anonId() });
+  const a = AnswersV2.safeParse(book.params);
   return json({
     id: book.id,
     status: book.status,
@@ -44,7 +48,11 @@ export async function GET(_: Request, { params }: { params: Promise<{ id: string
         url: full ? (p.imageKey ? await signedUrl("books", p.imageKey) : null) : p.previewKey ? await signedUrl("books", p.previewKey) : null,
       })),
     ),
-    photos: await Promise.all(photos.map(async (p) => ({ id: p.id, url: await signedUrl("photos", p.storageKey) }))),
+    photos: await Promise.all(photos.map(async (p) => ({ id: p.id, role: p.hero.role, url: await signedUrl("photos", p.storageKey) }))),
+    // Вёрстка книги в превью (rev 13): имя и пол героя, посвящение, обложка, автор, фото
+    hero: a.success ? { name: a.data.hero.name, gender: a.data.hero.gender } : null,
+    dedication: a.success ? dedicationText(a.data) : "",
+    layout: layoutOf(book.params),
   });
 }
 

@@ -31,6 +31,8 @@ import { PhotoSlot, type ConsentState, type PhotoView } from "./PhotoSlot";
 import { GroupStep, type DraftAdult, type DraftMember, type QuizGroup } from "./GroupStep";
 import { FlowLegal } from "@/components/FlowLegal";
 import { speciesFromText } from "@/lib/gen/extras";
+import { MagicLoader } from "@/components/MagicLoader";
+import { SceneIcon, type SceneIconKind } from "./SceneIcon";
 
 export interface QuizStory {
   slug: string;
@@ -73,12 +75,40 @@ const OLD_KEYS = ["bookimi.quiz.v2", "bookimi.quiz.v1"];
 
 type Extra = QuizAnswers["extras"][number];
 type DraftExtra = Omit<Extra, "gender"> & { gender?: Extra["gender"] };
-type Draft = Omit<QuizAnswers, "hero" | "extras" | "group"> & {
+type Draft = Omit<QuizAnswers, "hero" | "extras" | "group" | "layout"> & {
   hero: Partial<QuizAnswers["hero"]>;
   extras: DraftExtra[];
   group: { members: DraftMember[]; adults: DraftAdult[] };
 };
 type Mode = "photo" | "describe";
+
+/** Шаг «Герои» — три маленькие сцены (rev 13): имя → внешность картинкой → кто ещё в книге. */
+const HERO_SCENES = 3;
+
+/**
+ * Готовые герои для выбора картинкой (rev 13): тон кожи, цвет волос и причёска. Рисует тот же рисовальщик, что книгу
+ * (/obrazec?p=1), — ребёнок выбранного возраста. Тонкая настройка — в «Подробнее».
+ */
+const LOOK_PRESETS: Record<"boy" | "girl", { skin: string; hair: string; hairstyle: string }[]> = {
+  boy: [
+    { skin: "светлый", hair: "светлые", hairstyle: "короткая стрижка" },
+    { skin: "светлый", hair: "рыжие", hairstyle: "кудряшки" },
+    { skin: "светлый", hair: "русые", hairstyle: "чёлка" },
+    { skin: "смуглый", hair: "каштановые", hairstyle: "короткая стрижка" },
+    { skin: "смуглый", hair: "чёрные", hairstyle: "кудряшки" },
+    { skin: "тёмный", hair: "чёрные", hairstyle: "короткая стрижка" },
+  ],
+  girl: [
+    { skin: "светлый", hair: "светлые", hairstyle: "косички" },
+    { skin: "светлый", hair: "рыжие", hairstyle: "хвостик" },
+    { skin: "светлый", hair: "русые", hairstyle: "длинные" },
+    { skin: "смуглый", hair: "каштановые", hairstyle: "кудряшки" },
+    { skin: "смуглый", hair: "тёмные", hairstyle: "длинные" },
+    { skin: "тёмный", hair: "чёрные", hairstyle: "кудряшки" },
+  ],
+};
+const SKIN_WORD: Record<string, string> = { светлый: "светлая кожа", смуглый: "смуглая кожа", тёмный: "тёмная кожа" };
+const presetLabel = (x: { skin: string; hair: string; hairstyle: string }) => `${x.hair[0].toUpperCase()}${x.hair.slice(1)} волосы, ${x.hairstyle}, ${SKIN_WORD[x.skin] ?? x.skin}`;
 
 const empty = (audience: AudienceKey = "CHILD"): Draft => ({
   version: 2,
@@ -229,6 +259,8 @@ export function QuizWizard({
   const router = useRouter();
   const [a, setA] = useState<Draft>(() => { const e = empty(initial.audience); return { ...e, ...initial, hero: { ...e.hero, ...initial.hero }, group: { members: [], adults: [], ...(initial.group ?? {}) } }; });
   const [stepKey, setStepKey] = useState<FlowStep>("heroes");
+  const [scene, setScene] = useState(0);
+  const [making, setMaking] = useState(false);
   const [occChosen, setOccChosen] = useState(presetOccasion || locked);
   const [own, setOwn] = useState(false);
   const [modes, setModes] = useState<Record<string, Mode>>({});
@@ -274,6 +306,7 @@ export function QuizWizard({
         setOwn(Boolean(saved.own));
         setModes(saved.modes ?? {});
         setBulk(Boolean(saved.bulk));
+        if (typeof saved.scene === "number") setScene(Math.max(0, Math.min(HERO_SCENES - 1, saved.scene)));
       }
     } catch {}
     // Шаг из адреса (Назад/Вперёд браузера, перезагрузка) важнее сохранённого
@@ -302,9 +335,34 @@ export function QuizWizard({
   useEffect(() => {
     if (!loaded) return;
     try {
-      localStorage.setItem(KEY, JSON.stringify({ a, stepKey, occChosen, own, modes, bulk, fromLink: linkKey(initial) }));
+      localStorage.setItem(KEY, JSON.stringify({ a, stepKey, scene, occChosen, own, modes, bulk, fromLink: linkKey(initial) }));
     } catch {}
-  }, [a, stepKey, occChosen, own, modes, bulk, loaded, initial]);
+  }, [a, stepKey, scene, occChosen, own, modes, bulk, loaded, initial]);
+
+  // Искорки при выборе (чипсы, картинки героев, книги, стили): маленькая вспышка звёздочек у курсора.
+  // Без движения, если в системе включено «Уменьшить движение».
+  useEffect(() => {
+    if (window.matchMedia?.("(prefers-reduced-motion: reduce)").matches) return;
+    const on = (e: MouseEvent) => {
+      const t = (e.target as HTMLElement | null)?.closest?.(".quiz .chip, .quiz .char-card, .quiz .choice, .quiz .style-card, .quiz .mood, .quiz .dedication-chip");
+      if (!t) return;
+      const r = t.getBoundingClientRect();
+      const box = document.createElement("span");
+      box.className = "sparkle";
+      box.setAttribute("aria-hidden", "true");
+      box.style.left = `${e.clientX || r.left + r.width / 2}px`;
+      box.style.top = `${e.clientY || r.top + r.height / 2}px`;
+      for (let i = 0; i < 7; i++) {
+        const st = document.createElement("i");
+        st.style.setProperty("--a", `${i * (360 / 7)}deg`);
+        box.appendChild(st);
+      }
+      document.body.appendChild(box);
+      setTimeout(() => box.remove(), 800);
+    };
+    document.addEventListener("click", on);
+    return () => document.removeEventListener("click", on);
+  }, []);
 
   const set = <K extends keyof Draft>(k: K, v: Draft[K]) => setA((cur) => ({ ...cur, [k]: v }));
   const hero = (patch: Partial<Draft["hero"]>) => setA((cur) => ({ ...cur, hero: { ...cur.hero, ...patch } }));
@@ -361,7 +419,7 @@ export function QuizWizard({
 
   useEffect(() => {
     if (loaded) h1.current?.focus({ preventScroll: true });
-  }, [step, loaded]);
+  }, [step, scene, loaded]);
 
   // Адрес ↔ шаг: первый шаг — без новой записи; «Назад»/«Вперёд» браузера → шаг из адреса
   const pushedRef = useRef(0);
@@ -443,7 +501,9 @@ export function QuizWizard({
   const named = Boolean(a.hero.name?.trim());
   const coverTitle = story ? fill(named ? titleTemplate(story.title) : titleForCatalog(story.title, aud)) : own ? a.story.ideaChoice?.title || "Своя история" : "";
   const coverName = normalizeName(a.hero.name ?? "") || HERO_WORD[aud];
-  const mode = (k: string): Mode => modes[k] ?? (photoEnabled ? "photo" : "describe");
+  // Внешность картинкой — главный путь для ребёнка и подростка (rev 13); фото — запасной («Загрузить фото»)
+  const pictures = aud === "CHILD" || aud === "TEEN";
+  const mode = (k: string): Mode => modes[k] ?? (k === "main" && pictures ? ((a.hero.photoIds?.length ?? 0) > 0 ? "photo" : "describe") : photoEnabled ? "photo" : "describe");
 
   function chooseAudience(next: AudienceKey) {
     if (next === aud) return;
@@ -465,17 +525,7 @@ export function QuizWizard({
   const extrasNamed = (from = 0) => a.extras.slice(from).every((e) => (e.role === "custom" ? e.what?.trim() || e.name.trim() : e.name.trim()));
 
   function validate(s: FlowStep): string {
-    if (s === "heroes") {
-      if (!a.hero.name?.trim()) return aud === "PET" ? "Как зовут питомца?" : "Как зовут героя?";
-      const badName = nameError(a.hero.name, "free") ?? nameError(a.hero.nickname, "free") ?? a.extras.map((e) => nameError(e.name, "free")).find(Boolean);
-      if (badName) return badName;
-      if (aud === "PET" && !a.pet.species) return "Кто это: собака или кошка?";
-      if (!a.hero.gender) return aud === "PET" ? "Мальчик или девочка?" : `Выберите: ${GENDER[aud][0].toLowerCase()} или ${GENDER[aud][1].toLowerCase()}`;
-      if (aud === "CHILD" && !a.hero.ageGroup && !a.hero.birthDate) return "Укажите возраст или дату рождения";
-      if (aud === "TEEN" && (a.hero.age === undefined || a.hero.age < 11 || a.hero.age > 17)) return "Укажите возраст: от 11 до 17 лет";
-      if (!extrasNamed()) return "Укажите имя каждого героя (для «своего варианта» — кто это) или уберите лишнего";
-      // Вид питомца не блокирует «Дальше»: не выбран и не понятен из описания — в тексте нейтральное «питомец»
-    }
+    if (s === "heroes") return validateScene(0) || validateScene(2);
     if (s === "occasion" && occChosen && a.occasion.key === "svoj" && !a.occasion.custom?.trim()) return "Напишите, какой у вас повод";
     if (s === "book") {
       if (own) {
@@ -495,6 +545,26 @@ export function QuizWizard({
     return "";
   }
 
+  /** Сцены шага «Герои»: 0 — имя, пол, возраст; 1 — внешность (необязательно); 2 — кто ещё в книге. */
+  function validateScene(n: number): string {
+    if (n === 0) {
+      if (!a.hero.name?.trim()) return aud === "PET" ? "Как зовут питомца?" : "Как зовут героя?";
+      const badName = nameError(a.hero.name, "free") ?? nameError(a.hero.nickname, "free");
+      if (badName) return badName;
+      if (aud === "PET" && !a.pet.species) return "Кто это: собака или кошка?";
+      if (!a.hero.gender) return aud === "PET" ? "Мальчик или девочка?" : `Выберите: ${GENDER[aud][0].toLowerCase()} или ${GENDER[aud][1].toLowerCase()}`;
+      if (aud === "CHILD" && !a.hero.ageGroup && !a.hero.birthDate) return "Укажите возраст или дату рождения";
+      if (aud === "TEEN" && (a.hero.age === undefined || a.hero.age < 11 || a.hero.age > 17)) return "Укажите возраст: от 11 до 17 лет";
+    }
+    if (n === 2) {
+      const badExtra = a.extras.map((e) => nameError(e.name, "free")).find(Boolean);
+      if (badExtra) return badExtra;
+      if (!extrasNamed()) return "Укажите имя каждого героя (для «своего варианта» — кто это) или уберите лишнего";
+      // Вид питомца не блокирует «Дальше»: не выбран и не понятен из описания — в тексте нейтральное «питомец»
+    }
+    return "";
+  }
+
   function go(k: FlowStep) {
     setError("");
     setStepKey(k);
@@ -507,6 +577,12 @@ export function QuizWizard({
   }
   /** Кнопка «Назад» анкеты — как «Назад» браузера, если предыдущий шаг уже в истории. */
   function back() {
+    if (step === "heroes" && scene > 0) {
+      setError("");
+      setScene(scene - 1);
+      window.scrollTo({ top: 0, behavior: "smooth" });
+      return;
+    }
     const prev = steps[stepIdx - 1];
     if (!prev) return;
     if (pushedRef.current > 0) window.history.back();
@@ -514,6 +590,14 @@ export function QuizWizard({
   }
 
   function next() {
+    if (step === "heroes" && scene < HERO_SCENES - 1) {
+      const e0 = validateScene(scene);
+      if (e0) return setError(e0);
+      setError("");
+      setScene(scene + 1);
+      window.scrollTo({ top: 0, behavior: "smooth" });
+      return;
+    }
     const e = validate(step);
     if (step === "group") setShowIssues(true);
     if (e) return setError(e);
@@ -526,11 +610,13 @@ export function QuizWizard({
       const e = validate(s);
       if (e) {
         go(s);
+        if (s === "heroes") setScene(validateScene(0) ? 0 : 2);
         if (s === "group") setShowIssues(true);
         return setError(e);
       }
     }
     setBusy(true);
+    setMaking(true);
     setError("");
     try {
       const maxExtrasNow = story ? story.extras.max : 3;
@@ -553,6 +639,7 @@ export function QuizWizard({
     } catch (e) {
       setError((e as Error).message);
       setBusy(false);
+      setMaking(false);
     }
   }
 
@@ -570,7 +657,8 @@ export function QuizWizard({
   }
 
   const occLabel = occasionChips(aud).find((o) => o.key === a.occasion.key)?.label;
-  const withPreview = step === "heroes" || step === "details";
+  // Живая обложка — рядом с анкетой на всех шагах (кроме списка группы): меняется от имени, внешности, героев
+  const withPreview = step !== "group";
 
   const bookCard = (s: QuizStory, badge?: string) => (
     <button key={s.slug} type="button" className="choice" data-slug={s.slug} aria-pressed={!own && a.story.slug === s.slug} onClick={() => chooseStory(s.slug)}>
@@ -625,10 +713,17 @@ export function QuizWizard({
 
   const modeTabs = (k: string, photoOk = true) =>
     photoEnabled && photoOk ? (
-      <div className="mode-tabs" role="tablist" aria-label="Фото или описание">
-        <button type="button" role="tab" aria-selected={mode(k) === "photo"} data-mode="photo" onClick={() => setModes({ ...modes, [k]: "photo" })}>Загрузить фото</button>
-        <button type="button" role="tab" aria-selected={mode(k) === "describe"} data-mode="describe" onClick={() => setModes({ ...modes, [k]: "describe" })}>Описать</button>
-      </div>
+      k === "main" && pictures ? (
+        <div className="mode-tabs" role="tablist" aria-label="Картинка или фото">
+          <button type="button" role="tab" aria-selected={mode(k) === "describe"} data-mode="describe" onClick={() => setModes({ ...modes, [k]: "describe" })}>Выбрать картинку</button>
+          <button type="button" role="tab" aria-selected={mode(k) === "photo"} data-mode="photo" onClick={() => setModes({ ...modes, [k]: "photo" })}>Загрузить фото</button>
+        </div>
+      ) : (
+        <div className="mode-tabs" role="tablist" aria-label="Фото или описание">
+          <button type="button" role="tab" aria-selected={mode(k) === "photo"} data-mode="photo" onClick={() => setModes({ ...modes, [k]: "photo" })}>Загрузить фото</button>
+          <button type="button" role="tab" aria-selected={mode(k) === "describe"} data-mode="describe" onClick={() => setModes({ ...modes, [k]: "describe" })}>Описать</button>
+        </div>
+      )
     ) : null;
 
   // Подсказка по фото: «похоже, волосы русые» — только предложение, отмечает покупатель
@@ -669,6 +764,39 @@ export function QuizWizard({
       </label>
     </div>
   );
+  /** Заголовок сцены: картинка-значок, вопрос голосом рассказчика и подсказка. */
+  const sceneHead = (icon: SceneIconKind, title: string, sub?: string) => (
+    <div className="scene__head">
+      <SceneIcon kind={icon} />
+      <div>
+        <h1 ref={h1} tabIndex={-1}>{title}</h1>
+        {sub && <p className="muted">{sub}</p>}
+      </div>
+    </div>
+  );
+
+  const g = (a.hero.gender === "girl" ? "girl" : "boy") as "boy" | "girl";
+  const charPicker = (
+    <div className="describe" data-describe="pictures">
+      <div className="char-grid" role="radiogroup" aria-label="Внешность героя: выберите картинку">
+        {LOOK_PRESETS[g].map((x, i) => {
+          const on = a.appearance.hair === x.hair && a.appearance.hairstyle === x.hairstyle && a.appearance.skin === x.skin;
+          return (
+            <button key={`${g}-${i}`} type="button" role="radio" aria-checked={on} className="char-card" data-char={i} aria-label={presetLabel(x)} title={presetLabel(x)} onClick={() => look(x)}>
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src={sampleUrl({ portrait: true, kind, gender: g, age: heroAgeNum, ...x, glasses: a.appearance.glasses, freckles: a.appearance.freckles, style })} alt="" width={150} height={150} />
+              <span className="char-card__check" aria-hidden="true">✓</span>
+            </button>
+          );
+        })}
+      </div>
+      <details className="more look-more">
+        <summary>Подробнее: очки, веснушки, одежда, свой цвет волос</summary>
+        {describeHuman}
+      </details>
+    </div>
+  );
+
   const describePet = (
     <div className="describe" data-describe="main">
       <span className="label">Окрас</span>
@@ -710,11 +838,15 @@ export function QuizWizard({
       <div className={withPreview ? "quiz__grid" : undefined}>
         <div className="quiz__main">
           {step === "heroes" && (
-            <section>
-              <h1 ref={h1} tabIndex={-1}>{aud === "PET" ? "Кто герой книги?" : "Герои книги"}</h1>
-              <p className="muted">
-                {photoEnabled ? "Загрузите фото — сразу проверим и обрежем до портрета, а иллюстрации нарисуем по фото в выбранном стиле, и герой узнаётся. Лучше всего — фото в анфас, с улыбкой, чтобы были хорошо видны глаза. Или опишите словами." : "Опишите героя — иллюстрации нарисуем по описанию."}
-              </p>
+            <section className="scene" data-k={`heroes-${scene}`} data-scene={scene}>
+              <ol className="scene-dots" aria-label={`Часть ${scene + 1} из ${HERO_SCENES}`}>
+                {["Имя", "Внешность", "Друзья"].map((t, i) => (
+                  <li key={t} className={i < scene ? "done" : i === scene ? "now" : ""}>{t}</li>
+                ))}
+              </ol>
+              {scene === 0 && (
+                <>
+              {sceneHead("name", aud === "PET" ? "Как зовут нашего питомца?" : "Как зовут нашего героя?", "Каждая хорошая история начинается с имени. Его мы впишем в название, на обложку и на каждую страницу — с правильными окончаниями.")}
               <fieldset className="hero-card" data-hero="main">
                 <legend>{aud === "PET" ? "Питомец" : "Главный герой"}</legend>
                 {!locked && !presetAudience && (
@@ -789,6 +921,13 @@ export function QuizWizard({
                     </datalist>
                   </label>
                 )}
+              </fieldset>
+                </>
+              )}
+              {scene === 1 && (
+                <>
+              {sceneHead("look", aud === "PET" ? `Как выглядит ${fill("{ГЕРОЙ.им}")}?` : `${a.hero.gender === "girl" ? "Какой" : "Каким"} нарисуем ${fill("{ГЕРОЙ.вин}")}?`, pictures ? "Нажмите на картинку — так герой будет выглядеть на всех страницах. Можно загрузить фото — нарисуем похожим. Лучше всего — фото в анфас, с улыбкой, чтобы были хорошо видны глаза." : photoEnabled ? "Загрузите фото — сразу проверим и обрежем до портрета, а иллюстрации нарисуем по фото в выбранном стиле. Лучше всего — фото в анфас, с улыбкой, чтобы были хорошо видны глаза. Или опишите словами." : "Опишите героя — иллюстрации нарисуем по описанию.")}
+              <div className="hero-card hero-card--look" data-hero="look">
                 {modeTabs("main")}
                 {mode("main") === "photo" && photoEnabled ? (
                   <PhotoSlot
@@ -808,11 +947,17 @@ export function QuizWizard({
                   />
                 ) : aud === "PET" ? (
                   describePet
+                ) : pictures ? (
+                  charPicker
                 ) : (
                   describeHuman
                 )}
-              </fieldset>
-
+              </div>
+                </>
+              )}
+              {scene === 2 && (
+                <>
+              {sceneHead("friends", `Кто отправится в путешествие вместе с ${fill("{ГЕРОЙ.тв}")}?`, "Мама, брат, бабушка, друг, питомец или любимая игрушка — они появятся на картинках и в тексте. Можно никого: тогда герой отправится сам.")}
               {a.extras.map((e, i) => {
                 const required = i < minExtras;
                 const photoOk = !NO_PHOTO_ROLES.includes(e.role);
@@ -895,13 +1040,15 @@ export function QuizWizard({
                   + Добавить героя
                 </button>
               )}
-              <p className="small muted" style={{ marginTop: 8 }}>Мама, брат, бабушка, друг, питомец, игрушка — необязательно, до {maxExtras}. {story?.group ? "Детей группы впишем отдельным списком." : ""}</p>
+              <p className="small muted" style={{ marginTop: 8 }}>Необязательно, до {maxExtras}. {story?.group ? "Детей группы впишем отдельным списком." : ""}</p>
+                </>
+              )}
             </section>
           )}
 
           {step === "occasion" && (
-            <section>
-              <h1 ref={h1} tabIndex={-1}>Какой повод?</h1>
+            <section className="scene" data-k="occasion">
+              {sceneHead("occasion", "Какой повод мы празднуем?", "День рождения, Новый год, первый раз в садик — или просто так. Повод впишем в первую и последнюю страницы.")}
               {/* «Для кого» уже выбрано на шаге «Герои» («Кто герой?») — здесь только напоминание, без второго вопроса */}
               <p className="muted quiz__known" data-known="audience">
                 {AUDIENCE_LABEL[aud]}{a.hero.name?.trim() ? <> — <b>{normalizeName(a.hero.name)}</b></> : null}
@@ -921,8 +1068,8 @@ export function QuizWizard({
           )}
 
           {step === "book" && (
-            <section>
-              <h1 ref={h1} tabIndex={-1}>Выберите книгу</h1>
+            <section className="scene" data-k="book">
+              {sceneHead("book", `Какую историю подарим ${a.hero.name?.trim() ? fill("{ГЕРОЙ.дат}") : "герою"}?`)}
               <p className="muted">
                 {AUDIENCE_LABEL[aud]}
                 {occ !== "bez" ? <> · повод: <b>{occ === "svoj" ? a.occasion.custom || "свой" : occLabel}</b></> : " · без повода"}
@@ -983,9 +1130,8 @@ export function QuizWizard({
           )}
 
           {step === "details" && (
-            <section>
-              <h1 ref={h1} tabIndex={-1}>{aud === "PET" ? `Какой характер у ${fill("{ГЕРОЙ.род}")}?` : `Что любит ${fill("{ГЕРОЙ.им}")}?`}</h1>
-              <p className="muted">Привычки и увлечения станут сценами книги.</p>
+            <section className="scene" data-k="details">
+              {sceneHead("details", aud === "PET" ? `Какой характер у ${fill("{ГЕРОЙ.род}")}?` : `Что любит ${fill("{ГЕРОЙ.им}")}?`, "Привычки и увлечения станут сценами книги. Последний штрих — стиль картинок и посвящение.")}
               {aud === "CHILD" && (
                 <>
                   <span className="label">Увлечения — до трёх</span>
@@ -1147,24 +1293,32 @@ export function QuizWizard({
         </div>
 
         {withPreview && (
-          <aside className="quiz__preview" aria-label="Обложка, пример">
-            <Cover theme={story?.coverTheme ?? ""} title={coverTitle} sample={sampleUrl({ ...previewLook, style, mood: a.mood })} name={named ? (coverTitle.includes(coverName) ? "" : coverName) : /ваш/i.test(coverTitle) ? "" : coverName} eager />
+          <aside className="quiz__preview" aria-label="Обложка, пример" data-live-cover>
+            <div className="quiz__cover" data-k={`${previewLook.gender}|${previewLook.hair}|${previewLook.hairstyle}|${previewLook.skin}|${previewLook.glasses}|${previewLook.freckles}|${previewLook.extras.join(",")}|${previewLook.slug}|${style}`}>
+              <Cover theme={story?.coverTheme ?? ""} title={coverTitle} sample={sampleUrl({ ...previewLook, style, mood: a.mood })} name={named ? (coverTitle.includes(coverName) ? "" : coverName) : /ваш/i.test(coverTitle) ? "" : coverName} eager />
+              <span className="quiz__glow" aria-hidden="true" />
+            </div>
             <p className="small muted">
-              Обложка-пример: меняется по вашим ответам. {(a.hero.photoIds?.length ?? 0) > 0 ? "По вашему фото нарисуем героя похожим — на шаге превью." : aud === "PET" ? "По фото питомца нарисуем ещё точнее." : "По фото нарисуем героя ещё точнее."}
+              {named ? <><b>Это книга {fill("{ГЕРОЙ.род}")}.</b> </> : null}Обложка меняется от ваших ответов. {(a.hero.photoIds?.length ?? 0) > 0 ? "По вашему фото нарисуем героя похожим — на шаге превью." : aud === "PET" ? "По фото питомца нарисуем ещё точнее." : "По фото нарисуем героя ещё точнее."}
             </p>
           </aside>
         )}
       </div>
 
+      {making && (
+        <div className="magic-overlay">
+          <MagicLoader title="Книга готовится…" lines={[`Пишем имя ${fill("{ГЕРОЙ.род}")} на обложке`, "Подбираем слова для сказки", "Раскрашиваем небо", "Зажигаем звёзды"]} />
+        </div>
+      )}
       <div className="flow-nav">
         <div className="in">
-          {stepIdx > 0 && (
+          {(stepIdx > 0 || (step === "heroes" && scene > 0)) && (
             <button type="button" className="btn btn--ghost" onClick={back}>
               Назад
             </button>
           )}
           <button type="button" className="btn btn--primary" data-next onClick={next} disabled={busy}>
-            {stepIdx < steps.length - 1 ? "Дальше" : busy ? "Отправляем…" : "Сочинить книгу"}
+            {stepIdx < steps.length - 1 || (step === "heroes" && scene < HERO_SCENES - 1) ? "Дальше" : busy ? "Сочиняем…" : "Сочинить книгу"}
           </button>
         </div>
       </div>

@@ -6,7 +6,8 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { spreadHtml, SPREAD_PDF_CSS } from "./spread-markup";
-import { normalizeName } from "./declension";
+import { declineName, normalizeName } from "./declension";
+import { authorLine, COVER_VARIANTS, finalText, splitSpread, welcomeText } from "./book-layout";
 
 export interface BookPageData {
   title: string;
@@ -19,6 +20,14 @@ export interface BookPageData {
   cover: PdfImage;
   spreads: { text: string; image: PdfImage; /** Печать: левая и правая половины разворота точно под страницу (preparePrint). */ halves?: [PdfImage, PdfImage] }[];
   orderCode?: string;
+  /** Оформление обложки 0–2 (src/lib/book-layout.ts, rev 13). */
+  coverVariant?: number;
+  /** «Автор: …» на первой странице. */
+  author?: string;
+  /** Фото на странице «Фото и посвящение» — как есть; нет — иллюстрация обложки. */
+  photo?: PdfImage | null;
+  /** Тон текста на картинке по страницам разворота: light — тёмный текст на светлом, dark — светлый на тёмном. */
+  tones?: ("light" | "dark")[][];
   /** Картинки уже подготовлены для печати этого вида (preparePrint) — повторно не масштабируем. */
   preparedFor?: string;
 }
@@ -38,6 +47,9 @@ export type PdfKind =
 
 const BLEED = 3;
 const SAFE = 5;
+
+/** Книжный шрифт текста сказки: с засечками (системный, с кириллицей). */
+export const BOOK_SERIF = `"PT Serif","Literata","Noto Serif","Georgia","DejaVu Serif",serif`;
 
 let fontCss: string | null = null;
 /** Шрифты сайта (Nunito 800, Manrope 500) для PDF — встраиваются в HTML. */
@@ -85,44 +97,138 @@ function baseCss(pageW: number, pageH: number) {
   body{font-family:Manrope,sans-serif;color:#1a2b24;-webkit-print-color-adjust:exact;print-color-adjust:exact}
   .page{width:${pageW}mm;height:${pageH}mm;position:relative;overflow:hidden;page-break-after:always;break-after:page;background:#fff}
   .img{position:absolute;inset:0;background-size:cover;background-repeat:no-repeat}
-  .text{position:absolute;background:rgba(255,255,255,.88);border-radius:4mm;padding:4mm 5mm;font-size:var(--fs);line-height:1.45;white-space:pre-line}
+  .text{position:absolute;padding:7mm 10mm 10mm;font-family:${BOOK_SERIF};font-size:var(--fs);line-height:1.45;white-space:pre-line;text-align:center;color:#1f2a26;
+    background:radial-gradient(ellipse 50% 50% at 50% 50%,rgba(253,250,242,.94) 0%,rgba(253,250,242,.86) 58%,rgba(253,250,242,0) 100%)}
+  .text.dark{color:#fdf8ea;background:radial-gradient(ellipse 50% 50% at 50% 50%,rgba(18,24,48,.74) 0%,rgba(18,24,48,.6) 58%,rgba(18,24,48,0) 100%)}
+  .serif{font-family:${BOOK_SERIF}}
+  .blob{position:absolute;inset:14%;border-radius:46% 54% 52% 48% / 55% 45% 55% 45%;background:radial-gradient(circle at 35% 35%,rgba(243,228,194,.95),rgba(227,237,230,.85) 60%,rgba(227,237,230,0) 78%)}
+  .frame{position:absolute;border:2.5mm solid #fff;border-radius:3mm;box-shadow:0 1.5mm 5mm rgba(20,54,40,.25);background-size:cover;background-position:50% 50%}
+  .brand{font-family:Nunito,sans-serif;font-weight:800;color:#1e4d3b}
   ${SPREAD_PDF_CSS}
   h1{font-family:Nunito,sans-serif;font-weight:800}
   .mark{position:absolute;bottom:1mm;right:1mm;font-size:1pt;color:#fff}`;
 }
 
-/** Страницы блока: посвящение, 12 разворотов (24 страницы), финальная страница. */
+/**
+ * Обложка в выбранном оформлении (rev 13, src/lib/book-layout.ts): 0 — иллюстрация на всю обложку и плашка с названием;
+ * 1 — тёмно-синяя со звёздами, иллюстрация в круге; 2 — светлая рамка, иллюстрация с мягкой виньеткой.
+ * Содержимое для блока с position:relative/absolute заданного размера (мм).
+ */
+export function coverInner(b: Pick<BookPageData, "title" | "cover" | "coverVariant">, wMm: number, hMm: number, inset = 0): string {
+  const v = COVER_VARIANTS[b.coverVariant === 1 || b.coverVariant === 2 ? b.coverVariant : 0];
+  const fs = Math.max(14, Math.min(26, wMm / 8.5));
+  const img = `background-image:url(${uri(b.cover)});background-size:cover;background-position:50% 50%`;
+  const t = esc(b.title);
+  if (v.id === 1) {
+    const d = Math.min(wMm, hMm) * 0.62;
+    const stars = Array.from({ length: 26 }, (_, i) => `<i style="position:absolute;left:${(i * 37) % 97}%;top:${(i * 53) % 93}%;width:${0.6 + (i % 3) * 0.4}mm;height:${0.6 + (i % 3) * 0.4}mm;border-radius:50%;background:#f6e7b8;opacity:${0.5 + (i % 4) * 0.12}"></i>`).join("");
+    return `<div style="position:absolute;inset:0;background:radial-gradient(circle at 50% 30%,#2c3a78,${v.bg} 70%)">${stars}
+      <div style="position:absolute;left:${(wMm - d) / 2}mm;top:${inset + hMm * 0.08}mm;width:${d}mm;height:${d}mm;border-radius:50%;${img};box-shadow:0 0 0 1.6mm #f3d27a,0 0 0 3.2mm rgba(243,210,122,.25)"></div>
+      <h1 style="position:absolute;left:${inset + 10}mm;right:${inset + 10}mm;bottom:${inset + hMm * 0.07}mm;text-align:center;color:${v.ink};font-size:${fs}pt;line-height:1.15">${t}</h1></div>`;
+  }
+  if (v.id === 2) {
+    const m = inset + Math.min(wMm, hMm) * 0.07;
+    return `<div style="position:absolute;inset:0;background:${v.bg}">
+      <div style="position:absolute;inset:${m * 0.55}mm;border:0.5mm solid #c8952f;border-radius:2mm;box-shadow:inset 0 0 0 1.2mm ${v.bg},inset 0 0 0 1.5mm #c8952f"></div>
+      <div style="position:absolute;left:${m + 2}mm;right:${m + 2}mm;top:${m + 2}mm;bottom:${hMm * 0.27}mm;${img};-webkit-mask-image:radial-gradient(ellipse 72% 70% at 50% 50%,#000 58%,transparent 100%);mask-image:radial-gradient(ellipse 72% 70% at 50% 50%,#000 58%,transparent 100%)"></div>
+      <h1 style="position:absolute;left:${m + 6}mm;right:${m + 6}mm;bottom:${m + hMm * 0.05}mm;text-align:center;color:${v.ink};font-size:${fs}pt;line-height:1.15">${t}</h1></div>`;
+  }
+  return `<div style="position:absolute;inset:0;${img}"></div>
+    <div style="position:absolute;left:0;right:0;top:0;padding:${inset + 8}mm ${inset + 10}mm 7mm;background:linear-gradient(180deg,${v.band} 70%,rgba(252,251,247,0))"><h1 style="text-align:center;color:${v.ink};font-size:${fs}pt;line-height:1.15">${t}</h1></div>`;
+}
+
+/**
+ * Страницы блока (rev 13): приветствие (имя, автор) → фото → посвящение → 12 разворотов (24 страницы, текст прямо
+ * на картинке, слева и справа) → финальная страница.
+ */
 function blockPages(b: BookPageData, pageW: number, pageH: number, inset: number) {
   const fs = Math.max(9, Math.min(15, pageW / 15)); // pt
   const pages: string[] = [];
-  pages.push(`<section class="page" style="display:flex;align-items:center;justify-content:center;padding:${inset + 12}mm;text-align:center">
-    <div><h1 style="font-size:${fs * 1.6}pt;color:#1e4d3b;margin-bottom:8mm">${esc(b.title)}</h1>
-    ${b.dedication ? `<p style="font-size:${fs}pt;font-style:italic;max-width:80%;margin:0 auto;white-space:pre-line">${esc(b.dedication)}</p>` : ""}</div></section>`);
+  const pad = inset + 12;
+  const name = normalizeName(b.heroName);
+  const author = authorLine(b.author);
+  const art = (img: PdfImage) => `background-image:url(${uri(img)})`;
+  // 1. Приветствие
+  const d = Math.min(pageW, pageH) * 0.36;
+  pages.push(`<section class="page" style="text-align:center;background:#fdfaf2">
+    <div style="position:absolute;left:${pad}mm;right:${pad}mm;top:${pad + 4}mm">
+      <h1 style="font-size:${fs * 1.45}pt;color:#1e4d3b;line-height:1.2">${esc(b.title)}</h1>
+      <p class="serif" style="font-size:${fs * 1.15}pt;line-height:1.45;margin-top:6mm">${esc(welcomeText(name))}</p></div>
+    <div style="position:absolute;left:${(pageW - d) / 2}mm;top:${pageH * 0.47}mm;width:${d}mm;height:${d}mm;border-radius:50%;background-size:cover;background-position:50% 40%;${art(b.cover)};box-shadow:0 0 0 1.2mm #f3e4c2"></div>
+    <div style="position:absolute;left:${pad}mm;right:${pad}mm;bottom:${inset + 10}mm;font-size:${fs * 0.85}pt">
+      ${author ? `<p class="serif" style="font-style:italic;margin-bottom:3mm">${esc(author)}</p>` : ""}<p style="color:#4d5f57">Создано в <b class="brand">букими</b></p></div></section>`);
+  // 2. Фото (как есть, в мягкой рамке) или иллюстрация
+  const fw = pageW * 0.62;
+  const fh = b.photo ? fw * 1.22 : fw;
+  pages.push(`<section class="page" style="background:#fdfaf2">
+    <div class="blob" style="inset:10%"></div>
+    <div class="frame" style="left:${(pageW - fw) / 2}mm;top:${(pageH - fh) / 2}mm;width:${fw}mm;height:${fh}mm;${art(b.photo ?? b.cover)};transform:rotate(-2deg)${b.photo ? "" : ";border-radius:50%"}"></div></section>`);
+  // 3. Посвящение на акварельном пятне
+  const ded = b.dedication || bookWording(b).madeFor;
+  pages.push(`<section class="page" style="background:#fdfaf2">
+    <div class="blob"></div>
+    <div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;padding:${pad + pageW * 0.12}mm;text-align:center">
+      <p class="serif" style="font-size:${fs * 1.1}pt;font-style:italic;line-height:1.5;white-space:pre-line">${esc(ded)}</p></div></section>`);
+  // 4. Развороты: текст на картинке — левая и правая страница
   b.spreads.forEach((s, i) => {
-    const textLeft = i % 2 === 0;
+    const parts = splitSpread(s.text);
     for (const side of ["left", "right"] as const) {
+      const k = side === "left" ? 0 : 1;
       const pos = side === "left" ? "0% 50%" : "100% 50%";
-      const hasText = (side === "left") === textLeft;
       // Печать: у каждой страницы своя половина разворота в 300 dpi (preparePrint); иначе — весь разворот со сдвигом
-      const half = s.halves?.[side === "left" ? 0 : 1];
+      const half = s.halves?.[k];
       const bg = half ? `background-image:url(${uri(half)});background-size:cover;background-position:50% 50%` : `background-image:url(${uri(s.image)});background-size:200% 100%;background-position:${pos}`;
+      const tone = b.tones?.[i]?.[k] === "dark" ? " dark" : "";
       pages.push(`<section class="page" style="--fs:${fs}pt">
         <div class="img" style="${bg}"></div>
-        ${hasText ? `<div class="text" style="left:${inset + 4}mm;right:${inset + 4}mm;bottom:${inset + 4}mm">${spreadHtml(s.text)}</div>` : ""}
+        ${parts[k] ? `<div class="text${tone}" style="left:${inset + 3}mm;right:${inset + 3}mm;top:${inset + 3}mm">${spreadHtml(parts[k])}</div>` : ""}
         <span class="mark">${esc(b.orderCode ?? "")}</span></section>`);
     }
   });
-  pages.push(`<section class="page" style="display:flex;align-items:center;justify-content:center;text-align:center;padding:${inset + 12}mm">
-    <p style="font-size:${fs}pt">${esc(bookWording(b).madeFor)}<br><br><b style="font-family:Nunito">букими</b></p></section>`);
+  // 5. Финал
+  pages.push(`<section class="page" style="display:flex;align-items:center;justify-content:center;text-align:center;padding:${pad + 4}mm;background:#fdfaf2">
+    <div class="blob" style="inset:18%"></div>
+    <p class="serif" style="position:relative;font-size:${fs * 1.1}pt;line-height:1.5">${esc(finalText(name, b.heroGender))}<br><br><b class="brand">букими</b></p></section>`);
   return pages.join("");
+}
+
+/** Задняя обложка (экран, А4): тёплая строка с именем и знак. */
+function backPage(b: BookPageData, fs: number) {
+  return `<section class="page" style="background:#1e4d3b;color:#f3e4c2;display:flex;align-items:flex-end;padding:14mm">
+    <p style="font-size:${fs}pt;line-height:1.5"><span class="serif">${esc(bookWording(b).back)}</span><br><b style="font-family:Nunito;font-size:${fs * 1.4}pt">букими</b> · ${bookWording(b).rating}</p></section>`;
+}
+
+/** Тон текста на картинке по каждой странице: средняя яркость верхней части половины разворота. */
+export async function textTones(b: BookPageData): Promise<("light" | "dark")[][]> {
+  const sharp = (await import("sharp")).default;
+  const out: ("light" | "dark")[][] = [];
+  for (const s of b.spreads) {
+    const src = s.image.data.length ? s.image : null;
+    if (!src) {
+      out.push(["light", "light"]);
+      continue;
+    }
+    try {
+      const { data, info } = await sharp(src.data, { density: 24 }).resize(64, 32, { fit: "fill" }).removeAlpha().greyscale().raw().toBuffer({ resolveWithObject: true });
+      const side = (x0: number) => {
+        let sum = 0;
+        let n = 0;
+        for (let y = 0; y < Math.round(info.height * 0.42); y++) for (let x = x0; x < x0 + info.width / 2; x++, n++) sum += data[y * info.width + x];
+        return sum / Math.max(1, n) < 105 ? "dark" : "light";
+      };
+      out.push([side(0), side(info.width / 2)]);
+    } catch {
+      out.push(["light", "light"]);
+    }
+  }
+  return out;
 }
 
 export function bookHtml(b: BookPageData, k: PdfKind): { html: string; wMm: number; hMm: number } {
   if (k.kind === "screen") {
     const W = 210, H = 210;
-    const cover = `<section class="page"><div class="img" style="background-image:url(${uri(b.cover)})"></div>
-      <h1 style="position:absolute;left:10mm;right:10mm;bottom:12mm;color:#fff;font-size:22pt;text-shadow:0 1mm 4mm rgba(0,0,0,.4)">${esc(b.title)}</h1></section>`;
-    return { html: `<style>${baseCss(W, H)}</style>${cover}${blockPages(b, W, H, 0)}`, wMm: W, hMm: H };
+    const cover = `<section class="page">${coverInner(b, W, H)}</section>`;
+    return { html: `<style>${baseCss(W, H)}</style>${cover}${blockPages(b, W, H, 0)}${backPage(b, 12)}`, wMm: W, hMm: H };
   }
   if (k.kind === "a4") {
     // А4 альбомный: разворот целиком (две страницы по 148,5 мм), 2 страницы на листе
@@ -133,7 +239,7 @@ export function bookHtml(b: BookPageData, k: PdfKind): { html: string; wMm: numb
       .filter(Boolean)
       .map((p) => `<div class="cell"><section class="page"${p}</div>`);
     const sheets: string[] = [];
-    sheets.push(`<div class="sheet"><div class="cell"><section class="page"><div class="img" style="background-image:url(${uri(b.cover)})"></div></section></div>${inner[0]}</div>`);
+    sheets.push(`<div class="sheet"><div class="cell"><section class="page">${coverInner(b, pageW, pageH)}</section></div>${inner[0]}</div>`);
     for (let i = 1; i < inner.length; i += 2) sheets.push(`<div class="sheet">${inner[i]}${inner[i + 1] ?? ""}</div>`);
     const css = `${baseCss(pageW, pageH)} @page{size:${W}mm ${H}mm;margin:0} html,body{width:${W}mm}
       .sheet{width:${W}mm;height:${H}mm;display:flex;align-items:center;justify-content:center;page-break-after:always;break-after:page}
@@ -147,10 +253,9 @@ export function bookHtml(b: BookPageData, k: PdfKind): { html: string; wMm: numb
   // Обложка: задняя | корешок | передняя. Корешок ≈ 0,1 мм на страницу + 4 мм (твёрдая), загиб 17 мм.
   const { spine, wrap, W, H } = coverGeometry(k);
   const html = `<style>${baseCss(W, H)}</style><section class="page">
-    <div class="img" style="left:${wrap + k.wMm + spine}mm;right:0;background-image:url(${uri(b.cover)})"></div>
-    <h1 style="position:absolute;left:${wrap + k.wMm + spine + 10}mm;width:${k.wMm - 20}mm;bottom:${wrap + 14}mm;color:#fff;font-size:20pt;text-shadow:0 1mm 4mm rgba(0,0,0,.4)">${esc(b.title)}</h1>
+    <div style="position:absolute;top:0;bottom:0;left:${wrap + k.wMm + spine}mm;right:0;overflow:hidden">${coverInner(b, k.wMm + wrap, H, wrap)}</div>
     <div style="position:absolute;left:0;width:${wrap + k.wMm}mm;top:0;bottom:0;background:#1e4d3b"></div>
-    <p style="position:absolute;left:${wrap + 15}mm;width:${k.wMm - 30}mm;bottom:${wrap + 15}mm;color:#f3e4c2;font-size:10pt">${esc(bookWording(b).back)}<br><b style="font-family:Nunito;font-size:14pt">букими</b> · ${bookWording(b).rating}</p>
+    <p style="position:absolute;left:${wrap + 15}mm;width:${k.wMm - 30}mm;bottom:${wrap + 15}mm;color:#f3e4c2;font-size:10pt"><span class="serif">${esc(finalText(b.heroName, b.heroGender).split(".")[0])}.</span><br>${esc(bookWording(b).back)}<br><b style="font-family:Nunito;font-size:14pt">букими</b> · ${bookWording(b).rating}</p>
     <div style="position:absolute;left:${wrap + k.wMm}mm;width:${spine}mm;top:0;bottom:0;background:#143628"></div>
     <span class="mark">${esc(b.orderCode ?? "")}</span></section>`;
   return { html, wMm: W, hMm: H };
@@ -158,7 +263,9 @@ export function bookHtml(b: BookPageData, k: PdfKind): { html: string; wMm: numb
 
 export async function renderPdf(b: BookPageData, k: PdfKind): Promise<Buffer> {
   // Типографии — иллюстрации в 300 dpi под обрезной формат + вылеты; TrimBox/BleedBox — точные
-  const data = (k.kind === "print" || k.kind === "cover") && b.preparedFor !== kindKey(k) ? (await preparePrint(b, k)).data : b;
+  const prepared = (k.kind === "print" || k.kind === "cover") && b.preparedFor !== kindKey(k) ? (await preparePrint(b, k)).data : b;
+  // Тёмная сцена (ночь) — светлый текст на картинке, иначе тёмный на светлой дымке
+  const data = prepared.tones || k.kind === "cover" ? prepared : { ...prepared, tones: await textTones(prepared) };
   const { html, wMm, hMm } = bookHtml(data, k);
   const pdf = await renderHtmlPdf(html, wMm, hMm, data);
   if (k.kind === "print") return setBoxes(pdf, k.wMm, k.hMm, BLEED);

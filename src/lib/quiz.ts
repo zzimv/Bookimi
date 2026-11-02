@@ -1,6 +1,7 @@
 // Анкета создания книги: варианты-чипсы и проверка ответов. Используется и в браузере, и на сервере.
 // Схема ответов — AnswersV2 (src/content/answers.ts): 4 аудитории, старые черновики разбираются без потерь
 // (style → artStyle, роли доп. героев сохраняются). Модуль безопасен для клиента: без промптов и планов сюжетов.
+import { sampleUrl } from "./obrazec";
 import { AnswersV2, heroKindFor, type AnswersV2T } from "../content/answers";
 import { OCCASIONS, SEGMENTS, type AudienceKey } from "../content/profiles";
 import { dedicationsFor } from "./dedications";
@@ -146,3 +147,24 @@ export function appearanceLine(a: QuizAnswers) {
 }
 
 export { heroKindFor };
+
+/** Образец обложки по ответам (/obrazec) — пока иллюстрации книги не нарисованы (превью книги, rev 13). */
+export function coverSampleUrl(a: QuizAnswers): string {
+  const kind = ({ CHILD: "child", TEEN: "teen", ADULT: "adult", PET: "pet" } as const)[a.audience];
+  return sampleUrl({
+    slug: a.story.slug || undefined,
+    kind,
+    gender: a.hero.gender,
+    age: heroAge(a),
+    hair: a.appearance.hair,
+    hairstyle: a.appearance.hairstyle,
+    skin: a.appearance.skin,
+    glasses: a.appearance.glasses,
+    freckles: a.appearance.freckles,
+    beard: a.appearance.beard,
+    species: a.pet.species,
+    style: a.artStyle,
+    mood: a.mood || undefined,
+    extras: a.extras.map((e) => e.role),
+  });
+}

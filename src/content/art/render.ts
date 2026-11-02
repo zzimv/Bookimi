@@ -344,6 +344,24 @@ export function renderDemoSpread(o: DemoRenderOpts): string {
   return over ? svg.replace(/<\/svg>\s*$/, `${over}</svg>`) : svg;
 }
 
+/**
+ * Портрет героя для выбора внешности в анкете (rev 13): только фигура на мягком круглом фоне, квадрат 360×360.
+ * Тот же рисовальщик, что в книге, — ребёнок выбранного возраста.
+ */
+export function renderDemoCharacter(o: { kind?: HeroKind; look: DemoLook; artStyle?: ArtStyle | string | null; bg?: string }): string {
+  const style = resolveStyle(o.artStyle);
+  const kind = o.kind ?? "child";
+  const W = 360;
+  const H = 360;
+  const age = o.look.age ?? 6;
+  // Малыши ниже ростом — крупнее в кадре
+  const scale = kind === "child" ? (age <= 4 ? 1.42 : age <= 7 ? 1.3 : 1.2) : 1.05;
+  const feet = H - 14;
+  const bg = o.bg ?? "#f3e4c2";
+  const fig = heroDrawer(kind)({ kind, look: o.look, x: W / 2, y: feet - 190 * scale, scale, style, index: 1 });
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${H}" width="${W}" height="${H}"><defs>${textureDefs(style)}<radialGradient id="ch-bg" cx="50%" cy="42%" r="62%"><stop offset="0" stop-color="#fffdf7"/><stop offset="1" stop-color="${bg}"/></radialGradient></defs><rect width="${W}" height="${H}" fill="url(#ch-bg)"/><ellipse cx="${W / 2}" cy="${feet + 4}" rx="74" ry="12" fill="#000" opacity=".08"/>${fig}</svg>`;
+}
+
 /** Обложка: квадрат 1024×1024, герой крупнее, необязательный заголовок. */
 export function renderDemoCover(o: Omit<DemoRenderOpts, "spreadIndex">): string {
   return renderDemoSpread({ ...o, spreadIndex: 0, wide: o.wide ?? false });

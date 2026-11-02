@@ -5,6 +5,9 @@ import { useCallback, useEffect, useState } from "react";
 import { api, goal } from "@/lib/client";
 import { OtpForm } from "@/components/OtpForm";
 import { FlowLegal } from "@/components/FlowLegal";
+import { MagicLoader } from "@/components/MagicLoader";
+import { BookPreview } from "./BookPreview";
+import { DEFAULT_LAYOUT, type BookLayout } from "@/lib/book-layout";
 
 interface BookState {
   id: string;
@@ -20,8 +23,12 @@ interface BookState {
   mood: string;
   moodChanges: { preview: number; full: number };
   redrawsLeft: number;
-  photos: { id: string; url: string }[];
-  consent?: { pd: boolean; photo: boolean };
+  photos: { id: string; url: string; role?: string }[];
+  consent?: { pd: boolean; photo: boolean; group?: boolean };
+  /** Вёрстка книги (rev 13). */
+  hero?: { name: string; gender?: string } | null;
+  dedication?: string;
+  layout?: BookLayout;
 }
 
 type Audience = "CHILD" | "TEEN" | "ADULT" | "PET";
@@ -44,6 +51,7 @@ export function BookFlow({
   moodChangesPreview = 2,
   audience = "CHILD",
   bulkAvailable = false,
+  coverSample,
 }: {
   bookId: string;
   photoEnabled: boolean;
@@ -55,6 +63,8 @@ export function BookFlow({
   audience?: Audience;
   /** Книга о группе: можно заказать «для каждого ребёнка» (src/lib/bulk.ts). */
   bulkAvailable?: boolean;
+  /** Образец обложки по анкете (/obrazec) — пока иллюстрации не нарисованы. */
+  coverSample?: string;
 }) {
   const [b, setB] = useState<BookState | null>(null);
   const [error, setError] = useState("");
@@ -147,22 +157,41 @@ export function BookFlow({
   if (!b) return <div className="flow"><div className="spinner" style={{ margin: "60px auto" }} /><FlowLegal /></div>;
 
   const moodLeft = Math.max(0, moodChangesPreview - b.moodChanges.preview);
-  void photoEnabled;
   void extras;
-  void audience;
 
-  const generating = (label: string, sub: string) => (
-    <div style={{ textAlign: "center", padding: "40px 0" }}>
-      <div className="spinner" style={{ margin: "0 auto 18px" }} />
-      <h1>{label}</h1>
+  const generating = (label: string, sub: string, lines?: string[]) => (
+    <div style={{ textAlign: "center", padding: "28px 0" }}>
+      <h1 className="sr-only">{label}</h1>
+      <MagicLoader title={label} lines={lines} progress={b.progress} />
       <p className="muted" style={{ margin: "0 auto" }}>{sub}</p>
-      <div className="progress" style={{ maxWidth: 320, margin: "16px auto" }}><i style={{ width: `${Math.max(5, b.progress)}%` }} /></div>
     </div>
   );
 
+  // Книга, которую листают и правят на месте (rev 13): до превью — образец обложки и подложки разворотов
+  const book = (pendingNote: string) =>
+    b.text ? (
+      <BookPreview
+        bookId={b.id}
+        title={b.text.title}
+        heroName={b.hero?.name ?? ""}
+        heroGender={b.hero?.gender}
+        coverUrl={b.pages.find((p) => p.index === 0)?.url ?? coverSample ?? null}
+        spreads={b.text.spreads.map((s) => ({ index: s.index, text: b.pages.find((p) => p.index === s.index)?.text ?? s.text, url: b.pages.find((p) => p.index === s.index)?.url ?? null }))}
+        dedication={b.dedication ?? dedication}
+        layout={b.layout ?? DEFAULT_LAYOUT}
+        photos={b.photos}
+        pendingNote={pendingNote}
+        paid={b.paid}
+        photoEnabled={photoEnabled}
+        consent={{ pd: Boolean(b.consent?.pd), photo: Boolean(b.consent?.photo), group: Boolean(b.consent?.group) }}
+        audience={audience}
+        onChanged={load}
+      />
+    ) : null;
+
   return (
     <div className="flow">
-      {b.status === "TEXT_QUEUED" && generating("Сочиняем сказку", "Обычно это занимает меньше минуты.")}
+      {b.status === "TEXT_QUEUED" && generating("Книга готовится…", "Обычно это занимает меньше минуты.")}
 
       {b.status === "FAILED" && b.paid && (
         <div className="panel" role="status">
@@ -182,8 +211,10 @@ export function BookFlow({
       {b.status === "TEXT_READY" && b.text && (
         <section>
           <h1>{b.text.title}</h1>
-          {dedication && <p className="dedication" style={{ whiteSpace: "pre-line" }}>{dedication}</p>}
-          <p className="muted">Прочитайте сказку. Любой разворот можно поправить вручную — бесплатно.</p>
+          <p className="muted">Это ваша книга — листайте её. Имя, обложку, фото, посвящение и автора можно поменять прямо здесь, текст — поправить вручную. Иллюстрации нарисуем на следующем шаге.</p>
+          {book("Иллюстрацию нарисуем в превью")}
+          <details className="more story-edit" open={Object.keys(edit).length > 0}>
+            <summary>Поправить текст вручную — бесплатно</summary>
           <div className="story-text">
             {b.text.spreads.map((s) => (
               <article className="spread" key={s.index}>
@@ -203,6 +234,7 @@ export function BookFlow({
               </article>
             ))}
           </div>
+          </details>
           {Object.keys(edit).length > 0 && <button className="btn btn--ghost" disabled={busy} onClick={saveEdits}>Сохранить правки</button>}
           {error && <p className="error">{error}</p>}
           <div className="flow-nav">
@@ -260,22 +292,12 @@ export function BookFlow({
       {b.status === "PREVIEW_QUEUED" &&
         (b.error === "limit"
           ? generating("Превью в очереди", "Сейчас много заказов — превью нарисуем чуть позже и пришлём ссылку. Можно закрыть страницу.")
-          : generating("Рисуем обложку и первые развороты", "Обычно 2–5 минут. Можно закрыть страницу — пришлём ссылку, когда будет готово."))}
+          : generating("Рисуем обложку и первые развороты", "Обычно 2–5 минут. Можно закрыть страницу — пришлём ссылку, когда будет готово.", ["Смешиваем краски", "Рисуем героя", "Зажигаем звёзды", "Сушим страницы"]))}
 
       {(b.status === "PREVIEW_READY" || b.status === "FULL_QUEUED" || b.status === "FULL_READY") && b.text && (
         <section>
           <h1>{b.text.title}</h1>
-          <div className="preview-grid">
-            {b.pages.map((p) => (
-              <figure className="spread-view" key={p.index} style={{ margin: 0 }}>
-                {p.url && (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img className="preview-img" src={p.url} alt={p.index === 0 ? "Обложка" : `Разворот ${p.index}`} loading={p.index > 0 ? "lazy" : "eager"} />
-                )}
-                {p.index > 0 && <figcaption><SpreadText text={p.text} /></figcaption>}
-              </figure>
-            ))}
-          </div>
+          {book(b.paid ? (b.status === "FULL_READY" ? "Иллюстрация готовится" : "Рисуем иллюстрацию…") : "Иллюстрацию нарисуем после оплаты")}
           {moods.length > 1 && (b.status === "PREVIEW_READY" || b.status === "FULL_READY") && (
             <section className="panel mood-panel" style={{ marginTop: 20 }} data-mood-panel aria-labelledby="mood-h">
               <h2 id="mood-h" className="mood-panel__h">Настроение иллюстраций</h2>

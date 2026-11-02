@@ -175,6 +175,17 @@ export const AnswersV2 = z.preprocess(
     /** Голос книги; пусто — голос сюжета (plot.textStyle). Для своей идеи — выбор покупателя. */
     textStyle: str(40).default(""),
     dedication: str(300).optional().default(""),
+    /**
+     * Вёрстка книги (rev 13, src/lib/book-layout.ts): вариант обложки, «Автор: …» на первой странице, фото на странице
+     * «Фото и посвящение» (id фото книги, само фото — в бакете photos и удаляется по общим правилам). Старые ответы — по умолчанию.
+     */
+    layout: z
+      .object({
+        coverVariant: z.preprocess((v) => (v === undefined || v === null || v === "" ? 0 : Number(v)), z.number().int().min(0).max(2)).default(0),
+        author: str(60).optional().default(""),
+        photoId: z.string().uuid().optional(),
+      })
+      .default({}),
     /** Контакт: в анкете может быть пустым, ContactV2 проверяется на шаге входа/оформления. */
     contact: z
       .object({

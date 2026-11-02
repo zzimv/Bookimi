@@ -40,8 +40,22 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   if (file.size > MAX_BYTES) return err("Файл больше 15 МБ");
   if (!/^image\/(jpeg|png|webp|heic|heif)$/.test(file.type)) return err("Подойдёт JPG, PNG или WebP");
 
-  const hero = await db.hero.findFirst({ where: { bookId: id, role }, orderBy: { createdAt: "asc" } });
+  // keepsake — фото для страницы «Фото и посвящение» (rev 13): встаёт в книгу как есть, в рисунки не идёт
+  let hero = await db.hero.findFirst({ where: { bookId: id, role }, orderBy: { createdAt: "asc" } });
+  if (!hero && role === "keepsake") {
+    const main = await db.hero.findFirst({ where: { bookId: id, role: "main" }, orderBy: { createdAt: "asc" } });
+    hero = await db.hero.create({ data: { bookId: id, userId: main?.userId ?? own.user?.id ?? null, role: "keepsake", name: main?.name ?? "Фото", appearance: {}, interests: [] } });
+  }
   if (!hero) return err("Герой не найден");
+  if (role === "keepsake") {
+    // Одно фото на странице: новое заменяет старое (старое удаляем сразу)
+    const old = await db.photo.findMany({ where: { heroId: hero.id, deletedAt: null } });
+    for (const o of old) {
+      await deleteFile("photos", o.storageKey).catch(() => {});
+      if (o.originalKey) await deleteFile("photos", o.originalKey).catch(() => {});
+      await db.photo.update({ where: { id: o.id }, data: { deletedAt: new Date() } });
+    }
+  }
   const count = await db.photo.count({ where: { heroId: hero.id, deletedAt: null } });
   if (count >= (role === "main" ? 3 : 1)) return err(role === "main" ? "Не больше 3 фото" : "Одно фото на героя");
 
