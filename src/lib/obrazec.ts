@@ -17,9 +17,68 @@ export interface SampleOpts {
   fur?: string;
   /** Роли доп. героев; undefined — обязательные по сюжету, [] — никого. */
   extras?: string[];
+  /**
+   * Доп. герои с внешностью (rev 14): роль, пол, вид питомца и выбор картинками — по ним рисуются мама, бабушка,
+   * дедушка, кошка… (раньше передавались только роли, и все взрослые выходили одним мужчиной, кошка — собакой).
+   * Если задано — вместо extras.
+   */
+  extraLooks?: SampleExtra[];
+  /** rev 14: цвет глаз, улыбка, румянец, цвет одежды (OUTFIT_COLORS). */
+  eyes?: string;
+  smile?: string;
+  blush?: boolean;
+  outfit?: string;
+  /** Водяной знак превью (эскизы страниц до оплаты). */
+  wm?: boolean;
+  /** Крупно лицо (true) или по пояс ("bust") — к portrait / extraPortrait. */
+  face?: boolean | "bust";
+  /** Портрет доп. героя по роли (выбор его внешности картинками): берётся первый из extraLooks. */
+  extraPortrait?: boolean;
   wide?: boolean;
   /** Портрет героя без сцены (выбор внешности в анкете). */
   portrait?: boolean;
+}
+
+/** Доп. герой для образца: роль и то, что видно на картинке. */
+export interface SampleExtra {
+  role: string;
+  gender?: string;
+  species?: string;
+  what?: string;
+  look?: { hair?: string; hairstyle?: string; skin?: string; glasses?: boolean; beard?: boolean; moustache?: boolean; fur?: string; toy?: string };
+}
+
+/** Короткие ключи внешности доп. героя в ссылке: x1=g:girl;h:седые;gl:1 */
+const EXTRA_KEYS = { gender: "g", species: "sp", what: "w", hair: "h", hairstyle: "hs", skin: "sk", glasses: "gl", beard: "b", moustache: "mu", fur: "fur", toy: "t" } as const;
+
+/** Внешность доп. героя → значение параметра xN (пусто — нечего передавать). */
+export function encodeSampleExtra(e: SampleExtra): string {
+  const all: Record<string, string | boolean | undefined> = { gender: e.gender, species: e.species, what: e.what, ...e.look };
+  return Object.entries(EXTRA_KEYS)
+    .map(([k, short]) => {
+      const v = all[k];
+      if (v === undefined || v === "") return "";
+      return `${short}:${v === true ? "1" : v === false ? "0" : String(v).replace(/[;:]/g, " ").slice(0, 40)}`;
+    })
+    .filter(Boolean)
+    .join(";");
+}
+
+/** Обратно: xN → поля (без проверки по белым спискам — это делает маршрут). */
+export function decodeSampleExtra(role: string, v: string | null): SampleExtra {
+  const out: SampleExtra = { role, look: {} };
+  for (const part of (v ?? "").split(";")) {
+    const i = part.indexOf(":");
+    if (i < 1) continue;
+    const short = part.slice(0, i);
+    const val = part.slice(i + 1);
+    const key = (Object.keys(EXTRA_KEYS) as (keyof typeof EXTRA_KEYS)[]).find((k) => EXTRA_KEYS[k] === short);
+    if (!key) continue;
+    if (key === "gender" || key === "species" || key === "what") out[key] = val;
+    else if (key === "glasses" || key === "beard" || key === "moustache") out.look![key] = val === "1";
+    else out.look![key] = val;
+  }
+  return out;
 }
 
 export function sampleUrl(o: SampleOpts) {
@@ -43,7 +102,17 @@ export function sampleUrl(o: SampleOpts) {
   put("b", o.beard);
   put("sp", o.species);
   put("fur", o.fur);
-  if (o.extras) q.set("x", o.extras.join(","));
+  put("ey", o.eyes);
+  put("sm", o.smile);
+  put("bl", o.blush);
+  put("oc", o.outfit);
+  if (o.extraLooks) {
+    q.set("x", o.extraLooks.map((e) => e.role).join(","));
+    o.extraLooks.slice(0, 3).forEach((e, i) => put(`x${i + 1}`, encodeSampleExtra(e)));
+  } else if (o.extras) q.set("x", o.extras.join(","));
+  put("wm", o.wm);
+  put("f", o.face === "bust" ? 2 : o.face);
+  if (o.extraPortrait && o.extraLooks?.[0]) q.set("pr", o.extraLooks[0].role);
   put("w", o.wide);
   put("p", o.portrait);
   return `/obrazec?${q.toString()}`;

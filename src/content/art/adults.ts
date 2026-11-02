@@ -12,7 +12,7 @@
 // requests (просьбы к интегратору, агенту 11): —
 
 import type { ArtStyle, DemoHeroDrawer, DemoLook, DemoSceneCtx, DemoTheme } from "../types";
-import { colorFrom, drawDeco, HAIR_COLORS, pick, SKIN_COLORS, stroke } from "./shared";
+import { colorFrom, drawDeco, EYE_COLORS, HAIR_COLORS, pick, SKIN_COLORS, stroke } from "./shared";
 
 // ---------------------------------------------------------------------------
 // Стили
@@ -478,18 +478,23 @@ export const drawAdult: DemoHeroDrawer = (o) => {
   // Лицо
   const browY = hy - 9;
   parts.push(`<path d="M-16 ${browY} q6 -4 11 -1 M16 ${browY} q-6 -4 -11 -1" stroke="${old ? shade(hc, -0.15) : hcDark}" stroke-width="${fem ? 2.2 : 3}" fill="none" stroke-linecap="round"/>`);
-  parts.push(`<ellipse cx="-10" cy="${hy}" rx="3.2" ry="3.8" fill="#2b2523"/><ellipse cx="10" cy="${hy}" rx="3.2" ry="3.8" fill="#2b2523"/>`);
+  const eyeCol = h.eyes ? colorFrom(EYE_COLORS, h.eyes, "") : "";
+  parts.push(
+    eyeCol
+      ? `<ellipse cx="-10" cy="${hy}" rx="4.6" ry="5" fill="${eyeCol}" stroke="#2b2523" stroke-width="1.2" data-eyes="${eyeCol}"/><ellipse cx="10" cy="${hy}" rx="4.6" ry="5" fill="${eyeCol}" stroke="#2b2523" stroke-width="1.2"/><circle cx="-10" cy="${hy}" r="2" fill="#2b2523"/><circle cx="10" cy="${hy}" r="2" fill="#2b2523"/><circle cx="-8.6" cy="${hy - 1.8}" r="1.1" fill="#fff"/><circle cx="11.4" cy="${hy - 1.8}" r="1.1" fill="#fff"/>`
+      : `<ellipse cx="-10" cy="${hy}" rx="3.2" ry="3.8" fill="#2b2523"/><ellipse cx="10" cy="${hy}" rx="3.2" ry="3.8" fill="#2b2523"/>`,
+  );
   if (fem) parts.push(`<path d="M-14 ${hy - 3} l-3 -2 M14 ${hy - 3} l3 -2" stroke="#2b2523" stroke-width="1.6"/>`);
   parts.push(`<path d="M1 ${hy + 2} Q4 ${hy + 10} -1 ${hy + 11}" stroke="${skinDark}" stroke-width="2.2" fill="none" stroke-linecap="round"/>`);
   parts.push(`<circle cx="-17" cy="${hy + 10}" r="5" fill="#e88f84" opacity=".35"/><circle cx="17" cy="${hy + 10}" r="5" fill="#e88f84" opacity=".35"/>`);
   if (old) parts.push(`<path d="M-21 ${hy - 3} l-5 -2 M-21 ${hy + 1} l-5 1 M21 ${hy - 3} l5 -2 M21 ${hy + 1} l5 1 M-12 ${hy + 10} q-4 5 -1 10 M12 ${hy + 10} q4 5 1 10 M-8 ${hy - 16} h16" stroke="${skinDark}" stroke-width="1.4" fill="none" stroke-linecap="round"/>`);
 
   // Борода / усы
-  const moustache = !h.beard && /ус/.test((h.hairstyle ?? "").toLowerCase());
+  const moustache = !h.beard && !fem && (!!h.moustache || /ус/.test((h.hairstyle ?? "").toLowerCase()));
   const beardCol = cut === "shaved" || cut === "balding" ? (h.hair ? hc : old ? HAIR_COLORS["седые"] : hc) : hc;
   if (h.beard)
-    parts.push(`<path d="M${-R + 2} ${hy + 2} Q${-R + 2} ${hy + R + 16} 0 ${hy + R + 20} Q${R - 2} ${hy + R + 16} ${R - 2} ${hy + 2} L${R - 7} ${hy + 6} Q${R - 9} ${hy + 18} 7 ${hy + 15} Q0 ${hy + 12} -7 ${hy + 15} Q${-R + 9} ${hy + 18} ${-R + 7} ${hy + 6} Z" fill="${beardCol}"${sThin}/>`);
-  if (h.beard || moustache) parts.push(`<path d="M-12 ${hy + 15} Q0 ${hy + 8} 12 ${hy + 15} Q6 ${hy + 18} 0 ${hy + 15} Q-6 ${hy + 18} -12 ${hy + 15}Z" fill="${shade(beardCol, -0.15)}"/>`);
+    parts.push(`<path data-beard="1" d="M${-R + 2} ${hy + 2} Q${-R + 2} ${hy + R + 16} 0 ${hy + R + 20} Q${R - 2} ${hy + R + 16} ${R - 2} ${hy + 2} L${R - 7} ${hy + 6} Q${R - 9} ${hy + 18} 7 ${hy + 15} Q0 ${hy + 12} -7 ${hy + 15} Q${-R + 9} ${hy + 18} ${-R + 7} ${hy + 6} Z" fill="${beardCol}"${sThin}/>`);
+  if (h.beard || moustache) parts.push(`<path data-moustache="1" d="M-12 ${hy + 15} Q0 ${hy + 8} 12 ${hy + 15} Q6 ${hy + 18} 0 ${hy + 15} Q-6 ${hy + 18} -12 ${hy + 15}Z" fill="${shade(beardCol, -0.15)}"/>`);
   parts.push(
     h.beard
       ? `<path d="M-6 ${hy + 20} Q0 ${hy + 24} 6 ${hy + 20}" stroke="#7a2e28" stroke-width="2.6" fill="none" stroke-linecap="round"/>`
@@ -536,7 +541,7 @@ export const drawAdult: DemoHeroDrawer = (o) => {
 
   // Очки
   if (h.glasses)
-    parts.push(`<g fill="#fff" fill-opacity=".18" stroke="#2b2523" stroke-width="2.6"><rect x="-19" y="${hy - 7}" width="16" height="13" rx="5"/><rect x="3" y="${hy - 7}" width="16" height="13" rx="5"/><path d="M-3 ${hy - 2} h6 M-19 ${hy - 3} l-9 -2 M19 ${hy - 3} l9 -2" fill="none"/></g>`);
+    parts.push(`<g data-glasses="1" fill="#fff" fill-opacity=".18" stroke="#2b2523" stroke-width="2.6"><rect x="-19" y="${hy - 7}" width="16" height="13" rx="5"/><rect x="3" y="${hy - 7}" width="16" height="13" rx="5"/><path d="M-3 ${hy - 2} h6 M-19 ${hy - 3} l-9 -2 M19 ${hy - 3} l9 -2" fill="none"/></g>`);
 
   // Руки спереди и предмет (поза 2 — держит книгу)
   parts.push(...armsFront);
@@ -545,5 +550,6 @@ export const drawAdult: DemoHeroDrawer = (o) => {
     parts.push(`<g${sThin}><rect x="-17" y="${by - 34}" width="34" height="42" rx="3" fill="${second}"/><rect x="-11" y="${by - 26}" width="22" height="12" rx="2" fill="#f4f1ea"/></g>`);
   }
 
-  return `<g transform="translate(${o.x} ${o.y}) scale(${o.flip ? -o.scale : o.scale} ${o.scale})">${parts.join("")}</g>`;
+  // Метки для проверок (rev 14): взрослый, пол и возраст — мама ≠ папа ≠ бабушка ≠ дедушка
+  return `<g data-figure="adult" data-gender="${fem ? "f" : "m"}" data-age="${old ? "old" : "adult"}" data-hair="${hc}" transform="translate(${o.x} ${o.y}) scale(${o.flip ? -o.scale : o.scale} ${o.scale})">${parts.join("")}</g>`;
 };

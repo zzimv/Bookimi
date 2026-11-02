@@ -3,7 +3,7 @@
 // Адреса — как на сайте, в hash: #/skazki/<книга>, #/sozdat, #/kniga/<id>, #/zakaz/<id>, #/kabinet, #/admin.
 // Сборка: node tools/demo/build.mjs → tools/demo/out/bookimi-demo.html
 import { createRoot, setAttrHook, setScheduler, setServerErrorHandler } from "react";
-import { GET as obrazec } from "../../src/app/obrazec/route";
+import { sampleSrc } from "./sample";
 import { PromoBar, Header, Footer } from "../../src/components/Layout";
 import HomePage from "../../src/app/page";
 import CatalogPage from "../../src/app/skazki/page";
@@ -28,22 +28,6 @@ import { normalizeName } from "../../src/lib/declension";
 DEFAULTS.art.showTrialStyles = true;
 
 // ───────── картинки-образцы /obrazec — тем же кодом, что маршрут сайта ─────────
-function sampleSrc(url: string) {
-  return svgUrl(`obrazec${url}`, () => {
-    const R = globalThis.Response;
-    let body = "";
-    // Маршрут сайта отвечает new Response(svg) — забираем строку синхронно
-    (globalThis as { Response: unknown }).Response = function (b: string) {
-      body = b;
-    };
-    try {
-      obrazec({ url: `https://demo.bookimi${url}` } as Request);
-    } finally {
-      globalThis.Response = R;
-    }
-    return body;
-  });
-}
 setAttrHook((tag, name, v) => {
   if (name === "src" && v.startsWith("/obrazec")) return sampleSrc(v);
   if (name === "href" && tag === "a") return demoHref(v);
@@ -183,7 +167,7 @@ function View() {
       <div className="demo-bar">
         <div className="wrap demo-bar__in">
           <span className="demo-bar__text">
-            <b>Демо-стенд <span className="demo-rev">rev 13</span>.</b> <span className="demo-bar__long">Всё работает в этом окне: оплата понарошку, фото не покидает браузер, письма не отправляются. На сайте админка — только на admin.&lt;домен&gt; и только через VPN.</span>
+            <b>Демо-стенд <span className="demo-rev">rev 14</span>.</b> <span className="demo-bar__long">Всё работает в этом окне: оплата понарошку, фото не покидает браузер, письма не отправляются. На сайте админка — только на admin.&lt;домен&gt; и только через VPN.</span>
           </span>
           <nav className="demo-tabs" aria-label="Демо">
             <a href="#/" aria-current={!admin ? "page" : undefined}>Сайт</a>

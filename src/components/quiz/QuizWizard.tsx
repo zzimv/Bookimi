@@ -13,9 +13,10 @@ import { Cover } from "@/components/Cover";
 import { api, goal } from "@/lib/client";
 import {
   ADULT_AGES, AGE_GROUPS, AUDIENCE_EXTRA_ROLES, bookAgeLabel, kidGroupByKey, kidGroupOf, CLOTHES, dedicationsFor, EXTRA_ROLE_LABELS, FUR, HAIR, HAIR_ADULT, HAIRSTYLE, INTERESTS, occasionChips, SKIN, TEEN_INTERESTS,
+  ADULT_HAIRSTYLE_F, ADULT_HAIRSTYLE_M, EYES, extraGender, OUTFIT_COLOR_KEYS, sampleExtras, SMILES, TOYS,
   type QuizAnswers,
 } from "@/lib/quiz";
-import { fillTags, normalizeName } from "@/lib/declension";
+import { fillTags, guessGender, normalizeName } from "@/lib/declension";
 import { NameHint } from "./NameHint";
 import { nameError } from "@/lib/names";
 import { occasionWord } from "@/content/occasions";
@@ -30,9 +31,10 @@ import { DEFAULT_BULK_TIERS, type BulkTier } from "@/lib/bulk";
 import { PhotoSlot, type ConsentState, type PhotoView } from "./PhotoSlot";
 import { GroupStep, type DraftAdult, type DraftMember, type QuizGroup } from "./GroupStep";
 import { FlowLegal } from "@/components/FlowLegal";
-import { speciesFromText } from "@/lib/gen/extras";
+import { ROLE_LOOK, speciesFromText } from "@/lib/gen/extras";
 import { MagicLoader } from "@/components/MagicLoader";
 import { SceneIcon, type SceneIconKind } from "./SceneIcon";
+import { PicRow, PicToggles } from "./PicPicker";
 
 export interface QuizStory {
   slug: string;
@@ -108,6 +110,21 @@ const LOOK_PRESETS: Record<"boy" | "girl", { skin: string; hair: string; hairsty
   ],
 };
 const SKIN_WORD: Record<string, string> = { светлый: "светлая кожа", смуглый: "смуглая кожа", тёмный: "тёмная кожа" };
+const cap1 = (x: string) => (x ? x[0].toUpperCase() + x.slice(1) : x);
+/** Подписи вариантов-картинок для экранного диктора (rev 14). */
+const PIC_LABEL = {
+  skin: (x: string) => cap1(SKIN_WORD[x] ?? x),
+  hair: (x: string) => `${cap1(x)} волосы`,
+  hairstyle: (x: string) => cap1(x),
+  eyes: (x: string) => `${cap1(x)} глаза`,
+  outfit: (x: string) => `${cap1(x)} одежда`,
+  fur: (x: string) => `${cap1(x)} окрас`,
+};
+const SPECIES_PICS: { key: "cat" | "dog" | "other"; label: string; what?: string }[] = [
+  { key: "cat", label: "Кошка" },
+  { key: "dog", label: "Собака" },
+  { key: "other", label: "Другой питомец", what: "кролик" },
+];
 const presetLabel = (x: { skin: string; hair: string; hairstyle: string }) => `${x.hair[0].toUpperCase()}${x.hair.slice(1)} волосы, ${x.hairstyle}, ${SKIN_WORD[x.skin] ?? x.skin}`;
 
 const empty = (audience: AudienceKey = "CHILD"): Draft => ({
@@ -115,7 +132,7 @@ const empty = (audience: AudienceKey = "CHILD"): Draft => ({
   audience,
   segment: "",
   hero: { name: "", nickname: "", gender: undefined, ageGroup: undefined, birthDate: "", age: undefined, photoIds: [] },
-  appearance: { hair: "", hairstyle: "", skin: "", glasses: false, freckles: false, beard: false, clothes: "", custom: "" },
+  appearance: { hair: "", hairstyle: "", skin: "", glasses: false, freckles: false, beard: false, clothes: "", eyes: "", smile: "", blush: false, outfitColor: "", custom: "" },
   adult: { profession: "", relation: "", howMet: "", memories: [] },
   pet: { species: undefined, breed: "", furColor: "", traits: "" },
   interests: [],
@@ -495,15 +512,28 @@ export function QuizWizard({
     beard: a.appearance.beard,
     species: a.pet.species,
     fur: FUR.includes(a.pet.furColor ?? "") ? a.pet.furColor : undefined,
-    extras: a.extras.map((e) => e.role),
+    eyes: a.appearance.eyes || undefined,
+    smile: a.appearance.smile || undefined,
+    blush: a.appearance.blush || undefined,
+    outfit: a.appearance.outfitColor || undefined,
+    // Доп. герои с ролью, полом, видом питомца и внешностью — мама, бабушка, дедушка, кошка рисуются собой (rev 14)
+    extraLooks: sampleExtras(a.extras.map((e) => ({ ...e, name: e.name ?? "" }) as Extra)),
   };
+  const coverSample = sampleUrl({ ...previewLook, style, mood: a.mood });
   // До ввода имени — «Ваш ребёнок и …» (как в каталоге), а не «Имя и …»
   const named = Boolean(a.hero.name?.trim());
   const coverTitle = story ? fill(named ? titleTemplate(story.title) : titleForCatalog(story.title, aud)) : own ? a.story.ideaChoice?.title || "Своя история" : "";
   const coverName = normalizeName(a.hero.name ?? "") || HERO_WORD[aud];
   // Внешность картинкой — главный путь для ребёнка и подростка (rev 13); фото — запасной («Загрузить фото»)
   const pictures = aud === "CHILD" || aud === "TEEN";
-  const mode = (k: string): Mode => modes[k] ?? (k === "main" && pictures ? ((a.hero.photoIds?.length ?? 0) > 0 ? "photo" : "describe") : photoEnabled ? "photo" : "describe");
+  // Доп. герои детской книги — тоже картинками по умолчанию (rev 14); фото — вкладка «Загрузить фото»
+  const mode = (k: string): Mode =>
+    modes[k] ??
+    (k === "main" && pictures
+      ? (a.hero.photoIds?.length ?? 0) > 0 ? "photo" : "describe"
+      : pictures && k.startsWith("extra-")
+        ? a.extras[Number(k.slice(6))]?.photoId ? "photo" : "describe"
+        : photoEnabled ? "photo" : "describe");
 
   function chooseAudience(next: AudienceKey) {
     if (next === aud) return;
@@ -713,7 +743,7 @@ export function QuizWizard({
 
   const modeTabs = (k: string, photoOk = true) =>
     photoEnabled && photoOk ? (
-      k === "main" && pictures ? (
+      pictures ? (
         <div className="mode-tabs" role="tablist" aria-label="Картинка или фото">
           <button type="button" role="tab" aria-selected={mode(k) === "describe"} data-mode="describe" onClick={() => setModes({ ...modes, [k]: "describe" })}>Выбрать картинку</button>
           <button type="button" role="tab" aria-selected={mode(k) === "photo"} data-mode="photo" onClick={() => setModes({ ...modes, [k]: "photo" })}>Загрузить фото</button>
@@ -776,6 +806,117 @@ export function QuizWizard({
   );
 
   const g = (a.hero.gender === "girl" ? "girl" : "boy") as "boy" | "girl";
+  // Внешность картинками (rev 14): каждый вариант — рисунок героя с этим вариантом поверх текущего выбора
+  const ap = a.appearance;
+  const heroPic = (patch: Record<string, unknown>, face: boolean | "bust" = true) =>
+    sampleUrl({
+      portrait: true,
+      face,
+      kind,
+      gender: g,
+      age: heroAgeNum,
+      hair: ap.hair || LOOK_PRESETS[g][0].hair,
+      hairstyle: ap.hairstyle || LOOK_PRESETS[g][0].hairstyle,
+      skin: ap.skin || LOOK_PRESETS[g][0].skin,
+      glasses: ap.glasses,
+      freckles: ap.freckles,
+      blush: ap.blush,
+      eyes: ap.eyes || undefined,
+      smile: ap.smile || undefined,
+      outfit: ap.outfitColor || undefined,
+      style,
+      ...patch,
+    });
+  const heroPics = (
+    <div className="describe" data-describe="pics">
+      <PicRow name="skin" label="Тон кожи" options={SKIN.map((x) => ({ key: x, label: PIC_LABEL.skin(x), src: heroPic({ skin: x }) }))} value={ap.skin ?? ""} onChange={(v) => look({ skin: v })} />
+      <PicRow name="hair" label="Цвет волос" options={HAIR.map((x) => ({ key: x, label: PIC_LABEL.hair(x), src: heroPic({ hair: x }) }))} value={ap.hair ?? ""} onChange={(v) => look({ hair: v })} />
+      <PicRow name="hairstyle" label="Причёска" options={HAIRSTYLE.map((x) => ({ key: x, label: PIC_LABEL.hairstyle(x), src: heroPic({ hairstyle: x }, "bust") }))} value={ap.hairstyle ?? ""} onChange={(v) => look({ hairstyle: v })} />
+      <PicRow name="eyes" label="Цвет глаз" options={EYES.map((x) => ({ key: x, label: PIC_LABEL.eyes(x), src: heroPic({ eyes: x }) }))} value={ap.eyes ?? ""} onChange={(v) => look({ eyes: v })} allowEmpty />
+      <PicToggles
+        name="face"
+        label="Лицо"
+        options={[
+          { key: "freckles", label: "Веснушки", src: heroPic({ freckles: true }) },
+          { key: "glasses", label: "Очки", src: heroPic({ glasses: true }) },
+          { key: "blush", label: "Румянец", src: heroPic({ blush: true }) },
+        ]}
+        value={{ freckles: ap.freckles, glasses: ap.glasses, blush: ap.blush }}
+        onToggle={(k) => look({ [k]: !ap[k as "freckles" | "glasses" | "blush"] })}
+      />
+      <PicRow name="smile" label="Улыбка" options={SMILES.map((x) => ({ key: x.key, label: x.label, src: heroPic({ smile: x.key }) }))} value={ap.smile ?? ""} onChange={(v) => look({ smile: v })} allowEmpty />
+      <PicRow name="outfit" label="Цвет одежды" options={OUTFIT_COLOR_KEYS.map((x) => ({ key: x, label: PIC_LABEL.outfit(x), src: heroPic({ outfit: x }, "bust") }))} value={ap.outfitColor ?? ""} onChange={(v) => look({ outfitColor: v })} allowEmpty />
+      <details className="more look-own">
+        <summary>Своё описание</summary>
+        {aud !== "ADULT" && (
+          <>
+            <span className="label">Любимая одежда</span>
+            <Chips name="clothes" label="Любимая одежда" items={asItems(CLOTHES)} value={ap.clothes ?? ""} onChange={(v) => look({ clothes: v as string })} />
+          </>
+        )}
+        <label className="field">
+          <span>Своими словами</span>
+          <textarea className="textarea" name="look-custom" maxLength={300} value={ap.custom ?? ""} onChange={(e) => look({ custom: e.target.value })} placeholder="Например: ямочки на щеках, всегда в красной кепке" />
+          <small className="names-hint">{NAMES_HINT}</small>
+        </label>
+      </details>
+    </div>
+  );
+  // Доп. герои картинками (rev 14): мама, бабушка, папа, дедушка — волосы, причёска, очки, борода/усы;
+  // брат, сестра, друг — как ребёнок; питомец — вид и окрас; игрушка — какая
+  const extraPic = (e: DraftExtra, patch: { species?: Extra["species"]; what?: string; look?: Extra["look"] } = {}, face: boolean | "bust" = false) => {
+    const [sx] = sampleExtras([{ ...e, name: e.name ?? "" } as Extra]);
+    return sampleUrl({
+      kind,
+      style,
+      age: heroAgeNum,
+      extraPortrait: true,
+      face,
+      extraLooks: [{ ...sx, species: patch.species ?? sx.species, what: patch.what ?? sx.what, look: { ...sx.look, ...patch.look } }],
+    });
+  };
+  const extraPics = (e: DraftExtra, i: number) => {
+    const L = e.look ?? {};
+    const def = ROLE_LOOK[e.role] ?? { age: 0 };
+    const setL = (patch: Extra["look"]) => setExtra(i, { look: { ...L, ...patch } });
+    if (e.role === "pet") {
+      if (!e.species) return null;
+      return (
+        <PicRow name={`extra-fur-${i}`} label="Окрас" options={FUR.map((x) => ({ key: x, label: PIC_LABEL.fur(x), src: extraPic(e, { look: { fur: x } }) }))} value={L.fur ?? ""} onChange={(v) => setL({ fur: v || undefined })} allowEmpty />
+      );
+    }
+    if (e.role === "toy" || e.role === "custom") return null;
+    const adult = HUMAN_ROLES.includes(e.role);
+    const male = adult ? def.gender === "boy" : extraGender({ role: e.role, name: e.name ?? "", gender: e.gender }, guessGender) === "boy";
+    const styles = adult ? (male ? ADULT_HAIRSTYLE_M : ADULT_HAIRSTYLE_F) : HAIRSTYLE;
+    return (
+      <div className="describe" data-describe={`extra-pics-${i}`}>
+        <PicRow name={`extra-hair-${i}`} label="Цвет волос" options={(adult ? HAIR_ADULT : HAIR).map((x) => ({ key: x, label: PIC_LABEL.hair(x), src: extraPic(e, { look: { hair: x } }, true) }))} value={L.hair ?? def.hair ?? ""} onChange={(v) => setL({ hair: v || undefined })} />
+        <PicRow name={`extra-hairstyle-${i}`} label="Причёска" options={styles.map((x) => ({ key: x, label: PIC_LABEL.hairstyle(x), src: extraPic(e, { look: { hairstyle: x } }, "bust") }))} value={L.hairstyle ?? def.hairstyle ?? ""} onChange={(v) => setL({ hairstyle: v || undefined })} />
+        <PicRow name={`extra-skin-${i}`} label="Тон кожи" options={SKIN.map((x) => ({ key: x, label: PIC_LABEL.skin(x), src: extraPic(e, { look: { skin: x } }, true) }))} value={L.skin ?? ""} onChange={(v) => setL({ skin: v || undefined })} allowEmpty />
+        {adult && (
+          <PicToggles
+            name={`extra-face-${i}`}
+            label="Приметы"
+            options={[
+              { key: "glasses", label: "Очки", src: extraPic(e, { look: { glasses: true } }, true) },
+              ...(male
+                ? [
+                    { key: "moustache", label: "Усы", src: extraPic(e, { look: { moustache: true, beard: false } }, true) },
+                    { key: "beard", label: "Борода", src: extraPic(e, { look: { beard: true } }, true) },
+                  ]
+                : []),
+            ]}
+            value={{ glasses: L.glasses ?? def.glasses, moustache: L.moustache ?? def.moustache, beard: L.beard ?? def.beard }}
+            onToggle={(k) => {
+              const cur = { glasses: L.glasses ?? def.glasses, moustache: L.moustache ?? def.moustache, beard: L.beard ?? def.beard }[k as "glasses"];
+              setL({ [k]: !cur });
+            }}
+          />
+        )}
+      </div>
+    );
+  };
   const charPicker = (
     <div className="describe" data-describe="pictures">
       <div className="char-grid" role="radiogroup" aria-label="Внешность героя: выберите картинку">
@@ -784,15 +925,15 @@ export function QuizWizard({
           return (
             <button key={`${g}-${i}`} type="button" role="radio" aria-checked={on} className="char-card" data-char={i} aria-label={presetLabel(x)} title={presetLabel(x)} onClick={() => look(x)}>
               {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src={sampleUrl({ portrait: true, kind, gender: g, age: heroAgeNum, ...x, glasses: a.appearance.glasses, freckles: a.appearance.freckles, style })} alt="" width={150} height={150} />
+              <img src={sampleUrl({ portrait: true, kind, gender: g, age: heroAgeNum, ...x, glasses: ap.glasses, freckles: ap.freckles, blush: ap.blush, eyes: ap.eyes || undefined, smile: ap.smile || undefined, outfit: ap.outfitColor || undefined, style })} alt="" width={150} height={150} />
               <span className="char-card__check" aria-hidden="true">✓</span>
             </button>
           );
         })}
       </div>
-      <details className="more look-more">
-        <summary>Подробнее: очки, веснушки, одежда, свой цвет волос</summary>
-        {describeHuman}
+      <details className="more look-more" data-look-more>
+        <summary>Подробнее: кожа, волосы, глаза, очки, улыбка, одежда</summary>
+        {heroPics}
       </details>
     </div>
   );
@@ -974,12 +1115,15 @@ export function QuizWizard({
                         <input className="input" name={`extra-what-${i}`} maxLength={60} value={e.what ?? ""} onChange={(ev) => setExtra(i, { what: ev.target.value })} placeholder="Дерево, робот, машинка, облако, плюшевый заяц" />
                       </label>
                     )}
-                    {/* Питомец: вид обязателен — по нему и текст («кошка Мурка»), и рисунок */}
+                    {/* Питомец: вид обязателен — по нему и текст («кошка Мурка»), и рисунок; выбор — картинкой (rev 14) */}
                     {e.role === "pet" && (
-                      <span className="label">Кошка или собака?</span>
-                    )}
-                    {e.role === "pet" && (
-                      <Chips name={`extra-species-${i}`} label="Кошка или собака" items={[{ key: "cat", label: "Кошка" }, { key: "dog", label: "Собака" }, { key: "other", label: "Другое" }]} value={(e.species ?? "") as "cat"} onChange={(v) => setExtra(i, { species: (v || undefined) as Extra["species"] })} />
+                      <PicRow
+                        name={`extra-species-${i}`}
+                        label="Кошка или собака?"
+                        options={SPECIES_PICS.map((x) => ({ key: x.key, label: x.label, src: extraPic(e, { species: x.key, what: x.what ?? e.what }) }))}
+                        value={e.species ?? ""}
+                        onChange={(v) => setExtra(i, { species: (v || undefined) as Extra["species"] })}
+                      />
                     )}
                     {e.role === "pet" && e.species === "other" && (
                       <label className="field">
@@ -988,10 +1132,13 @@ export function QuizWizard({
                       </label>
                     )}
                     {e.role === "toy" && (
-                      <label className="field">
-                        <span>Что за игрушка</span>
-                        <input className="input" name={`extra-what-${i}`} maxLength={60} value={e.what ?? ""} onChange={(ev) => setExtra(i, { what: ev.target.value })} placeholder="Плюшевый заяц, мишка, кукла" />
-                      </label>
+                      <PicRow
+                        name={`extra-toy-${i}`}
+                        label="Какая игрушка?"
+                        options={TOYS.map((x) => ({ key: x, label: cap1(x), src: extraPic(e, { look: { toy: x } }) }))}
+                        value={e.look?.toy ?? ""}
+                        onChange={(v) => setExtra(i, { look: { ...e.look, toy: v || undefined }, what: v || e.what })}
+                      />
                     )}
                     <label className="field">
                       <span>{e.role === "pet" ? "Кличка" : e.role === "custom" || e.role === "toy" ? "Как зовут (если есть имя)" : "Имя"}{e.role !== "custom" && <span className="req"> *</span>}</span>
@@ -1018,6 +1165,16 @@ export function QuizWizard({
                         onRemove={() => setExtra(i, { photoId: undefined })}
                       />
                     ) : (
+                      <>
+                      {extraPics(e, i)}
+                      <details className="more look-own" data-own={i} open={e.role === "custom" || undefined}>
+                      <summary>Своё описание</summary>
+                      {e.role === "toy" && (
+                        <label className="field">
+                          <span>Что за игрушка</span>
+                          <input className="input" name={`extra-what-${i}`} maxLength={60} value={e.what ?? ""} onChange={(ev) => setExtra(i, { what: ev.target.value })} placeholder="Плюшевый заяц, мишка, кукла" />
+                        </label>
+                      )}
                       <label className="field">
                         <span>{e.role === "custom" ? "Какой он" : "Как выглядит"}</span>
                         <input className="input" name={`extra-desc-${i}`} maxLength={200} value={e.description ?? ""} onChange={(ev) => {
@@ -1028,6 +1185,8 @@ export function QuizWizard({
                         }} placeholder={e.role === "pet" ? "Рыжий кот с белыми лапками" : e.role === "custom" ? "Старый, мудрый, с дуплом-окошком" : "Светлые волосы, очки"} />
                         <small className="names-hint">{NAMES_HINT}</small>
                       </label>
+                      </details>
+                      </>
                     )}
                     {!required && (
                       <button type="button" className="link-btn" onClick={() => set("extras", a.extras.filter((_, j) => j !== i))}>Убрать</button>
@@ -1294,8 +1453,8 @@ export function QuizWizard({
 
         {withPreview && (
           <aside className="quiz__preview" aria-label="Обложка, пример" data-live-cover>
-            <div className="quiz__cover" data-k={`${previewLook.gender}|${previewLook.hair}|${previewLook.hairstyle}|${previewLook.skin}|${previewLook.glasses}|${previewLook.freckles}|${previewLook.extras.join(",")}|${previewLook.slug}|${style}`}>
-              <Cover theme={story?.coverTheme ?? ""} title={coverTitle} sample={sampleUrl({ ...previewLook, style, mood: a.mood })} name={named ? (coverTitle.includes(coverName) ? "" : coverName) : /ваш/i.test(coverTitle) ? "" : coverName} eager />
+            <div className="quiz__cover" data-k={coverSample}>
+              <Cover theme={story?.coverTheme ?? ""} title={coverTitle} sample={coverSample} name={named ? (coverTitle.includes(coverName) ? "" : coverName) : /ваш/i.test(coverTitle) ? "" : coverName} eager />
               <span className="quiz__glow" aria-hidden="true" />
             </div>
             <p className="small muted">

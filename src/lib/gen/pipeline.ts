@@ -14,7 +14,7 @@ import { imageProvider, type HeroRef, type ImageResult, type SceneJob } from "./
 import { watermark } from "../../content/art/render";
 import { mood as moodById } from "../../content/registry";
 import { artStyle, extraDrawKind } from "../../content/art/index";
-import { extraPetLook, extraThing } from "./extras";
+import { extraDemoLook } from "./extras";
 import { HERO_KIND_BY_AUDIENCE, type DemoLook, type HeroKind } from "../../content/types";
 import type { ExtraV2T } from "../../content/answers";
 import { guessGender, normalizeName } from "../declension";
@@ -28,6 +28,7 @@ import { track } from "../events";
 import { checkText } from "../moderation";
 import { personsOf, redactForImage } from "./redact";
 import { crowdLooks } from "../../content/art/render";
+import { OUTFIT_COLORS } from "../../content/art/shared";
 import { groupSpreadIndexes } from "../../content/registry";
 import { groupOf } from "./text";
 import { layoutOf } from "../book-layout";
@@ -93,7 +94,11 @@ export function outfitFor(seed: string, style?: string, shift = 0): string {
 export function heroLook(a: QuizAnswers, style?: string): DemoLook {
   const p = a.appearance;
   return {
-    outfit: outfitFor(`${a.hero.name}|${a.audience}`, style),
+    // Цвет одежды, выбранный картинкой (rev 14), иначе — из палитры стиля по имени
+    outfit: OUTFIT_COLORS[p.outfitColor ?? ""] ?? outfitFor(`${a.hero.name}|${a.audience}`, style),
+    eyes: p.eyes || undefined,
+    smile: p.smile || undefined,
+    blush: p.blush || undefined,
     gender: a.hero.gender,
     age: heroAge(a),
     hair: p.hair,
@@ -109,16 +114,14 @@ export function heroLook(a: QuizAnswers, style?: string): DemoLook {
   };
 }
 
-const EXTRA_AGE: Record<string, number> = { mom: 35, dad: 37, grandma: 68, grandpa: 70, owner: 34, colleague: 38 };
-
-/** Внешность доп. героя для демо: род, возраст по роли, питомец, «свой вариант». */
+/**
+ * Внешность доп. героя для демо: пол и возраст по роли (бабушка — седая, дедушка — с усами), выбор картинками,
+ * питомец (вид, окрас), игрушка. Одна функция для обложки, эскизов, страниц и PDF — extraDemoLook (rev 14).
+ */
 export function extraLook(e: ExtraV2T, a: QuizAnswers, style?: string, i = 0): DemoLook {
-  const g = extraGender(e, guessGender);
-  const age = e.role === "partner" ? heroAge(a) : e.role === "child" || e.role === "grandchild" ? 7 : EXTRA_AGE[e.role];
   // Свой цвет одежды у каждого доп. героя (сдвиг по палитре — не как у главного), тоже на всю книгу
   const outfit = outfitFor(`${a.hero.name}|${a.audience}`, style, i + 1);
-  // Питомец: вид — из анкеты (Кошка / Собака / Другое), иначе по описанию и кличке; порода и окрас — из описания
-  return { gender: g === "n" ? undefined : g, age, outfit, ...extraPetLook(e), thing: extraThing(e) };
+  return extraDemoLook(e, { heroAge: heroAge(a), partnerAge: heroAge(a), outfit });
 }
 
 async function heroesFor(book: Book, a: QuizAnswers): Promise<HeroRef[]> {
@@ -167,7 +170,7 @@ export function plotInfo(a: QuizAnswers): { plot: SceneJob["plot"]; coverScene: 
 async function savePage(book: Book, index: number, img: ImageResult, text: string | null) {
   const key = `${book.id}/p${String(index).padStart(2, "0")}-v${Date.now().toString(36)}.${img.ext}`;
   await putFile("books", key, img.data, img.contentType);
-  // Превью: водяной знак и низкое разрешение
+  // Превью: водяной знак (один мягкий штамп «букими» на страницу, rev 14) и низкое разрешение
   let previewKey: string;
   if (img.ext === "svg") {
     const svg = img.data.toString().replace("</svg>", `${watermark(index === 0 ? 1024 : 2048, 1024)}</svg>`);
@@ -178,7 +181,7 @@ async function savePage(book: Book, index: number, img: ImageResult, text: strin
     const w = Math.min(900, meta.width ?? 900);
     const small = sharp(img.data).resize({ width: w });
     const h = Math.round(((meta.height ?? w) * w) / (meta.width ?? w));
-    const mark = Buffer.from(`<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}">${watermark(w, h).replace('font-size="44"', 'font-size="28"')}</svg>`);
+    const mark = Buffer.from(`<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}">${watermark(w, h)}</svg>`);
     const out = await small.composite([{ input: mark }]).jpeg({ quality: 70 }).toBuffer();
     previewKey = key.replace(/\.png$/, "-preview.jpg");
     await putFile("books", previewKey, out, "image/jpeg");

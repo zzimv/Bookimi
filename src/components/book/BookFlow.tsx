@@ -52,6 +52,7 @@ export function BookFlow({
   audience = "CHILD",
   bulkAvailable = false,
   coverSample,
+  sketches = [],
 }: {
   bookId: string;
   photoEnabled: boolean;
@@ -65,6 +66,8 @@ export function BookFlow({
   bulkAvailable?: boolean;
   /** Образец обложки по анкете (/obrazec) — пока иллюстрации не нарисованы. */
   coverSample?: string;
+  /** Эскизы страниц (0 — обложка, 1..12 — развороты) демо-рисовальщиком: страница без картинки не бывает пустой (rev 14). */
+  sketches?: string[];
 }) {
   const [b, setB] = useState<BookState | null>(null);
   const [error, setError] = useState("");
@@ -175,8 +178,13 @@ export function BookFlow({
         title={b.text.title}
         heroName={b.hero?.name ?? ""}
         heroGender={b.hero?.gender}
-        coverUrl={b.pages.find((p) => p.index === 0)?.url ?? coverSample ?? null}
-        spreads={b.text.spreads.map((s) => ({ index: s.index, text: b.pages.find((p) => p.index === s.index)?.text ?? s.text, url: b.pages.find((p) => p.index === s.index)?.url ?? null }))}
+        coverUrl={b.pages.find((p) => p.index === 0)?.url ?? sketches[0] ?? coverSample ?? null}
+        coverSketch={!b.pages.some((p) => p.index === 0 && p.url) && Boolean(sketches[0] ?? coverSample)}
+        spreads={b.text.spreads.map((s) => {
+          const url = b.pages.find((p) => p.index === s.index)?.url ?? null;
+          // Ещё не нарисовано (до превью или до оплаты) — эскиз тем же демо-рисовальщиком, с подписью «эскиз»
+          return { index: s.index, text: b.pages.find((p) => p.index === s.index)?.text ?? s.text, url: url ?? sketches[s.index] ?? null, sketch: !url && Boolean(sketches[s.index]) };
+        })}
         dedication={b.dedication ?? dedication}
         layout={b.layout ?? DEFAULT_LAYOUT}
         photos={b.photos}

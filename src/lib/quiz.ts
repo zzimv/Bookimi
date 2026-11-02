@@ -1,7 +1,9 @@
 // Анкета создания книги: варианты-чипсы и проверка ответов. Используется и в браузере, и на сервере.
 // Схема ответов — AnswersV2 (src/content/answers.ts): 4 аудитории, старые черновики разбираются без потерь
 // (style → artStyle, роли доп. героев сохраняются). Модуль безопасен для клиента: без промптов и планов сюжетов.
-import { sampleUrl } from "./obrazec";
+import { sampleUrl, type SampleExtra, type SampleOpts } from "./obrazec";
+import { extraGender as extraGenderOf } from "../content/answers";
+import { guessGender } from "./declension";
 import { AnswersV2, heroKindFor, type AnswersV2T } from "../content/answers";
 import { OCCASIONS, SEGMENTS, type AudienceKey } from "../content/profiles";
 import { dedicationsFor } from "./dedications";
@@ -22,6 +24,19 @@ export const HAIR_ADULT = [...HAIR, "седые", "с проседью"];
 export const HAIRSTYLE = ["короткая стрижка", "чёлка", "длинные", "кудряшки", "хвостик", "косички"];
 export const CLOTHES = ["футболка", "платье", "комбинезон", "толстовка с капюшоном", "свитер", "спортивный костюм"];
 export const SKIN = ["светлый", "смуглый", "тёмный"];
+/** rev 14 — выбор внешности картинками. */
+export const EYES = ["карие", "голубые", "зелёные", "серые"];
+export const SMILES: { key: string; label: string }[] = [
+  { key: "smile", label: "Улыбка" },
+  { key: "wide", label: "Широкая улыбка" },
+  { key: "calm", label: "Спокойная улыбка" },
+];
+export const OUTFIT_COLOR_KEYS = ["красная", "оранжевая", "жёлтая", "зелёная", "голубая", "синяя", "фиолетовая", "розовая"];
+/** Причёски взрослых доп. героев (мама, бабушка, папа, дедушка). */
+export const ADULT_HAIRSTYLE_F = ["длинные", "каре", "пучок", "хвост", "кудряшки", "короткая стрижка"];
+export const ADULT_HAIRSTYLE_M = ["короткая стрижка", "кудряшки", "лысина"];
+/** Игрушки, которые умеет рисовать демо (drawThing). */
+export const TOYS = ["плюшевый мишка", "плюшевый заяц", "кукла", "робот", "машинка"];
 export const FUR = ["рыжий", "чёрный", "белый", "серый", "коричневый", "палевый", "трёхцветный", "полосатый"];
 export const INTERESTS = [
   { key: "динозавры", hint: "в сказке появится добрый динозавр" },
@@ -148,10 +163,21 @@ export function appearanceLine(a: QuizAnswers) {
 
 export { heroKindFor };
 
-/** Образец обложки по ответам (/obrazec) — пока иллюстрации книги не нарисованы (превью книги, rev 13). */
-export function coverSampleUrl(a: QuizAnswers): string {
+/**
+ * Доп. герои для образца (/obrazec): роль, пол (по роли или имени), вид питомца и выбор картинками — чтобы мама,
+ * бабушка, дедушка и кошка на живой обложке и эскизах были собой (rev 14).
+ */
+export function sampleExtras(extras: Pick<QuizAnswers["extras"][number], "role" | "name" | "gender" | "species" | "what" | "look">[]): SampleExtra[] {
+  return extras.map((e) => {
+    const g = extraGenderOf({ role: e.role, name: e.name ?? "", gender: e.gender }, guessGender);
+    return { role: e.role, gender: g === "n" ? undefined : g, species: e.species, what: e.what || undefined, look: e.look };
+  });
+}
+
+/** Внешность героя из анкеты для образца. */
+function sampleLookOf(a: QuizAnswers): SampleOpts {
   const kind = ({ CHILD: "child", TEEN: "teen", ADULT: "adult", PET: "pet" } as const)[a.audience];
-  return sampleUrl({
+  return {
     slug: a.story.slug || undefined,
     kind,
     gender: a.hero.gender,
@@ -162,9 +188,27 @@ export function coverSampleUrl(a: QuizAnswers): string {
     glasses: a.appearance.glasses,
     freckles: a.appearance.freckles,
     beard: a.appearance.beard,
+    eyes: a.appearance.eyes || undefined,
+    smile: a.appearance.smile || undefined,
+    blush: a.appearance.blush || undefined,
+    outfit: a.appearance.outfitColor || undefined,
     species: a.pet.species,
     style: a.artStyle,
     mood: a.mood || undefined,
-    extras: a.extras.map((e) => e.role),
-  });
+    extraLooks: sampleExtras(a.extras),
+  };
+}
+
+/** Образец обложки по ответам (/obrazec) — пока иллюстрации книги не нарисованы (превью книги, rev 13). */
+export function coverSampleUrl(a: QuizAnswers): string {
+  return sampleUrl(sampleLookOf(a));
+}
+
+/**
+ * Эскизы всех страниц (rev 14): 0 — обложка, 1..12 — развороты, тем же демо-рисовальщиком, с водяным знаком.
+ * Страница книги до генерации и после превью (до оплаты) никогда не пустая — эскиз с подписью «эскиз».
+ */
+export function sketchUrls(a: QuizAnswers, count = 12): string[] {
+  const base = sampleLookOf(a);
+  return Array.from({ length: count + 1 }, (_, i) => sampleUrl({ ...base, index: i, wide: i > 0, wm: true }));
 }

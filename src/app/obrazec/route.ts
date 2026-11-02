@@ -3,12 +3,21 @@
 //   /obrazec?s=<сюжет>&i=<0..12>&st=<стиль>&m=<настроение>&k=<child|teen|adult|pet>&g=<boy|girl>&a=<возраст>
 //            &h=<волосы>&hs=<причёска>&sk=<кожа>&gl=1&fr=1&b=1&sp=<dog|cat>&br=<порода>&fur=<окрас>&x=<роли через запятую>&w=1
 //   &p=1 — портрет героя без сцены (выбор внешности картинкой в анкете, rev 13)
+//   rev 14: &f=1 — крупно лицо, &f=2 — по пояс (к p=1 / pr=); &ey=<глаза>&sm=<smile|wide|calm>&bl=1&oc=<цвет одежды>&wm=1 (водяной знак эскиза);
+//   x1..x3 — внешность доп. героев («g:girl;h:седые;gl:1;sp:cat;fur:рыжий;t:робот», src/lib/obrazec.ts):
+//   мама — женщина, бабушка — седая, дедушка — с усами, кошка — кошка. Всё — по белым спискам.
 import { plotBySlug, PLOTS } from "@/content/registry";
 import { renderDemoCharacter, renderDemoSpread } from "@/content/art/render";
+import { extraDrawKind } from "@/content/art/index";
 import { ART_STYLE_IDS } from "@/content/profiles";
 import { MOODS } from "@/content/moods";
 import { EXTRA_ROLES, HERO_KIND_BY_AUDIENCE, type DemoExtra, type DemoLook, type HeroKind } from "@/content/types";
-import { FUR, HAIR_ADULT, HAIRSTYLE, SKIN } from "@/lib/quiz";
+import { ADULT_HAIRSTYLE_F, ADULT_HAIRSTYLE_M, EYES, FUR, HAIR_ADULT, HAIRSTYLE, OUTFIT_COLOR_KEYS, SKIN, SMILES, TOYS } from "@/lib/quiz";
+import { OUTFIT_COLORS } from "@/content/art/shared";
+import { decodeSampleExtra } from "@/lib/obrazec";
+import { extraDemoLook } from "@/lib/gen/extras";
+
+const STYLES_ALL = [...new Set([...HAIRSTYLE, ...ADULT_HAIRSTYLE_F, ...ADULT_HAIRSTYLE_M])];
 
 const KINDS: HeroKind[] = ["child", "teen", "adult", "pet"];
 const DEFAULT_AGE: Record<HeroKind, number> = { child: 5, teen: 14, adult: 35, pet: 3 };
@@ -60,6 +69,10 @@ export function GET(req: Request) {
     ...(q.get("b") === "1" ? { beard: true } : {}),
     ...(q.get("sp") === "dog" || q.get("sp") === "cat" ? { species: q.get("sp")! } : {}),
     ...(q.get("fur") ? { furColor: pickFrom(q.get("fur"), FUR) ?? base.furColor } : {}),
+    ...(pickFrom(q.get("ey"), EYES) ? { eyes: q.get("ey")! } : {}),
+    ...(pickFrom(q.get("sm"), SMILES.map((x) => x.key)) ? { smile: q.get("sm")! } : {}),
+    ...(q.get("bl") === "1" ? { blush: true } : {}),
+    ...(pickFrom(q.get("oc"), OUTFIT_COLOR_KEYS) ? { outfit: OUTFIT_COLORS[q.get("oc")!] } : {}),
   };
   // Если пол выбран, а причёска нет — длинные волосы только у девочек
   if (q.get("g") && !q.get("hs") && kind !== "pet") {
@@ -69,13 +82,40 @@ export function GET(req: Request) {
   // Доп. герои: явный список ролей или обязательные по сюжету (пара, хозяева питомца)
   const xParam = q.get("x");
   const roles = xParam !== null ? xParam.split(",").filter((r) => (EXTRA_ROLES as readonly string[]).includes(r)).slice(0, 3) : plot.extras.min > 0 ? Array(plot.extras.min).fill(plot.extras.roles[0]) : [];
-  const extras: DemoExtra[] = roles.map((role, i) => ({
-    role,
-    look: role === "partner" ? { gender: look.gender === "girl" ? "boy" : "girl", age: look.age, hair: ["тёмные", "русые", "светлые"][(seed + i) % 3] } : { gender: (seed + i) % 2 ? "boy" : "girl", age: 34, hair: ["каштановые", "светлые", "тёмные"][(seed + i) % 3] },
-  }));
+  // Внешность доп. героев — та же extraDemoLook, что у страниц книги: по роли (мама — женщина, бабушка — седая,
+  // дедушка — с усами), выбор картинками (x1..x3) и вид питомца. Раньше пол брался по номеру, а вид не передавался.
+  const extras: DemoExtra[] = roles.map((role, i) => {
+    const d = decodeSampleExtra(role, q.get(`x${i + 1}`));
+    const lk = d.look ?? {};
+    const e = {
+      role: role as never,
+      name: "",
+      gender: (["boy", "girl", "n"] as const).find((g) => g === d.gender) ?? (role === "partner" ? (look.gender === "girl" ? "boy" : "girl") : role === "owner" || role === "colleague" ? ((seed + i) % 2 ? "boy" : "girl") : undefined),
+      species: (["cat", "dog", "other"] as const).find((x) => x === d.species),
+      what: (d.what ?? "").replace(/[^а-яёa-z -]/gi, "").slice(0, 40),
+      description: "",
+      look: {
+        hair: pickFrom(lk.hair ?? null, HAIR_ADULT),
+        hairstyle: pickFrom(lk.hairstyle ?? null, STYLES_ALL),
+        skin: pickFrom(lk.skin ?? null, SKIN),
+        glasses: lk.glasses,
+        beard: lk.beard,
+        moustache: lk.moustache,
+        fur: pickFrom(lk.fur ?? null, FUR),
+        toy: pickFrom(lk.toy ?? null, TOYS),
+      },
+    };
+    // Цвет одежды — свой у каждого доп. героя и не меняется от выбора причёски или очков
+    return { role, look: extraDemoLook(e, { heroAge: look.age, partnerAge: look.age, outfit: ["#5b8fd6", "#d9734f", "#6aa86f"][i] }) };
+  });
 
-  const svg = q.get("p") === "1" && kind !== "pet"
-    ? renderDemoCharacter({ kind, look, artStyle: style })
+  // Портрет доп. героя (rev 14: выбор внешности мамы, бабушки, питомца, игрушки картинками): &pr=<роль>&x=<роль>&x1=…
+  const pr = q.get("pr");
+  const prKind = pr && (EXTRA_ROLES as readonly string[]).includes(pr) && extras[0] ? extraDrawKind(pr, kind) : null;
+  const svg = prKind && prKind !== "custom"
+    ? renderDemoCharacter({ kind: prKind, look: extras[0].look, artStyle: style, bg: "#e3ecd9", face: q.get("f") === "2" ? "bust" : q.get("f") === "1" })
+    : q.get("p") === "1"
+    ? renderDemoCharacter({ kind, look, artStyle: style, face: q.get("f") === "2" ? "bust" : q.get("f") === "1" })
     : renderDemoSpread({
     plot: { slug: plot.slug, theme: plot.theme, heroKind: kind },
     spreadIndex: idx,
@@ -84,6 +124,7 @@ export function GET(req: Request) {
     hero: { ...look, kind },
     extras,
     wide: q.get("w") === "1" || idx > 0,
+    watermark: q.get("wm") === "1",
   });
   return new Response(svg, {
     headers: {

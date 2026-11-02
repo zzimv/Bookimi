@@ -14,7 +14,7 @@
 // requests (просьбы к интегратору, агенту 11): —
 
 import type { ArtStyle, ArtStyleDemo, DemoHeroDrawer, DemoSceneCtx, DemoTheme } from "../types";
-import { colorFrom, HAIR_COLORS, pick, SKIN_COLORS } from "./shared";
+import { colorFrom, EYE_COLORS, HAIR_COLORS, pick, SKIN_COLORS } from "./shared";
 
 // ---------------------------------------------------------------------------
 // Цвет
@@ -792,22 +792,33 @@ export const drawChild: DemoHeroDrawer = (o) => {
   // лицо
   const ex = R * 0.37;
   const ey = hc + R * 0.14;
-  const happy = pose === "cheer";
+  const eyeCol = h.eyes ? colorFrom(EYE_COLORS, h.eyes, "") : "";
+  // С выбранным цветом глаз — открытые глаза (иначе цвета не видно)
+  const happy = pose === "cheer" && !eyeCol;
   const eyes = happy
     ? [-1, 1].map((sd) => `<path d="M${f(sd * ex - R * 0.12)} ${f(ey + 2)} Q${f(sd * ex)} ${f(ey - R * 0.14)} ${f(sd * ex + R * 0.12)} ${f(ey + 2)}" stroke="${faceInk}" stroke-width="${f(R * 0.07)}" fill="none" stroke-linecap="round"/>`).join("")
     : [-1, 1]
         .map(
           (sd) =>
-            `<ellipse cx="${f(sd * ex)}" cy="${f(ey)}" rx="${f(R * 0.085)}" ry="${f(R * 0.11)}" fill="${faceInk}"/><circle cx="${f(sd * ex + R * 0.03)}" cy="${f(ey - R * 0.04)}" r="${f(R * 0.032)}" fill="#ffffff"/>` +
+            (eyeCol
+              ? // Цвет глаз (rev 14): цветная радужка, тёмный зрачок, блик — крупнее, чтобы цвет было видно
+                `<ellipse cx="${f(sd * ex)}" cy="${f(ey)}" rx="${f(R * 0.12)}" ry="${f(R * 0.14)}" fill="${eyeCol}" stroke="${faceInk}" stroke-width="${f(R * 0.025)}" data-eyes="${eyeCol}"/><circle cx="${f(sd * ex)}" cy="${f(ey + R * 0.01)}" r="${f(R * 0.055)}" fill="${faceInk}"/><circle cx="${f(sd * ex + R * 0.04)}" cy="${f(ey - R * 0.05)}" r="${f(R * 0.035)}" fill="#ffffff"/>`
+              : `<ellipse cx="${f(sd * ex)}" cy="${f(ey)}" rx="${f(R * 0.085)}" ry="${f(R * 0.11)}" fill="${faceInk}"/><circle cx="${f(sd * ex + R * 0.03)}" cy="${f(ey - R * 0.04)}" r="${f(R * 0.032)}" fill="#ffffff"/>`) +
             (girl ? `<path d="M${f(sd * (ex + R * 0.07))} ${f(ey - R * 0.07)} l${f(sd * R * 0.07)} ${f(-R * 0.05)}" stroke="${faceInk}" stroke-width="${f(R * 0.035)}" stroke-linecap="round"/>` : ""),
         )
         .join("");
   const brows = [-1, 1].map((sd) => `<path d="M${f(sd * ex - R * 0.1)} ${f(ey - R * 0.24)} Q${f(sd * ex)} ${f(ey - R * 0.3)} ${f(sd * ex + R * 0.1)} ${f(ey - R * 0.24)}" stroke="${hairDark}" stroke-width="${f(R * 0.05)}" fill="none" stroke-linecap="round" opacity=".85"/>`).join("");
-  const cheeks = [-1, 1].map((sd) => `<ellipse cx="${f(sd * R * 0.6)}" cy="${f(hc + R * 0.42)}" rx="${f(R * 0.15)}" ry="${f(R * 0.1)}" fill="${blush}" opacity=".55"/>`).join("");
+  const cheeks = h.blush
+    ? [-1, 1].map((sd) => `<ellipse cx="${f(sd * R * 0.6)}" cy="${f(hc + R * 0.42)}" rx="${f(R * 0.2)}" ry="${f(R * 0.13)}" fill="#ef7f8a" opacity=".75" data-blush="1"/>`).join("")
+    : [-1, 1].map((sd) => `<ellipse cx="${f(sd * R * 0.6)}" cy="${f(hc + R * 0.42)}" rx="${f(R * 0.15)}" ry="${f(R * 0.1)}" fill="${blush}" opacity=".55"/>`).join("");
   const nose = `<path d="M${f(-R * 0.05)} ${f(hc + R * 0.34)} Q0 ${f(hc + R * 0.4)} ${f(R * 0.05)} ${f(hc + R * 0.34)}" stroke="${mix(skin, "#7a3b2a", 0.45)}" stroke-width="${f(R * 0.045)}" fill="none" stroke-linecap="round"/>`;
   const my = hc + R * 0.53;
+  // Улыбка (rev 14): выбранная в анкете — на всех разворотах; иначе — по позе
+  const smile = h.smile === "wide" || h.smile === "calm" || h.smile === "smile" ? h.smile : pose === "cheer" || pose === "wave" ? "wide" : "smile";
   const mouth =
-    pose === "cheer" || pose === "wave"
+    smile === "calm"
+      ? `<path d="M${f(-R * 0.09)} ${f(my + R * 0.03)} Q0 ${f(my + R * 0.08)} ${f(R * 0.09)} ${f(my + R * 0.03)}" stroke="#9b3b33" stroke-width="${f(R * 0.05)}" fill="none" stroke-linecap="round" data-smile="calm"/>`
+      : smile === "wide"
       ? `<path d="M${f(-R * 0.17)} ${f(my)} Q0 ${f(my + R * 0.3)} ${f(R * 0.17)} ${f(my)}Z" fill="#9b3b33"/><path d="M${f(-R * 0.08)} ${f(my + R * 0.13)} Q0 ${f(my + R * 0.06)} ${f(R * 0.08)} ${f(my + R * 0.13)} Q0 ${f(my + R * 0.2)} ${f(-R * 0.08)} ${f(my + R * 0.13)}Z" fill="#e87d7d"/>`
       : `<path d="M${f(-R * 0.15)} ${f(my)} Q0 ${f(my + R * 0.16)} ${f(R * 0.15)} ${f(my)}" stroke="#9b3b33" stroke-width="${f(R * 0.06)}" fill="none" stroke-linecap="round"/>`;
   const freckles = h.freckles
@@ -849,7 +860,7 @@ export const drawChild: DemoHeroDrawer = (o) => {
   const rot = `rotate(${tilt} 0 ${f(shY)})`;
   const head = `<g transform="${rot}">${ear}${headShape}${cheeks}${freckles}${brows}${eyes}${nose}${mouth}${front}${glasses}</g>`;
 
-  return `<g transform="translate(${f(o.x)} ${f(o.y)}) scale(${f(o.flip ? -o.scale : o.scale)} ${f(o.scale)})">
+  return `<g data-figure="child" data-gender="${girl ? "f" : "m"}" transform="translate(${f(o.x)} ${f(o.y)}) scale(${f(o.flip ? -o.scale : o.scale)} ${f(o.scale)})">
     <ellipse cx="0" cy="${footY + 6}" rx="${f(56 + age)}" ry="10" fill="rgba(0,0,0,.16)"/>
     ${back ? `<g transform="${rot}">${back}</g>` : ""}${arm(armL)}${legs}${body}${neck}${braids}${head}${arm(armR)}
   </g>`;

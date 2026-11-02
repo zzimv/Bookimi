@@ -122,7 +122,7 @@ describe("анкета: герой картинкой", () => {
     expect(src).toContain("Как зовут нашего героя?");
     expect(src).toContain("Кто отправится в путешествие вместе с ${fill(\"{ГЕРОЙ.тв}\")}?");
     expect(src).toContain("Какой повод мы празднуем?");
-    expect(src).toContain("Подробнее: очки, веснушки, одежда");
+    expect(src).toContain("Подробнее: кожа, волосы, глаза, очки");
     expect(src).toContain(">Загрузить фото<");
     expect(src).toContain("prefers-reduced-motion");
     expect(src).toContain("Книга готовится…");

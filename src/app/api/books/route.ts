@@ -117,7 +117,7 @@ export async function POST(req: Request) {
   for (const id of a.hero.photoIds ?? []) photoHero.set(id, main.id);
   for (const e of a.extras) {
     const h = await db.hero.create({
-      data: { bookId: book.id, userId: user?.id, role: e.role, name: e.name, gender: e.gender, appearance: { custom: e.description, what: e.what, species: e.species }, interests: [] },
+      data: { bookId: book.id, userId: user?.id, role: e.role, name: e.name, gender: e.gender, appearance: { custom: e.description, what: e.what, species: e.species, ...(e.look ? { look: e.look } : {}) }, interests: [] },
     });
     if (e.photoId) photoHero.set(e.photoId, h.id);
   }

@@ -8,7 +8,8 @@ import { moodsFor } from "../../src/content/moods";
 import { ART_STYLE_IDS } from "../../src/content/profiles";
 import { HERO_KIND_BY_AUDIENCE, type DemoExtra, type DemoLook, type HeroKind } from "../../src/content/types";
 import { extraDrawKind } from "../../src/content/art/index";
-import { extraPetLook, extraThing } from "../../src/lib/gen/extras";
+import { extraDemoLook } from "../../src/lib/gen/extras";
+import { OUTFIT_COLORS } from "../../src/content/art/shared";
 import { renderDemoSpread, watermark } from "../../src/content/art/render";
 import { declineName, guessGender } from "../../src/lib/declension";
 import { normalizePhone } from "../../src/content/answers";
@@ -316,6 +317,11 @@ function heroLook(a: QuizAnswers): DemoLook {
   return {
     gender: a.hero.gender,
     age: heroAge(a),
+    // Выбор картинками (rev 14): глаза, улыбка, румянец, цвет одежды
+    eyes: p.eyes || undefined,
+    smile: p.smile || undefined,
+    blush: p.blush || undefined,
+    outfit: OUTFIT_COLORS[p.outfitColor ?? ""],
     hair: p.hair,
     hairstyle: p.hairstyle,
     longHair: /длинн|хвост|косич|кудр|пучок|коса/i.test(p.hairstyle ?? ""),
@@ -328,11 +334,9 @@ function heroLook(a: QuizAnswers): DemoLook {
     furColor: a.pet.furColor,
   };
 }
-const EXTRA_AGE: Record<string, number> = { mom: 35, dad: 37, grandma: 68, grandpa: 70, owner: 34, colleague: 38 };
+// Доп. герой — та же extraDemoLook, что на сайте: мама ≠ папа ≠ бабушка ≠ дедушка, кошка — кошка (rev 14)
 function extraLook(e: ExtraV2T, a: QuizAnswers): DemoLook {
-  const g = extraGender(e, guessGender);
-  const age = e.role === "partner" ? heroAge(a) : e.role === "child" || e.role === "grandchild" ? 7 : EXTRA_AGE[e.role];
-  return { gender: g === "n" ? undefined : g, age, ...extraPetLook(e), thing: extraThing(e) };
+  return extraDemoLook(e, { heroAge: heroAge(a), partnerAge: heroAge(a) });
 }
 const IDEA_THEME: Record<string, string> = { CHILD: "dragon", TEEN: "city-night", ADULT: "home", PET: "pet-home" };
 export function plotInfo(a: QuizAnswers) {
@@ -438,14 +442,16 @@ async function finishJob(b: DBook, kind: JobKind) {
     return;
   }
   if (kind === "preview") {
-    b.pages = b.pages.length ? b.pages : [0, 1, 2];
+    // Демо-рисовальщик мгновенный: в превью — все страницы (с водяным знаком), без «нарисуем после оплаты» (rev 14).
+    // На сайте превью — обложка и 2 разворота, остальные страницы до оплаты — эскизы (sketchUrls).
+    b.pages = Array.from({ length: 13 }, (_, i) => i);
     b.status = "PREVIEW_READY";
     b.progress = 100;
     b.previewReadyAt = Date.now();
-    S.costs.push({ at: Date.now(), rub: COST.image * b.pages.length });
+    S.costs.push({ at: Date.now(), rub: COST.image * 3 });
     event("preview_ready");
     if (b.parentId) return;
-    log(`Превью готово: обложка и 2 разворота · уведомление покупателю «Превью готово» (${S.user?.email ?? "—"})`);
+    log(`Превью готово: вся книга (в демо картинки мгновенные; на сайте — обложка и 2 разворота) · уведомление покупателю «Превью готово» (${S.user?.email ?? "—"})`);
     for (const c of copiesOf(b.id).slice(0, DEFAULTS.bulk.previewCopies - 1))
       if (c.status === "TEXT_APPROVED") {
         c.status = "PREVIEW_QUEUED";

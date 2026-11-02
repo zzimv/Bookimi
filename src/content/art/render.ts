@@ -241,10 +241,41 @@ function titleLines(t: string, max: number): string[] {
   return best;
 }
 
+/**
+ * Водяной знак превью до оплаты (rev 14): один мягкий «бумажный» штамп «букими» со звёздочкой на страницу —
+ * как тиснение: светлый оттиск с тенью, низкая прозрачность. Стоит в нижнем внешнем углу страницы: текст в книге —
+ * сверху, герои — в середине кадра, ступни выше. На развороте 2:1 — по одному знаку на левую и правую страницу.
+ */
 export function watermark(W: number, H: number) {
-  let marks = "";
-  for (let y = 120; y < H; y += 220) for (let x = -200; x < W; x += 420) marks += `<text x="${x}" y="${y}" transform="rotate(-24 ${x} ${y})">БУКИМИ · ПРЕВЬЮ</text>`;
-  return `<g font-family="sans-serif" font-size="44" font-weight="700" fill="#fff" opacity=".28">${marks}</g>`;
+  const k = H / 1024;
+  const pages = W >= H * 1.5 ? [0, 1] : [1];
+  const pageW = pages.length === 2 ? W / 2 : W;
+  const mark = (cx: number, cy: number) => {
+    // Звезда (5 лучей) + слово: размер ~ 1/5 ширины страницы
+    const star = (dx: number, dy: number, fill: string) => {
+      const pts: string[] = [];
+      for (let i = 0; i < 10; i++) {
+        const r = (i % 2 ? 9 : 20) * k;
+        const a = -Math.PI / 2 + (i * Math.PI) / 5;
+        pts.push(`${(cx - 70 * k + dx + Math.cos(a) * r).toFixed(1)},${(cy - 10 * k + dy + Math.sin(a) * r).toFixed(1)}`);
+      }
+      return `<polygon points="${pts.join(" ")}" fill="${fill}"/>`;
+    };
+    const word = (dx: number, dy: number, fill: string) =>
+      `<text x="${(cx - 40 * k + dx).toFixed(1)}" y="${(cy + dy).toFixed(1)}" font-family="Georgia, 'Times New Roman', serif" font-size="${(34 * k).toFixed(1)}" font-weight="700" letter-spacing="${(1.5 * k).toFixed(1)}" fill="${fill}">букими</text>`;
+    const sh = 1.6 * k;
+    return `<g>${star(sh, sh, "#3b2f2a")}${word(sh, sh, "#3b2f2a")}</g><g>${star(-sh * 0.6, -sh * 0.6, "#ffffff")}${word(-sh * 0.6, -sh * 0.6, "#ffffff")}</g><g opacity=".7">${star(0, 0, "#efe6d6")}${word(0, 0, "#efe6d6")}</g>`;
+  };
+  const marks = pages
+    .map((p) => {
+      // Нижний внешний угол: на левой странице — слева, на правой и на обложке — справа
+      const left = pages.length === 2 && p === 0;
+      const x0 = pages.length === 2 ? p * pageW : 0;
+      const cx = left ? x0 + 110 * k : x0 + pageW - 150 * k;
+      return mark(cx, H - 78 * k);
+    })
+    .join("");
+  return `<g data-watermark="букими" opacity=".34" pointer-events="none">${marks}</g>`;
 }
 
 /** Иллюстрация разворота (или обложки при spreadIndex = 0). */
@@ -348,17 +379,28 @@ export function renderDemoSpread(o: DemoRenderOpts): string {
  * Портрет героя для выбора внешности в анкете (rev 13): только фигура на мягком круглом фоне, квадрат 360×360.
  * Тот же рисовальщик, что в книге, — ребёнок выбранного возраста.
  */
-export function renderDemoCharacter(o: { kind?: HeroKind; look: DemoLook; artStyle?: ArtStyle | string | null; bg?: string }): string {
+export function renderDemoCharacter(o: { kind?: HeroKind | ExtraDrawKind; look: DemoLook; artStyle?: ArtStyle | string | null; bg?: string; face?: boolean | "bust" }): string {
   const style = resolveStyle(o.artStyle);
   const kind = o.kind ?? "child";
   const W = 360;
   const H = 360;
   const age = o.look.age ?? 6;
-  // Малыши ниже ростом — крупнее в кадре
-  const scale = kind === "child" ? (age <= 4 ? 1.42 : age <= 7 ? 1.3 : 1.2) : 1.05;
+  // Малыши ниже ростом — крупнее в кадре; взрослый — по пояс крупнее не нужен: целиком, чуть мельче;
+  // питомец и игрушка — по ширине кадра
+  const scale = kind === "child" ? (age <= 4 ? 1.42 : age <= 7 ? 1.3 : 1.2) : kind === "adult" ? 0.88 : kind === "pet" ? 0.95 : kind === "toy" || kind === "custom" ? 1.2 : 1.05;
   const feet = H - 14;
   const bg = o.bg ?? "#f3e4c2";
-  const fig = heroDrawer(kind)({ kind, look: o.look, x: W / 2, y: feet - 190 * scale, scale, style, index: 1 });
+  const drawAs: HeroKind = kind === "toy" || kind === "custom" ? "child" : kind;
+  // Крупно лицо (rev 14: варианты цвета глаз, улыбки, причёски — картинками): голова в центре кадра
+  const faceY = kind === "child" ? 184 - (50 + 3 * age) - (58 + 1.8 * age) - (47 - 0.75 * age) * 0.84 : kind === "adult" ? -128 + (age >= 72 ? 12 : age >= 60 ? 6 : 0) : kind === "teen" ? -120 : null;
+  if (o.face && faceY !== null) {
+    // bust — по пояс: видно косички, хвостик, длинные волосы и одежду
+    const bust = o.face === "bust";
+    const fs = (kind === "child" ? 2.5 : 3.1) * (bust ? 0.62 : 1);
+    const figF = heroDrawer(kind)({ kind: drawAs, look: o.look, x: W / 2, y: H * (bust ? 0.36 : 0.52) - faceY * fs, scale: fs, style, index: kind === "adult" ? 0 : 1 });
+    return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${H}" width="${W}" height="${H}"><defs>${textureDefs(style)}<radialGradient id="ch-bg" cx="50%" cy="42%" r="62%"><stop offset="0" stop-color="#fffdf7"/><stop offset="1" stop-color="${bg}"/></radialGradient></defs><rect width="${W}" height="${H}" fill="url(#ch-bg)"/>${figF}</svg>`;
+  }
+  const fig = heroDrawer(kind)({ kind: drawAs, look: o.look, x: W / 2, y: feet - 190 * scale, scale, style, index: kind === "adult" ? 0 : 1 });
   return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${H}" width="${W}" height="${H}"><defs>${textureDefs(style)}<radialGradient id="ch-bg" cx="50%" cy="42%" r="62%"><stop offset="0" stop-color="#fffdf7"/><stop offset="1" stop-color="${bg}"/></radialGradient></defs><rect width="${W}" height="${H}" fill="url(#ch-bg)"/><ellipse cx="${W / 2}" cy="${feet + 4}" rx="74" ry="12" fill="#000" opacity=".08"/>${fig}</svg>`;
 }
 

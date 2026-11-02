@@ -335,6 +335,14 @@ export interface DemoLook {
   glasses?: boolean;
   freckles?: boolean;
   beard?: boolean;
+  /** Усы без бороды (дедушка, папа) — rev 14. */
+  moustache?: boolean;
+  /** Цвет глаз словом: «карие», «голубые», «зелёные», «серые» (EYE_COLORS) — rev 14. */
+  eyes?: string;
+  /** Улыбка: smile — обычная, wide — широкая, calm — спокойная (rev 14); пусто — по позе. */
+  smile?: string;
+  /** Румянец на щеках ярче (rev 14). */
+  blush?: boolean;
   outfit?: string; // цвет одежды #rrggbb
   species?: "dog" | "cat" | string;
   breed?: string;

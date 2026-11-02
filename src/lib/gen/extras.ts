@@ -374,3 +374,68 @@ export function extraThing(e: ExtraIn): string | undefined {
   if (e.role !== "toy" && e.role !== "custom") return e.what || undefined;
   return e.what || (e.role === "toy" ? [e.description, e.name].filter(Boolean).join(" ") : e.name) || undefined;
 }
+
+// ---------------------------------------------------------------------------
+// Внешность доп. героя для рисовальщика — одна для живой обложки (/obrazec), эскизов, страниц книги и PDF (rev 14)
+// ---------------------------------------------------------------------------
+
+/** Что выбрано картинками в анкете (ExtraV2.look). */
+export interface ExtraPickedLook {
+  hair?: string;
+  hairstyle?: string;
+  skin?: string;
+  glasses?: boolean;
+  beard?: boolean;
+  moustache?: boolean;
+  fur?: string;
+  toy?: string;
+}
+
+/**
+ * Внешность по роли, если ничего не выбрано: мама — взрослая женщина, папа — мужчина, бабушка — седая, с пучком
+ * и в очках, дедушка — седой, с усами и в очках. Брат, сестра, друг — дети (рисует drawChild).
+ */
+export const ROLE_LOOK: Record<string, { gender?: "boy" | "girl"; age: number; hair?: string; hairstyle?: string; glasses?: boolean; moustache?: boolean; beard?: boolean }> = {
+  mom: { gender: "girl", age: 35, hair: "каштановые", hairstyle: "длинные" },
+  dad: { gender: "boy", age: 37, hair: "тёмные", hairstyle: "короткая стрижка" },
+  grandma: { gender: "girl", age: 68, hair: "седые", hairstyle: "пучок", glasses: true },
+  grandpa: { gender: "boy", age: 70, hair: "седые", hairstyle: "короткая стрижка", glasses: true, moustache: true },
+  owner: { age: 34 },
+  colleague: { age: 38 },
+};
+
+type ExtraLookIn = ExtraIn & { look?: ExtraPickedLook };
+
+/**
+ * Внешность доп. героя для демо-рисовальщика. heroAge — возраст главного героя (брат, сестра, друг — ровесники).
+ * Возвращает и пол, и возраст, и вид питомца — без них мама, бабушка и дедушка рисовались одинаковым мужчиной,
+ * а кошка — собакой (rev 14).
+ */
+export function extraDemoLook(e: ExtraLookIn, o: { heroAge?: number; outfit?: string; partnerAge?: number } = {}) {
+  const g = extraGender(e, guessGender);
+  const base = ROLE_LOOK[e.role];
+  const p = e.look ?? {};
+  const kid = e.role === "child" || e.role === "grandchild" || e.role === "sibling" || e.role === "friend";
+  const age = e.role === "partner" ? o.partnerAge : base?.age ?? (kid ? (e.role === "child" || e.role === "grandchild" ? 7 : Math.max(2, Math.min(10, o.heroAge ?? 6))) : undefined);
+  const pet = extraPetLook(e);
+  const look: {
+    gender?: string; age?: number; hair?: string; hairstyle?: string; longHair?: boolean; skin?: string; glasses?: boolean; beard?: boolean; moustache?: boolean;
+    outfit?: string; species?: string; breed?: string; furColor?: string; thing?: string;
+  } = {
+    gender: g === "n" ? base?.gender : g,
+    age,
+    hair: p.hair || base?.hair,
+    hairstyle: p.hairstyle || base?.hairstyle,
+    skin: p.skin || undefined,
+    glasses: p.glasses ?? base?.glasses,
+    beard: p.beard ?? base?.beard,
+    moustache: p.moustache ?? base?.moustache,
+    outfit: o.outfit,
+    ...pet,
+    ...(e.role === "pet" && p.fur ? { furColor: p.fur } : {}),
+    thing: e.role === "toy" && p.toy ? p.toy : extraThing(e),
+  };
+  if (look.hairstyle) look.longHair = /длинн|хвост|косич|кудр|коса/i.test(look.hairstyle);
+  for (const k of Object.keys(look) as (keyof typeof look)[]) if (look[k] === undefined) delete look[k];
+  return look;
+}

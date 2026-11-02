@@ -14,7 +14,8 @@ import { AddressBook } from "../../src/app/kabinet/dannye/AddressBook";
 import { CartoonPlayer } from "./cartoon";
 import { LoginBox } from "../../src/app/vhod/LoginBox";
 import { SideNav } from "../../src/components/SideNav";
-import { AnswersV2, coverSampleUrl, heroAge } from "../../src/lib/quiz";
+import { AnswersV2, coverSampleUrl, heroAge, sketchUrls } from "../../src/lib/quiz";
+import { sampleSrc } from "./sample";
 import { dedicationText } from "../../src/lib/gen/text";
 import { moodsFor } from "../../src/content/moods";
 import { moodSwatch } from "../../src/lib/mood-swatch";
@@ -55,6 +56,8 @@ export async function KnigaPage({ id }: { id: string }) {
       moodChangesPreview={DEFAULTS.limits.moodChangesPreview}
       audience={a.success ? a.data.audience : "CHILD"}
       coverSample={a.success ? coverSampleUrl(a.data) : undefined}
+      // Эскизы — сразу blob-ссылки (как атрибуты src): превью меряет тон картинки через new Image()
+      sketches={a.success ? sketchUrls(a.data).map(sampleSrc) : undefined}
       bulkAvailable={!b.parentId && bulkState(b).available}
     />
   );

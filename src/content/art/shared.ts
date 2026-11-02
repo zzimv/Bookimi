@@ -29,6 +29,26 @@ export const SKIN_COLORS: Record<string, string> = {
   тёмный: "#8d5a3b",
 };
 
+/** Цвет глаз (rev 14): радужка в демо-рисунке. */
+export const EYE_COLORS: Record<string, string> = {
+  карие: "#7a4a26",
+  голубые: "#4a90c8",
+  зелёные: "#4f9a5a",
+  серые: "#7f8c97",
+};
+
+/** Цвет одежды (rev 14): выбор картинкой в анкете → look.outfit. */
+export const OUTFIT_COLORS: Record<string, string> = {
+  красная: "#e05a4f",
+  оранжевая: "#f08a3c",
+  жёлтая: "#f2c94c",
+  зелёная: "#5cae6a",
+  голубая: "#5bb3e0",
+  синяя: "#3d6fc4",
+  фиолетовая: "#9b72cf",
+  розовая: "#f28fb1",
+};
+
 export const FUR_COLORS: Record<string, string> = {
   рыжий: "#d7863a",
   чёрный: "#2a2522",
@@ -131,7 +151,7 @@ export function drawThing(o: DemoHeroOpts) {
   else if (/мишк|медвед|bear|игрушк|toy/.test(t))
     body = `<circle cx="0" cy="130" r="56" fill="#b07b4f"${s}/><circle cx="0" cy="40" r="44" fill="#b07b4f"${s}/><circle cx="-34" cy="6" r="15" fill="#b07b4f"${s}/><circle cx="34" cy="6" r="15" fill="#b07b4f"${s}/><circle cx="-14" cy="36" r="5" fill="#2b2b2b"/><circle cx="14" cy="36" r="5" fill="#2b2b2b"/><ellipse cx="0" cy="54" rx="10" ry="7" fill="#e9c9a8"/>`;
   else body = `<circle cx="0" cy="100" r="70" fill="${a}" opacity=".85"${s}/><circle cx="-20" cy="86" r="6" fill="#2b2b2b"/><circle cx="20" cy="86" r="6" fill="#2b2b2b"/><path d="M-14 112 Q0 124 14 112" stroke="#2b2b2b" stroke-width="4" fill="none"/>`;
-  return `<g transform="translate(${o.x} ${o.y}) scale(${o.scale})"><ellipse cx="0" cy="190" rx="70" ry="12" fill="rgba(0,0,0,.15)"/>${body}</g>`;
+  return `<g data-figure="toy" data-thing="${escapeXml(t.slice(0, 30))}" transform="translate(${o.x} ${o.y}) scale(${o.scale})"><ellipse cx="0" cy="190" rx="70" ry="12" fill="rgba(0,0,0,.15)"/>${body}</g>`;
 }
 
 /** Декор поверх неба: count элементов в верхних 60% кадра. Используют render.ts и mood.ts. */

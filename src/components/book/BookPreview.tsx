@@ -2,8 +2,8 @@
 // Превью книги = настоящая книга, которую листают и правят на месте (rev 13): обложка в трёх оформлениях,
 // «Приветствие» с именем и автором, «Фото и посвящение», 12 разворотов с текстом прямо на картинке (слева и справа),
 // финал и задняя обложка. Под страницами — кнопки правок: имя, обложка, фото, посвящение, автор.
-// Вёрстка общая с PDF — src/lib/book-layout.ts. Превью до оплаты — картинки с водяным знаком (как раньше),
-// развороты без картинки — с мягкой подложкой. Работает и в демо-стенде (мини-рантайм: click/input/change/keydown).
+// Вёрстка общая с PDF — src/lib/book-layout.ts. Превью до оплаты — картинки с одним мягким знаком «букими» на страницу;
+// ещё не нарисованные страницы — эскизы демо-рисовальщиком с подписью «эскиз» (rev 14), пустых страниц нет. Работает и в демо-стенде (мини-рантайм: click/input/change/keydown).
 import { useEffect, useMemo, useRef, useState } from "react";
 import { SpreadText } from "@/components/SpreadText";
 import { api } from "@/lib/client";
@@ -24,8 +24,10 @@ export interface BookPreviewProps {
   heroGender?: string;
   /** Иллюстрация обложки (превью — с водяным знаком); нет — образец по анкете. */
   coverUrl: string | null;
-  /** 12 разворотов: текст и картинка (нет — подложка). */
-  spreads: { index: number; text: string; url: string | null }[];
+  /** Обложка — эскиз (ещё не нарисована): подпись «эскиз». */
+  coverSketch?: boolean;
+  /** 12 разворотов: текст и картинка (sketch — эскиз демо-рисовальщиком до генерации, rev 14; нет картинки — подложка). */
+  spreads: { index: number; text: string; url: string | null; sketch?: boolean }[];
   dedication: string;
   layout: BookLayout;
   /** Фото книги: из анкеты (main) и для страницы «Фото» (keepsake). */
@@ -214,6 +216,7 @@ export function BookPreview(p: BookPreviewProps) {
         return (
           <div className="bk-page bk-page--cover" key={k} data-page="cover">
             <BookCoverView variant={p.layout.coverVariant} art={coverArt} title={p.title} />
+            {p.coverSketch && <span className="bk-sketch" data-sketch>эскиз</span>}
           </div>
         );
       case "endpaper":
@@ -280,12 +283,13 @@ export function BookPreview(p: BookPreviewProps) {
           <div className={`bk-page bk-page--story bk-page--${ref.side}`} key={k} data-page="story" data-spread={ref.spread} data-side={ref.side} data-tone={tone}>
             {s?.url ? (
               // eslint-disable-next-line @next/next/no-img-element
-              <img className={`bk-art bk-art--${ref.side}`} src={s.url} alt={i === 0 ? `Иллюстрация разворота ${ref.spread}` : ""} loading="lazy" decoding="async" />
+              <img className={`bk-art bk-art--${ref.side}`} src={s.url} alt={i === 0 ? `Иллюстрация разворота ${ref.spread}` : ""} loading="lazy" decoding="async" data-sketch-art={s.sketch ? "1" : undefined} />
             ) : (
               <div className={`bk-art bk-art--ph bk-art--${ref.side}`}>
                 {i === 1 && <span className="bk-art__note">{p.pendingNote}</span>}
               </div>
             )}
+            {s?.sketch && i === 1 && <span className="bk-sketch" data-sketch>эскиз</span>}
             {part && (
               <div className={`bk-text bk-text--${tone}${part.length > 200 ? " bk-text--long" : ""}`}>
                 <SpreadText text={part} />

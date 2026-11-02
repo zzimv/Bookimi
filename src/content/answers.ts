@@ -60,6 +60,22 @@ export const ExtraV2 = z.object({
   species: z.enum(["dog", "cat", "other"]).optional(),
   /** Обработанное фото (id из /api/draft/photos): само фото не в анкете, только id; удаляется через 24 ч без книги, иначе через 7 дней. */
   photoId: z.string().uuid().optional(),
+  /**
+   * Внешность, выбранная картинками (rev 14): взрослым — волосы, причёска, очки, борода/усы; питомцу — окрас;
+   * игрушке — какая. Пусто — по роли (бабушка седая с пучком и в очках, дедушка седой с усами…), src/lib/gen/extras.ts.
+   */
+  look: z
+    .object({
+      hair: str(40).optional(),
+      hairstyle: str(40).optional(),
+      skin: str(40).optional(),
+      glasses: z.boolean().optional(),
+      beard: z.boolean().optional(),
+      moustache: z.boolean().optional(),
+      fur: str(40).optional(),
+      toy: str(40).optional(),
+    })
+    .optional(),
 });
 export type ExtraV2T = z.infer<typeof ExtraV2>;
 
@@ -131,6 +147,11 @@ export const AnswersV2 = z.preprocess(
         freckles: z.boolean().optional().default(false),
         beard: z.boolean().optional().default(false),
         clothes: str(60).optional().default(""),
+        /** rev 14 — выбор картинками: цвет глаз, улыбка (smile | wide | calm), румянец, цвет одежды (OUTFIT_COLORS). */
+        eyes: str(20).optional().default(""),
+        smile: str(20).optional().default(""),
+        blush: z.boolean().optional().default(false),
+        outfitColor: str(20).optional().default(""),
         custom: str(300).optional().default(""),
       })
       .default({}),

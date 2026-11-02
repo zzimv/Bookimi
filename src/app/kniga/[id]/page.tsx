@@ -3,7 +3,7 @@ import { notFound } from "next/navigation";
 import { BookFlow } from "@/components/book/BookFlow";
 import { ownBook } from "@/lib/api";
 import { cfg } from "@/lib/settings";
-import { AnswersV2, coverSampleUrl, heroAge } from "@/lib/quiz";
+import { AnswersV2, coverSampleUrl, heroAge, sketchUrls } from "@/lib/quiz";
 import { dedicationText } from "@/lib/gen/text";
 import { moodsFor } from "@/content/moods";
 import { moodSwatch } from "@/lib/mood-swatch";
@@ -31,6 +31,7 @@ export default async function Page({ params }: { params: Promise<{ id: string }>
       moodChangesPreview={limits.moodChangesPreview}
       audience={a.success ? a.data.audience : "CHILD"}
       coverSample={a.success ? coverSampleUrl(a.data) : undefined}
+      sketches={a.success ? sketchUrls(a.data) : undefined}
       bulkAvailable={a.success && !own.book.parentBookId && bulkAvailable(a.data) && (await cfg("bulk")).enabled}
     />
   );
