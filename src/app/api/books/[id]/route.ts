@@ -10,7 +10,9 @@ import { anonId } from "@/lib/auth";
 import { consentState } from "@/lib/consent";
 import { AnswersV2 } from "@/lib/quiz";
 import { layoutOf } from "@/lib/book-layout";
+import { editLocked } from "@/lib/book-edit";
 import { dedicationText } from "@/lib/gen/text";
+import { cfg } from "@/lib/settings";
 
 export const dynamic = "force-dynamic";
 
@@ -55,6 +57,8 @@ export async function GET(_: Request, { params }: { params: Promise<{ id: string
     hero: a.success ? { name: a.data.hero.name, gender: a.data.hero.gender } : null,
     dedication: a.success ? dedicationText(a.data) : "",
     layout: layoutOf(book.params),
+    // rev 19: цена «Другой обложки» — подпись «+100 ₽» в выборе обложки (сумму считает сервер при оформлении)
+    coverPriceRub: (await cfg("bookOptions")).coverPriceRub,
   });
 }
 
@@ -67,6 +71,9 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   if (!own) return err("Не найдено", 404);
   const b = await body(req, Edit);
   if (!b) return err("Некорректный текст");
+  // rev 19: оплаченная книга не правится — исправления через поддержку
+  const locked = editLocked(own.book, "text");
+  if (locked) return err(locked, 409);
   if (checkText(b.spreads.map((s) => s.text).join("\n"))) return err("Уберите недопустимые слова или ссылки");
   const text = own.book.text as unknown as StoryText;
   if (!text) return err("Текст ещё не готов");

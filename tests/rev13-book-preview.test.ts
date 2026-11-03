@@ -88,7 +88,10 @@ describe("PDF в новой вёрстке", () => {
   const b = { title: "Марк и Месяц", dedication: "", heroName: "марк", heroGender: "boy", audience: "CHILD" as const, cover: img, author: "мама и папа", photo: { data: Buffer.from("p"), contentType: "image/jpeg" }, spreads: [{ text: "Раз. Два.", image: img }], tones: [["light", "dark"]] as ("light" | "dark")[][] };
   it("приветствие, автор, фото, посвящение по умолчанию, текст на картинке слева и справа, финал", () => {
     const html = bookHtml(b, { kind: "screen" }).html;
-    expect(html).toContain("Марк, добро пожаловать в твою единственную такую книгу!");
+    // rev 19: «сказочная» вёрстка — строки разными шрифтами, текст фразы тот же
+    const plain = html.replace(/<[^>]+>/g, "").replace(/\s+/g, " ");
+    expect(plain).toContain("Марк, добро пожаловать в твою единственную такую книгу!");
+    expect(html).toContain('<em class="fk-key">единственную</em>');
     expect(html).toContain("Автор: мама и папа");
     expect(html).toContain("Создано в");
     expect(html).toContain(`data:image/jpeg;base64,${Buffer.from("p").toString("base64")}`);
@@ -97,7 +100,7 @@ describe("PDF в новой вёрстке", () => {
     expect(html).toContain('<div class="text dark"');
     expect(html).toContain('<span class="sp-line">Раз.</span>');
     expect(html).toContain('<span class="sp-line">Два.</span>');
-    expect(html).toContain("Марк, эта книга — только твоя.");
+    expect(plain).toContain("Марк, эта книга — только твоя.");
     const noAuthor = bookHtml({ ...b, author: "" }, { kind: "screen" }).html;
     expect(noAuthor).not.toContain("Автор:");
   });

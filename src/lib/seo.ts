@@ -83,8 +83,24 @@ export function faqItems(f: SiteFacts): { q: string; a: string }[] {
 }
 
 /** robots.txt — текстом: Clean-param для меток и фильтров каталога; без устаревшего Host. */
-export function robotsTxt(domain = process.env.DOMAIN ?? "bookimi.ru") {
+/** Длинный текст — строками комментария robots.txt по ~100 знаков. */
+function wrapComment(text: string, width = 100): string[] {
+  const out: string[] = [];
+  let line = "";
+  for (const w of text.split(/\s+/)) {
+    if (line && line.length + w.length + 1 > width) {
+      out.push(`# ${line}`);
+      line = w;
+    } else line = line ? `${line} ${w}` : w;
+  }
+  if (line) out.push(`# ${line}`);
+  return out;
+}
+
+export function robotsTxt(domain = process.env.DOMAIN ?? "bookimi.ru", notice?: string) {
   return [
+    // rev 19: обращение к сборщикам и агентам — комментарием (одинаково для всех, поисковики комментарии не читают)
+    ...(notice ? [...wrapComment(notice), "#"] : []),
     "User-agent: *",
     "Allow: /",
     ...["/api/", "/admin", "/kabinet", "/kniga/", "/zakaz/", "/sozdat", "/vhod", "/chek/", "/otpiska", "/mult/"].map((p) => `Disallow: ${p}`),

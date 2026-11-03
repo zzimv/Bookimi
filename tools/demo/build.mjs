@@ -267,6 +267,14 @@ const fontCss = [["Nunito", "nunito", 800], ["Manrope", "manrope", 400], ["Manro
     return `@font-face{font-family:${family};font-style:normal;font-weight:${w};font-display:swap;src:url(data:font/woff2;base64,${b64}) format("woff2");unicode-range:${range}}`;
   }))
   .join("");
+// rev 19: шрифты книги — Yeseva One (имя, ключевые слова) и Lora 400 / 400 italic (текст), подмножества (subset.sh)
+const PUN = "U+0020-0040,U+005B-0060,U+007B-007E,U+00A0,U+00AB,U+00BB,U+00B7,U+2010-2014,U+2018-201E,U+2026,U+2116,U+2009,U+202F,U+2605,U+2726,U+2767";
+const bookFontCss = [["Yeseva One", "yeseva-one-%s-400", "normal"], ["Lora", "lora-%s-400", "normal"], ["Lora", "lora-%s-400-italic", "italic"]]
+  .flatMap(([family, file, style]) => [["cyr", CYR], ["lat", PUN]].map(([sub, range]) => {
+    const b64 = readFileSync(join(here, "fonts", `${file.replace("%s", sub)}.woff2`)).toString("base64");
+    return `@font-face{font-family:"${family}";font-style:${style};font-weight:400;font-display:swap;src:url(data:font/woff2;base64,${b64}) format("woff2");unicode-range:${range}}`;
+  }))
+  .join("");
 
 // Тема до первой отрисовки — как THEME_SCRIPT в src/app/layout.tsx
 const themeScript = `try{var t=localStorage.getItem("bk_theme");if(t==="light"||t==="dark")document.documentElement.dataset.theme=t}catch(e){}`;
@@ -275,11 +283,11 @@ const html = `<!doctype html>
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>БУКИМИ демо rev 18</title>
+<title>БУКИМИ демо rev 19</title>
 <meta name="description" content="Интерактивный демо-стенд БУКИМИ: витрина, анкета, книга, оплата, кабинет и админка — без сервера.">
 <meta name="claude:viewport-fit-sides" content="cover">
 <script>${themeScript}</script>
-<style>${fontCss}${css}</style>
+<style>${fontCss}${bookFontCss}${css}</style>
 </head>
 <body>
 <div id="app"><p style="padding:40px 16px;text-align:center;font-family:system-ui">Загружаем демо-стенд…</p></div>

@@ -21,6 +21,20 @@ export type LayoutEditT = z.infer<typeof LayoutEdit>;
 export const NAME_AFTER_PAY = "Имя в оплаченной книге меняем через поддержку — напишите нам, всё поправим";
 
 /**
+ * rev 19: после оплаты книга не правится вовсе — ни имя, ни обложка, фото, посвящение, автор, ни текст, «Переписать»,
+ * настроение и перерисовка. Книга уже передана в работу (иллюстрации, PDF, типография); исправления — через поддержку.
+ * Сервер отказывает понятным текстом (409), в превью кнопок правок после оплаты нет.
+ */
+export const PAID_LOCKED = "Книга оплачена и передана в работу. Если нужно что-то исправить — напишите в поддержку";
+/** Действия, которые меняют книгу (текст, вёрстку, иллюстрации). */
+export const EDIT_ACTIONS = ["rewrite", "approve", "mood", "redraw", "layout", "text", "photo"] as const;
+export type EditAction = (typeof EDIT_ACTIONS)[number];
+/** Можно ли править книгу: null — можно, иначе — текст отказа. */
+export function editLocked(book: { paidFull: boolean }, action: string): string | null {
+  return book.paidFull && (EDIT_ACTIONS as readonly string[]).includes(action) ? PAID_LOCKED : null;
+}
+
+/**
  * Новые ответы книги после правки. Ошибка — текстом для покупателя. nameChanged — нужно заново подставить имя в текст.
  * Фото проверяет вызывающий (фото должно принадлежать книге и быть не удалённым).
  */

@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { adminHeaders, adminHosts, requestHost, routeForHost } from "./lib/admin-host";
+import { classifyUa, noticeHeader } from "./lib/bot-notice";
 
 // 1) Анонимный идентификатор для черновика и превью без регистрации.
 // 2) Реферальный код (?ref=) и UTM-метки — в cookie на 30 дней.
@@ -38,6 +39,15 @@ export function middleware(req: NextRequest) {
   if (route.adminHost) {
     for (const [k, v] of adminHeaders()) if (k !== "Content-Security-Policy") res.headers.set(k, v);
     return res; // на admin-хосте — без cookie сайта (анонимный id, реферал, UTM)
+  }
+  // rev 19: явная автоматика (сборщики данных, агенты, безголовые браузеры, curl) — вежливое обращение заголовком
+  // ответа и ссылка на /llms.txt (там же текст с контактами из настроек). Страницы при этом те же самые: HTML
+  // не меняем (layout статический — чтение заголовков запроса в нём сделало бы все страницы динамическими).
+  // Поисковым роботам (Яндекс, Google, Bing…) и людям — ничего (classifyUa → "search" / "human").
+  if (method === "GET" && !url.pathname.startsWith("/api/") && classifyUa(req.headers.get("user-agent")) === "automation") {
+    const site = `https://${process.env.DOMAIN ?? "bookimi.ru"}`;
+    res.headers.set("X-Bookimi-Notice", noticeHeader({ site }));
+    res.headers.append("Link", `<${site}/llms.txt>; rel="describedby"; type="text/plain"`);
   }
   // Ссылка «Поделиться мультфильмом» — личная: не индексировать
   if (url.pathname.startsWith("/mult/")) res.headers.set("X-Robots-Tag", "noindex, nofollow, noarchive");

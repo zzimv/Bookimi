@@ -215,6 +215,12 @@ const SECTIONS: { key: SettingKey; title: string; note?: string; fields: Field[]
     ],
   },
   {
+    key: "bookOptions",
+    title: "Книга: обложка",
+    note: "«Классика» — бесплатно. «Звёздная ночь» и «Светлая рамка» — строка «Другая обложка» в заказе. 0 — все обложки бесплатно.",
+    fields: [{ p: "coverPriceRub", label: "Другая обложка, ₽", t: "number" }],
+  },
+  {
     key: "referral",
     title: "Приведи друга",
     fields: [

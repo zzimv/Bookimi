@@ -43,10 +43,23 @@ export interface QuoteInput {
   audience?: string;
   /** Цифровые допы этой книги, уже оплаченные раньше: второй раз не продаём (файл уже в кабинете). */
   paidAddons?: string[];
+  /**
+   * Оформление обложки книги (rev 19): 0 — «Классика», бесплатно; 1 и 2 — «Другая обложка» за coverPriceRub.
+   * Берётся на сервере из вёрстки книги (params.layout), не из запроса браузера.
+   */
+  coverVariant?: number;
+  /** Цена «Другой обложки» из настроек (bookOptions.coverPriceRub, по умолчанию 100 ₽). */
+  coverPriceRub?: number;
 }
 
+/** Строка заказа «Другая обложка» (rev 19). */
+export const COVER_LINE_KEY = "cover-variant";
+export const COVER_LINE_TITLE = "Другая обложка";
+/** Платная ли обложка: всё, кроме «Классики» (0). */
+export const coverIsPaid = (variant: number | undefined) => variant === 1 || variant === 2;
+
 export interface QuoteLine {
-  kind: "format" | "addon";
+  kind: "format" | "addon" | "cover";
   key: string;
   title: string;
   priceRub: number;
@@ -134,6 +147,11 @@ export function quote(input: QuoteInput, formats: CatalogFormat[], addons: Catal
     }
     lines.push({ kind: "addon", key, title: a.title, priceRub: a.priceRub ?? 0 });
   }
+
+  // Другая обложка — к самой книге (PDF или печать), не к докупке допов; цена 0 — строки нет
+  const coverRub = Math.max(0, Math.round(input.coverPriceRub ?? 0));
+  if (!input.addonsOnly && coverIsPaid(input.coverVariant) && coverRub > 0 && lines.some((l) => l.kind === "format"))
+    lines.splice(1, 0, { kind: "cover", key: COVER_LINE_KEY, title: COVER_LINE_TITLE, priceRub: coverRub });
 
   const subtotalRub = lines.reduce((s, l) => s + l.priceRub, 0);
   const formatLine = lines.find((l) => l.kind === "format");

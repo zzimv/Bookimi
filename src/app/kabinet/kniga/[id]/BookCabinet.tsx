@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { api, rub } from "@/lib/client";
 import { AddonCards } from "@/components/book/AddonCards";
 import { CartoonPanel } from "./CartoonPanel";
+import { PaidNote } from "@/components/book/BookPreview";
 import { SILENT_ERROR, isSilent, levelMeter } from "@/lib/cartoon-guide";
 
 const FILE_TITLES: Record<string, string> = {
@@ -46,9 +47,7 @@ export function BookCabinet(p: {
   cartoonSoon?: boolean;
 }) {
   const router = useRouter();
-  const [msg, setMsg] = useState("");
-  const [editing, setEditing] = useState<number | null>(null);
-  const [draft, setDraft] = useState("");
+  const [msg] = useState("");
 
   useEffect(() => {
     if (p.status !== "FULL_READY") {
@@ -56,28 +55,6 @@ export function BookCabinet(p: {
       return () => clearInterval(t);
     }
   }, [p.status, router]);
-
-  async function redraw(index: number) {
-    if (!confirm("Перерисовать эту иллюстрацию? Бесплатных перерисовок осталось: " + p.redrawsLeft)) return;
-    try {
-      await api(`/api/books/${p.id}/action`, { action: "redraw", index });
-      setMsg("Перерисовываем — обновим страницу, когда будет готово.");
-      router.refresh();
-    } catch (e) {
-      setMsg((e as Error).message);
-    }
-  }
-
-  async function saveText(index: number) {
-    try {
-      await api(`/api/books/${p.id}`, { spreads: [{ index, text: draft }] }, "PATCH");
-      setEditing(null);
-      setMsg("Текст сохранён. PDF обновятся через минуту.");
-      router.refresh();
-    } catch (e) {
-      setMsg((e as Error).message);
-    }
-  }
 
   return (
     <>
@@ -116,7 +93,8 @@ export function BookCabinet(p: {
       {p.selfRead && <VoiceRecorder bookId={p.id} pages={p.pages} />}
 
       <h2 style={{ fontSize: "var(--fs-lg)", marginTop: 24 }}>Читалка</h2>
-      <p className="small muted">Текст можно править бесплатно. Иллюстрации — перерисовать бесплатно ещё {p.redrawsLeft} раз(а).</p>
+      {/* rev 19: оплаченная книга не правится — ни текст, ни иллюстрации (сервер тоже отказывает, src/lib/book-edit.ts) */}
+      <PaidNote />
       <div className="reader">
         {p.pages.map((pg) => (
           <figure key={pg.index} className="spread-view" style={{ margin: 0 }}>
@@ -124,19 +102,7 @@ export function BookCabinet(p: {
               // eslint-disable-next-line @next/next/no-img-element
               <img className="preview-img" src={pg.url} alt={pg.index === 0 ? "Обложка" : `Разворот ${pg.index}`} loading="lazy" />
             )}
-            {pg.index > 0 &&
-              (editing === pg.index ? (
-                <div style={{ marginTop: 8 }}>
-                  <textarea className="textarea" value={draft} maxLength={600} onChange={(e) => setDraft(e.target.value)} />
-                  <div className="row"><button className="btn btn--primary btn--sm" onClick={() => saveText(pg.index)}>Сохранить</button><button className="link-btn" onClick={() => setEditing(null)}>Отмена</button></div>
-                </div>
-              ) : (
-                <figcaption><SpreadText text={pg.text} /></figcaption>
-              ))}
-            <div className="row small" style={{ marginTop: 6 }}>
-              {pg.index > 0 && editing !== pg.index && <button className="link-btn" onClick={() => { setEditing(pg.index); setDraft(pg.text); }}>Поправить текст</button>}
-              <button className="link-btn" disabled={p.redrawsLeft <= 0} onClick={() => redraw(pg.index)}>Перерисовать</button>
-            </div>
+            {pg.index > 0 && <figcaption><SpreadText text={pg.text} /></figcaption>}
           </figure>
         ))}
       </div>

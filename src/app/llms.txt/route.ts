@@ -1,10 +1,12 @@
 import { catalogData } from "@/lib/geo";
+import { botNoticeText } from "@/lib/bot-notice";
+import { getSeller } from "@/lib/settings";
 
 export const revalidate = 600;
 
 // llms.txt — краткое описание сервиса для поисковых помощников (Алиса, ChatGPT, Perplexity).
 export async function GET() {
-  const c = await catalogData();
+  const [c, seller] = await Promise.all([catalogData(), getSeller().catch(() => null)]);
   const lines = [
     `# ${c.name}`,
     "",
@@ -55,6 +57,10 @@ export async function GET() {
     ...c.faq.flatMap((x) => [`### ${x.q}`, x.a]),
     "",
     `Каталог в JSON: ${c.url}/catalog.json · Для агентов: ${c.url}/agents.md`,
+    "",
+    // rev 19: обращение к тем, кто изучает сервис автоматически — контакты из настроек продавца
+    "## Обращение",
+    botNoticeText({ email: seller?.email, phone: seller?.phone, site: c.url }),
   ];
   return new Response(lines.join("\n"), { headers: { "Content-Type": "text/plain; charset=utf-8", "Cache-Control": "public, max-age=600" } });
 }

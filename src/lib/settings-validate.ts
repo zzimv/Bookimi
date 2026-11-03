@@ -124,7 +124,8 @@ const SCHEMAS: Partial<Record<SettingKey, z.ZodTypeAny>> = {
   bonus: z.object({ reviewRub: num("Бонусов за отзыв", 0, 5000), maxSharePct: num("Оплата бонусами, % заказа", 0, 100), expiryDays: num("Бонусы сгорают через, дней", 1, 3650) }).passthrough(),
   referral: z.object({ newbiePct: num("Скидка новичку", 0, 90), bonusPct: num("Бонус приглашающему", 0, 90), delayDays: num("Бонус через, дней", 0, 365) }).passthrough(),
   season: z.object({ mode: z.enum(["auto", "manual", "off"]), printDeadline: dateOrEmpty("Последний день заказа") }).passthrough(),
-  promoBar: z.object({ text: z.string().trim().max(200, "Текст полосы: не длиннее 200 символов") }).passthrough(),
+  bookOptions: z.object({ coverPriceRub: price("Другая обложка, ₽") }).passthrough(),
+    promoBar: z.object({ text: z.string().trim().max(200, "Текст полосы: не длиннее 200 символов") }).passthrough(),
 };
 
 /** Проверить раздел настроек перед сохранением. */

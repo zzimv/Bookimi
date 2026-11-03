@@ -14,7 +14,7 @@ import { AnswersV2, heroAge } from "@/lib/quiz";
 import { moodsFor } from "@/content/moods";
 import { hasConsent } from "@/lib/consent";
 import { takeFullMood, takePreviewMood, takeRedraw, takeRewrite } from "@/lib/book-limits";
-import { applyLayoutEdit, LayoutEdit, NAME_AFTER_PAY } from "@/lib/book-edit";
+import { applyLayoutEdit, editLocked, LayoutEdit, NAME_AFTER_PAY } from "@/lib/book-edit";
 import { personalize, type StoryText } from "@/lib/gen/text";
 
 const Input = z.discriminatedUnion("action", [
@@ -43,6 +43,9 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   const anon = await anonId();
   // Сотрудник тестирует свою книгу: без лимитов покупателя; расходы на сервисы — в свой суточный лимит (src/lib/staff.ts)
   const staff = isStaff(own.user?.role);
+  // rev 19: оплаченная книга не правится — исправления через поддержку
+  const locked = editLocked(book, b.action);
+  if (locked) return err(locked, 409);
 
   switch (b.action) {
     case "rewrite": {

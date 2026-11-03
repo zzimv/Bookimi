@@ -23,6 +23,7 @@ import { AdminCatalog, AdminDashboard, AdminHome, AdminJournal, AdminLayout, Adm
 import { bindRouter, currentPath, currentQuery, currentUrl, demoHref, NotFoundError, push, RedirectError } from "./router";
 import { DEFAULTS } from "../../src/lib/settings";
 import { normalizeName } from "../../src/lib/declension";
+import { installCopyGuard } from "../../src/lib/protect";
 
 // Демо показывает и пробные стили картинок (значок «пробный»); на сайте они скрыты до настройки art.showTrialStyles
 DEFAULTS.art.showTrialStyles = true;
@@ -167,7 +168,7 @@ function View() {
       <div className="demo-bar">
         <div className="wrap demo-bar__in">
           <span className="demo-bar__text">
-            <b>Демо-стенд <span className="demo-rev">rev 18</span>.</b> <span className="demo-bar__long">Всё работает в этом окне: оплата понарошку, фото не покидает браузер, письма не отправляются. На сайте админка — только на admin.&lt;домен&gt; и только через VPN.</span>
+            <b>Демо-стенд <span className="demo-rev">rev 19</span>.</b> <span className="demo-bar__long">Всё работает в этом окне: оплата понарошку, фото не покидает браузер, письма не отправляются. На сайте админка — только на admin.&lt;домен&gt; и только через VPN.</span>
           </span>
           <nav className="demo-tabs" aria-label="Демо">
             <a href="#/" aria-current={!admin ? "page" : undefined}>Сайт</a>
@@ -302,6 +303,8 @@ try {
   }
 } catch {}
 
+// Мягкая защита от копирования — как CopyGuard в src/app/layout.tsx (rev 19)
+installCopyGuard();
 resumeJobs();
 root.render().catch((e) => {
   console.error(e);

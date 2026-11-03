@@ -69,6 +69,20 @@ const SIZES = [
   { id: "big", label: "Большой 30×30 см" },
 ];
 
+/** Выбор на странице оформления, сохранённый на время «Редактировать книгу» (sessionStorage, только эта вкладка). */
+interface CheckoutKeep {
+  v: 1;
+  who: "self" | "bookimi";
+  size: string;
+  cover: "soft" | "hard";
+  addons: string[];
+  method: string;
+  addr: Addr;
+  contact: { name: string; phone: string };
+  promo: string;
+  useBonus: boolean;
+}
+
 export function Checkout(props: {
   bookId: string;
   coverUrl: string | null;
@@ -126,6 +140,33 @@ export function Checkout(props: {
   const [bulkInfo, setBulkInfo] = useState(props.bulk ?? null);
   const [dedication, setDedication] = useState(props.bulk?.dedication ?? "");
   const [dedSaved, setDedSaved] = useState(true);
+
+  // rev 19: «Редактировать книгу» — выбор оформления сохраняется в этой вкладке и возвращается после правок книги
+  const keepKey = `bk_checkout_${props.bookId}`;
+  useEffect(() => {
+    if (ed) return;
+    try {
+      const k = JSON.parse(sessionStorage.getItem(keepKey) ?? "null") as Partial<CheckoutKeep> | null;
+      if (!k || k.v !== 1) return;
+      if (k.who && (k.who === "self" || props.printEnabled)) setWho(k.who);
+      if (k.size) setSize(k.size);
+      if (k.cover) setCover(k.cover);
+      if (k.addons) setAddons(k.addons);
+      if (k.method && props.methods.some((m) => m.key === k.method)) setMethod(k.method);
+      if (k.addr) setAddr({ ...EMPTY_ADDR, ...k.addr });
+      if (k.contact) setContact((c) => ({ ...c, ...k.contact }));
+      if (k.promo) setPromo(k.promo);
+      if (k.useBonus) setUseBonus(true);
+    } catch {}
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  function editBook() {
+    const keep: CheckoutKeep = { v: 1, who, size, cover, addons, method, addr, contact: { name: contact.name, phone: contact.phone }, promo, useBonus };
+    try {
+      sessionStorage.setItem(keepKey, JSON.stringify(keep));
+    } catch {}
+    router.push(`/kniga/${props.bookId}`);
+  }
 
   const formatKey = useMemo(() => {
     const prefer = `${size}-${cover}`;
@@ -210,6 +251,9 @@ export function Checkout(props: {
       }
       const r = await api<{ orderId: string }>("/api/checkout", payload);
       goal("choose_print", { who });
+      try {
+        sessionStorage.removeItem(keepKey);
+      } catch {}
       router.push(`/zakaz/${r.orderId}`);
     } catch (e) {
       setError((e as Error).message);
@@ -432,6 +476,13 @@ export function Checkout(props: {
 
       <aside className="summary panel">
         <h2 style={{ fontSize: "var(--fs-lg)" }}>Ваш заказ</h2>
+        {!ed && (
+          <p className="checkout-edit small" data-edit-book>
+            До оплаты книгу можно поправить: имя, обложку, фото, посвящение, автора.{" "}
+            <button type="button" className="link-btn" onClick={editBook} data-edit-book-btn>Редактировать книгу</button>
+            <span className="muted"> — выбор здесь сохранится.</span>
+          </p>
+        )}
         {q ? (
           <table>
             <tbody>

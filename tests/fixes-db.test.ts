@@ -702,4 +702,58 @@ d("исправления по отчёту 30.10: БД", async () => {
       await saveSetting("limits", lim);
     }
   });
+  // ── rev 19: оплаченная книга не правится; «Другая обложка» в расчёте сервера ──
+  it("rev 19: после оплаты правки книги отклоняются понятным текстом; до оплаты — работают", async () => {
+    const action = await import("@/app/api/books/[id]/action/route");
+    const bookRoute = await import("@/app/api/books/[id]/route");
+    const photos = await import("@/app/api/books/[id]/photos/route");
+    const { PAID_LOCKED } = await import("@/lib/book-edit");
+    const buyer = await user("paid19");
+    await login(buyer.id);
+    const paid = await book(buyer.id, { status: "FULL_READY", paidFull: true });
+    const unpaid = await book(buyer.id, { status: "PREVIEW_READY" });
+    const post = (id: string, body: object) => action.POST(new Request("http://localhost/x", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) }), { params: Promise.resolve({ id }) });
+    const patch = (id: string) => bookRoute.PATCH(new Request("http://localhost/x", { method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify({ spreads: [{ index: 1, text: "Новый текст." }] }) }), { params: Promise.resolve({ id }) });
+    for (const body of [{ action: "layout", coverVariant: 1 }, { action: "layout", dedication: "Привет" }, { action: "mood", mood: "winter" }, { action: "redraw", index: 1 }, { action: "rewrite" }]) {
+      const r = await post(paid.id, body);
+      expect(r.status, JSON.stringify(body)).toBe(409);
+      expect(((await r.json()) as { error: string }).error).toBe(PAID_LOCKED);
+    }
+    const p = await patch(paid.id);
+    expect(p.status).toBe(409);
+    expect(((await p.json()) as { error: string }).error).toBe(PAID_LOCKED);
+    const fd = new FormData();
+    fd.append("file", new Blob([new Uint8Array([1, 2, 3])], { type: "image/jpeg" }), "x.jpg");
+    fd.append("role", "keepsake");
+    const ph = await photos.POST(new Request("http://localhost/x", { method: "POST", body: fd }), { params: Promise.resolve({ id: paid.id }) });
+    expect(ph.status).toBe(409);
+    // Текст оплаченной книги не изменился
+    expect(((await db.book.findUniqueOrThrow({ where: { id: paid.id } })).text as { spreads: { text: string }[] }).spreads[0].text).toBe("Жила-была Маша.");
+    // До оплаты — правка проходит
+    expect((await patch(unpaid.id)).status).toBe(200);
+  });
+
+  it("rev 19: «Другая обложка» — строка заказа с ценой из настроек; «Классика» — бесплатно", async () => {
+    const orders = await import("@/lib/orders");
+    const buyer = await user("cover19");
+    const contact = { name: "Анна Петрова", phone: "+79990000000" };
+    const params = (v: number) => ({ audience: "CHILD", hero: { name: "Маша", gender: "girl", ageGroup: "4-5" }, extras: [], layout: { coverVariant: v, author: "" } });
+    const classic = await book(buyer.id, { params: params(0) });
+    const night = await book(buyer.id, { params: params(1) });
+    const q0 = (await orders.priceCheckout(buyer.id, { bookId: classic.id, whoPrints: "self", addons: [], contact })).quote;
+    const q1 = (await orders.priceCheckout(buyer.id, { bookId: night.id, whoPrints: "self", addons: [], contact })).quote;
+    expect(q0.lines.some((l) => l.kind === "cover")).toBe(false);
+    const line = q1.lines.find((l) => l.kind === "cover");
+    expect(line).toMatchObject({ key: "cover-variant", title: "Другая обложка", priceRub: (await cfg("bookOptions")).coverPriceRub });
+    expect(q1.subtotalRub - q0.subtotalRub).toBe(line!.priceRub);
+    // Владелица поставила 0 — обложки бесплатны
+    const was = await cfg("bookOptions");
+    await saveSetting("bookOptions", { ...was, coverPriceRub: 0 });
+    try {
+      const qf = (await orders.priceCheckout(buyer.id, { bookId: night.id, whoPrints: "self", addons: [], contact })).quote;
+      expect(qf.lines.some((l) => l.kind === "cover")).toBe(false);
+    } finally {
+      await saveSetting("bookOptions", was);
+    }
+  });
 });

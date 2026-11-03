@@ -523,10 +523,8 @@ export async function KabinetBook({ id }: { id: string }) {
       {b.status === "FULL_READY" && cartoonOf(b).bought && <CartoonPlayer book={b} />}
       {b.status !== "FULL_READY" && cartoonOf(b).bought && <p className="muted-panel small">«Оживление книги» соберётся, как только книга будет готова.</p>}
       <BookCabinet heroName={normalizeName(b.params.hero.name ?? "")} cartoonSoon={!DEFAULTS.cartoon.enabled} id={id} title={b.text?.title ?? ""} status={b.status} progress={b.progress} redrawsLeft={b.redrawsLeft} pages={pages} files={files} audioUrl={null} selfRead={false} later={later} coverUrl={b.pages.includes(0) ? pageUrl(b, 0) : null} />
-      <p className="small demo-note" style={{ marginTop: 16 }}>
-        <Link href={`/kniga/${id}`}>Настроение иллюстраций — сменить для всей книги →</Link>
-        {bought.has("audiobook") && <span className="muted"> · Аудиокнига на сайте — MP3 голосом диктора в плеере.</span>}
-      </p>
+      {/* rev 19: после оплаты правок нет (ни настроения, ни перерисовки) — только через поддержку */}
+      {bought.has("audiobook") && <p className="small demo-note muted" style={{ marginTop: 16 }}>Аудиокнига на сайте — MP3 голосом диктора в плеере.</p>}
     </>
   );
 }

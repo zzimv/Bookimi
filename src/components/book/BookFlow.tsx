@@ -29,6 +29,8 @@ interface BookState {
   hero?: { name: string; gender?: string } | null;
   dedication?: string;
   layout?: BookLayout;
+  /** Цена «Другой обложки» (rev 19). */
+  coverPriceRub?: number;
 }
 
 type Audience = "CHILD" | "TEEN" | "ADULT" | "PET";
@@ -78,6 +80,14 @@ export function BookFlow({
   const [pdNow, setPdNow] = useState(false);
   const [exitShown, setExitShown] = useState(false);
   const [bulk, setBulk] = useState<BulkView | null>(null);
+  // rev 19: пришли из оформления («Редактировать книгу») — кнопка «Вернуться к оформлению», выбор там сохранён
+  const [fromCheckout, setFromCheckout] = useState<"self" | "bookimi" | null>(null);
+  useEffect(() => {
+    try {
+      const k = JSON.parse(sessionStorage.getItem(`bk_checkout_${bookId}`) ?? "null") as { v?: number; who?: "self" | "bookimi" } | null;
+      if (k?.v === 1) setFromCheckout(k.who ?? "self");
+    } catch {}
+  }, [bookId]);
 
   const load = useCallback(async () => {
     try {
@@ -194,6 +204,7 @@ export function BookFlow({
         consent={{ pd: Boolean(b.consent?.pd), photo: Boolean(b.consent?.photo), group: Boolean(b.consent?.group) }}
         audience={audience}
         onChanged={load}
+        coverPriceRub={b.coverPriceRub}
       />
     ) : null;
 
@@ -306,7 +317,14 @@ export function BookFlow({
         <section>
           <h1>{b.text.title}</h1>
           {book(b.paid ? (b.status === "FULL_READY" ? "Иллюстрация готовится" : "Рисуем иллюстрацию…") : "Иллюстрацию нарисуем после оплаты")}
-          {moods.length > 1 && (b.status === "PREVIEW_READY" || b.status === "FULL_READY") && (
+          {fromCheckout && !b.paid && b.status === "PREVIEW_READY" && (
+            <div className="panel back-to-checkout" data-back-to-checkout>
+              <p className="small" style={{ margin: 0 }}>Правки сохраняются сразу. Когда закончите — вернитесь к оформлению: выбранный формат, допы и адрес на месте.</p>
+              <Link className="btn btn--primary btn--sm" href={`/kniga/${b.id}/kupit?who=${fromCheckout}`}>Вернуться к оформлению</Link>
+            </div>
+          )}
+          {/* rev 19: после оплаты настроение не меняется (правки — через поддержку) */}
+          {moods.length > 1 && !b.paid && b.status === "PREVIEW_READY" && (
             <section className="panel mood-panel" style={{ marginTop: 20 }} data-mood-panel aria-labelledby="mood-h">
               <h2 id="mood-h" className="mood-panel__h">Настроение иллюстраций</h2>
               <p className="small muted" style={{ margin: "0 0 10px" }}>

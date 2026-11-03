@@ -4,14 +4,15 @@
 // финал и задняя обложка. Под страницами — кнопки правок: имя, обложка, фото, посвящение, автор.
 // Вёрстка общая с PDF — src/lib/book-layout.ts. Превью до оплаты — картинки с одним мягким знаком «букими» на страницу;
 // ещё не нарисованные страницы — эскизы демо-рисовальщиком с подписью «эскиз» (rev 14), пустых страниц нет. Работает и в демо-стенде (мини-рантайм: click/input/change/keydown).
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { SpreadText } from "@/components/SpreadText";
 import { api } from "@/lib/client";
 import {
-  AUTHOR_MAX, authorLine, bookSpreads, COVER_VARIANTS, finalText, pageLabel, singlePages, splitSpread, welcomeText,
-  type BookLayout, type BookPageRef,
+  AUTHOR_MAX, authorLine, backLines, bookSpreads, COVER_VARIANTS, fairyPalette, finalLines, pageLabel, singlePages, splitSpread, welcomeLines,
+  type BookLayout, type BookPageRef, type FairyLine,
 } from "@/lib/book-layout";
 import { ConsentGate, type ConsentState } from "@/components/quiz/PhotoSlot";
+import { sessionCode, wmCode } from "@/lib/protect";
 import type { AudienceKey } from "@/content/profiles";
 
 type Panel = "name" | "cover" | "photo" | "dedication" | "author";
@@ -40,6 +41,17 @@ export interface BookPreviewProps {
   audience?: AudienceKey;
   /** Правка сохранена — перечитать книгу. */
   onChanged: () => Promise<void> | void;
+  /** Цена «Другой обложки» (rev 19; «Классика» бесплатно). 0 или нет — без цены. */
+  coverPriceRub?: number;
+}
+
+/** rev 19: после оплаты правок нет — только эта строка со ссылкой на поддержку (и в кабинете). */
+export function PaidNote() {
+  return (
+    <p className="bk-paid-note small" role="note" data-paid-note>
+      Книга оплачена и передана в работу. Если нужно что-то исправить — <a href="/kabinet/podderzhka">напишите в поддержку</a>.
+    </p>
+  );
 }
 
 /** Обложка в выбранном оформлении — та же вёрстка, что в PDF (coverInner). */
@@ -59,6 +71,34 @@ export function BookCoverView({ variant, art, title, small }: { variant: number;
       </div>
       <div className="bk-cover__title">{title}</div>
     </div>
+  );
+}
+
+/** Звёздочка-разделитель «сказочных» страниц (rev 19): тонкие линии и четырёхлучевая звезда; декор — скрыт от диктора. */
+export function FairyDivider({ className }: { className?: string }) {
+  return (
+    <span className={`fk-div${className ? ` ${className}` : ""}`} aria-hidden="true">
+      <svg viewBox="0 0 24 24" width="1em" height="1em"><path d="M12 1.5c.7 5.6 4.9 9.8 10.5 10.5-5.6.7-9.8 4.9-10.5 10.5C11.3 16.9 7.1 12.7 1.5 12 7.1 11.3 11.3 7.1 12 1.5z" fill="currentColor" /></svg>
+    </span>
+  );
+}
+
+/** Строки «сказочной» страницы: имя крупно, ключевые слова акцентом (src/lib/book-layout.ts — общие с PDF). */
+export function FairyText({ lines, className }: { lines: FairyLine[]; className?: string }) {
+  const name = lines[0]?.[0]?.k === "name" ? lines[0][0].t : "";
+  return (
+    <p className={`fk${className ? ` ${className}` : ""}`} style={{ "--fk-n": String(Math.max(6, name.length)) } as CSSProperties}>
+      {lines.map((l, i) =>
+        l[0]?.k === "div" ? (
+          <FairyDivider key={i} />
+        ) : (
+          <span key={i} className={`fk-line fk-line--${l[0]?.k ?? "text"}`}>
+            {l.map((x, j) => (x.k === "key" ? <em key={j} className="fk-key">{x.t}</em> : x.k === "name" ? <span key={j} className="fk-name">{x.t}</span> : x.t))}
+            {i < lines.length - 1 ? " " : ""}
+          </span>
+        ),
+      )}
+    </p>
   );
 }
 
@@ -119,8 +159,15 @@ export function BookPreview(p: BookPreviewProps) {
   const [authorDraft, setAuthorDraft] = useState(p.layout.author);
   const [consent, setConsent] = useState<ConsentState>(p.consent);
   const file = useRef<HTMLInputElement>(null);
+  // rev 19: фото добавлено — сразу показываем страницу с фото и коротко подсвечиваем его
+  const [flash, setFlash] = useState(false);
   const stage = useRef<HTMLDivElement>(null);
   const count = p.spreads.length;
+
+  // Водяной знак превью до оплаты: бледный код «книга · сеанс · дата» на каждой странице (src/lib/protect.ts).
+  // Только в CSS (::after с пустым альтернативным текстом) — экранный диктор его не читает.
+  const [wm, setWm] = useState("");
+  useEffect(() => setWm(p.paid ? "" : wmCode(p.bookId, sessionCode())), [p.paid, p.bookId]);
 
   // Телефон — по одной странице; компьютер — разворотом (переключатель «Одна страница / Разворот»)
   useEffect(() => {
@@ -139,6 +186,17 @@ export function BookPreview(p: BookPreviewProps) {
   const photo = p.photos.find((x) => x.id === p.layout.photoId) ?? null;
   const coverArt = p.coverUrl;
   const v = COVER_VARIANTS[p.layout.coverVariant] ?? COVER_VARIANTS[0];
+  const pal = fairyPalette(p.layout.coverVariant);
+  const coverPrice = Math.max(0, p.coverPriceRub ?? 0);
+  const palette = { "--fk-ink": pal.ink, "--fk-accent": pal.accent, "--fk-orn": pal.orn } as CSSProperties;
+
+  function showPhoto() {
+    goTo("photo");
+    // Книга — в поле зрения (панель правок под ней могла увести страницу вниз)
+    stage.current?.scrollIntoView({ block: "nearest", behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth" });
+    setFlash(true);
+    setTimeout(() => setFlash(false), 1800);
+  }
 
   /** Перейти к странице (при смене вида — та же страница). */
   function goTo(kind: BookPageRef["kind"], spread?: number) {
@@ -193,6 +251,7 @@ export function BookPreview(p: BookPreviewProps) {
       await api(`/api/books/${p.bookId}/action`, { action: "layout", photoId: r.id });
       await p.onChanged();
       setSaved("Фото в книге");
+      showPhoto();
     } catch (e) {
       setError((e as Error).message);
     } finally {
@@ -214,18 +273,20 @@ export function BookPreview(p: BookPreviewProps) {
     switch (ref.kind) {
       case "cover":
         return (
-          <div className="bk-page bk-page--cover" key={k} data-page="cover">
+          <div className="bk-page bk-page--cover" key={k} data-wm={wm || undefined} data-page="cover">
             <BookCoverView variant={p.layout.coverVariant} art={coverArt} title={p.title} />
             {p.coverSketch && <span className="bk-sketch" data-sketch>эскиз</span>}
           </div>
         );
       case "endpaper":
-        return <div className="bk-page bk-page--endpaper" key={k} data-page="endpaper" aria-hidden="true" />;
+        return <div className="bk-page bk-page--endpaper" key={k} data-wm={wm || undefined} data-page="endpaper" aria-hidden="true" />;
       case "welcome":
         return (
-          <div className="bk-page bk-page--paper bk-welcome" key={k} data-page="welcome">
+          <div className="bk-page bk-page--paper bk-welcome" key={k} data-wm={wm || undefined} data-page="welcome">
+            <span className="bk-orn" aria-hidden="true"><i /><i /></span>
             <p className="bk-welcome__title">{p.title}</p>
-            <p className="bk-serif bk-welcome__text">{welcomeText(p.heroName)}</p>
+            <FairyText lines={welcomeLines(p.heroName)} className="bk-welcome__text" />
+            <FairyDivider className="fk-div--sm" />
             <div className="bk-welcome__hero">
               {coverArt ? (
                 // eslint-disable-next-line @next/next/no-img-element
@@ -236,7 +297,7 @@ export function BookPreview(p: BookPreviewProps) {
             </div>
             {p.layout.author ? (
               <p className="bk-serif bk-welcome__author" data-author>{authorLine(p.layout.author)}</p>
-            ) : (
+            ) : p.paid ? null : (
               <button type="button" className="bk-add" data-add="author" onClick={() => open("author")}>+ Вписать автора</button>
             )}
             <p className="bk-brand">Создано в <b>букими</b></p>
@@ -244,7 +305,7 @@ export function BookPreview(p: BookPreviewProps) {
         );
       case "photo":
         return (
-          <div className="bk-page bk-page--paper bk-photo" key={k} data-page="photo">
+          <div className={`bk-page bk-page--paper bk-photo${flash ? " bk-photo--flash" : ""}`} key={k} data-wm={wm || undefined} data-page="photo">
             <span className="bk-blob" aria-hidden="true" />
             <div className={`bk-frame ${photo ? "" : "bk-frame--art"}`}>
               {photo ? (
@@ -257,17 +318,21 @@ export function BookPreview(p: BookPreviewProps) {
                 <span className="bk-ph" aria-hidden="true" />
               )}
             </div>
-            {!photo && p.photoEnabled && (
+            {!photo && p.photoEnabled && !p.paid && (
               <button type="button" className="bk-add bk-add--float" data-add="photo" onClick={() => open("photo")}>+ Добавить фото</button>
             )}
           </div>
         );
       case "dedication":
         return (
-          <div className="bk-page bk-page--paper bk-ded" key={k} data-page="dedication">
+          <div className="bk-page bk-page--paper bk-ded" key={k} data-wm={wm || undefined} data-page="dedication">
             <span className="bk-blob bk-blob--ded" aria-hidden="true" />
-            {p.dedication ? (
-              <p className="bk-serif bk-ded__text" data-dedication>{p.dedication}</p>
+            {p.dedication || p.paid ? (
+              <div className="bk-ded__body">
+                <FairyDivider />
+                {p.dedication && <p className="bk-serif bk-ded__text" data-dedication>{p.dedication}</p>}
+                <FairyDivider />
+              </div>
             ) : (
               <button type="button" className="bk-add" data-add="dedication" onClick={() => open("dedication")}>+ Написать посвящение</button>
             )}
@@ -280,7 +345,7 @@ export function BookPreview(p: BookPreviewProps) {
         const part = parts[i];
         const tone: Tone = (s?.url && tones[s.url]?.[i]) || "light";
         return (
-          <div className={`bk-page bk-page--story bk-page--${ref.side}`} key={k} data-page="story" data-spread={ref.spread} data-side={ref.side} data-tone={tone}>
+          <div className={`bk-page bk-page--story bk-page--${ref.side}`} key={k} data-wm={wm || undefined} data-page="story" data-spread={ref.spread} data-side={ref.side} data-tone={tone}>
             {s?.url ? (
               // eslint-disable-next-line @next/next/no-img-element
               <img className={`bk-art bk-art--${ref.side}`} src={s.url} alt={i === 0 ? `Иллюстрация разворота ${ref.spread}` : ""} loading="lazy" decoding="async" data-sketch-art={s.sketch ? "1" : undefined} />
@@ -300,16 +365,16 @@ export function BookPreview(p: BookPreviewProps) {
       }
       case "final":
         return (
-          <div className="bk-page bk-page--paper bk-final" key={k} data-page="final">
+          <div className="bk-page bk-page--paper bk-final" key={k} data-wm={wm || undefined} data-page="final">
             <span className="bk-blob bk-blob--final" aria-hidden="true" />
-            <p className="bk-serif bk-final__text">{finalText(p.heroName, p.heroGender)}</p>
+            <FairyText lines={finalLines(p.heroName, p.heroGender)} className="bk-final__text" />
             <p className="bk-brand"><b>букими</b></p>
           </div>
         );
       case "back":
         return (
-          <div className="bk-page bk-back" key={k} data-page="back">
-            <p className="bk-serif">{p.heroName}, эта книга — только твоя.</p>
+          <div className="bk-page bk-back" key={k} data-wm={wm || undefined} data-page="back">
+            <FairyText lines={backLines(p.heroName)} className="bk-back__text" />
             <p className="bk-back__brand"><b>букими</b></p>
           </div>
         );
@@ -320,7 +385,7 @@ export function BookPreview(p: BookPreviewProps) {
   const label = frame.length === 2 && here.kind === "story" ? `Разворот ${here.spread}` : pageLabel(here);
 
   return (
-    <section className="bk" data-book-preview aria-label="Ваша книга: листайте и правьте">
+    <section className="bk" data-book-preview data-paid={p.paid ? "1" : "0"} aria-label={p.paid ? "Ваша книга" : "Ваша книга: листайте и правьте"} style={palette}>
       <div className="bk__bar">
         <span className="bk__where" aria-live="polite" data-where>{label} · {at + 1} из {frames.length}</span>
         <div className="bk__views" role="group" aria-label="Как показывать книгу">
@@ -346,6 +411,9 @@ export function BookPreview(p: BookPreviewProps) {
       </div>
       <div className="bk__track" aria-hidden="true"><i style={{ width: `${Math.round(((at + 1) / frames.length) * 100)}%` }} /></div>
 
+      {p.paid ? (
+        <PaidNote />
+      ) : (
       <div className="bk__tools" role="toolbar" aria-label="Правки книги">
         {tools.map((t) => (
           <button
@@ -360,8 +428,9 @@ export function BookPreview(p: BookPreviewProps) {
           </button>
         ))}
       </div>
+      )}
 
-      {panel && (
+      {panel && !p.paid && (
         <div className="panel bk__panel" data-panel={panel}>
           {panel === "name" &&
             (p.paid ? (
@@ -379,6 +448,7 @@ export function BookPreview(p: BookPreviewProps) {
           {panel === "cover" && (
             <div>
               <span className="label">Оформление обложки</span>
+              {coverPrice > 0 && <p className="small muted" style={{ margin: "2px 0 6px" }}>«Классика» — бесплатно, другая обложка — +{coverPrice} ₽ к заказу.</p>}
               <div className="bk-variants" role="radiogroup" aria-label="Оформление обложки">
                 {COVER_VARIANTS.map((c) => (
                   <button
@@ -393,6 +463,7 @@ export function BookPreview(p: BookPreviewProps) {
                   >
                     <BookCoverView variant={c.id} art={coverArt} title={p.title} small />
                     <b>{c.title}</b>
+                    {coverPrice > 0 && <span className="bk-variant__price" data-cover-price>{c.id === 0 ? "бесплатно" : `+${coverPrice} ₽`}</span>}
                     <small>{c.hint}</small>
                   </button>
                 ))}
@@ -409,7 +480,7 @@ export function BookPreview(p: BookPreviewProps) {
                   {p.photos.length > 0 && (
                     <div className="bk-photos" role="radiogroup" aria-label="Фото для книги">
                       {p.photos.map((ph) => (
-                        <button key={ph.id} type="button" role="radio" aria-checked={p.layout.photoId === ph.id} className="bk-photos__item" disabled={busy} onClick={() => p.layout.photoId !== ph.id && save({ photoId: ph.id }, "Фото в книге")}>
+                        <button key={ph.id} type="button" role="radio" aria-checked={p.layout.photoId === ph.id} className="bk-photos__item" disabled={busy} onClick={async () => { if (p.layout.photoId !== ph.id && (await save({ photoId: ph.id }, "Фото в книге"))) showPhoto(); }}>
                           {/* eslint-disable-next-line @next/next/no-img-element */}
                           <img src={ph.url} alt="Фото из анкеты" width={72} height={72} />
                         </button>
@@ -466,7 +537,7 @@ export function BookPreview(p: BookPreviewProps) {
           {saved && !error && <p className="ok small" role="status" data-saved>✓ {saved}</p>}
         </div>
       )}
-      <p className="small muted bk__hint">Обложка: «{v.title}». Листайте стрелками или кнопками ‹ ›. Правки сразу видны в книге и попадут в PDF и печать.</p>
+      <p className="small muted bk__hint">Обложка: «{v.title}»{coverPrice > 0 && p.layout.coverVariant !== 0 && !p.paid ? ` (+${coverPrice} ₽)` : ""}. Листайте стрелками или кнопками ‹ ›.{p.paid ? "" : " Правки сразу видны в книге и попадут в PDF и печать."}</p>
     </section>
   );
 }

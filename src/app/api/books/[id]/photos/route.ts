@@ -1,4 +1,5 @@
 import sharp, { type Metadata } from "sharp";
+import { editLocked } from "@/lib/book-edit";
 import { randomUUID } from "node:crypto";
 import { db } from "@/lib/db";
 import { err, json, ownBook, throttle } from "@/lib/api";
@@ -21,7 +22,9 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   const own = await ownBook(id);
   if (!own) return err("Не найдено", 404);
   // Книга уже нарисована (или рисуется после оплаты) — новые фото ни на что не повлияют, а хранить их незачем
-  if (own.book.paidFull || ["FULL_QUEUED", "FULL_READY"].includes(own.book.status)) return err("Книга уже нарисована — фото больше не нужны", 409);
+  // rev 19: оплаченная книга не правится (src/lib/book-edit.ts)
+  if (own.book.paidFull) return err(editLocked(own.book, "photo")!, 409);
+  if (["FULL_QUEUED", "FULL_READY"].includes(own.book.status)) return err("Книга уже нарисована — фото больше не нужны", 409);
   const flags = await cfg("flags");
   if (!flags.photoUploadEnabled) return err("Приём фото пока выключен — иллюстрации будут по описанию", 403);
   const anon = await anonId();

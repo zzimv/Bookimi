@@ -211,6 +211,8 @@ export const DEFAULTS = {
   },
   /** Стили картинок. Пробные (status "trial" в ART_STYLE_IDS) на сайте скрыты, пока showTrialStyles = false; в демо видны всегда. */
   art: { showTrialStyles: false },
+  /** Книга (rev 19): «Другая обложка» — «Звёздная ночь» и «Светлая рамка»; «Классика» бесплатно. 0 — все бесплатно. */
+  bookOptions: { coverPriceRub: 100 },
 };
 
 export type Settings = typeof DEFAULTS;

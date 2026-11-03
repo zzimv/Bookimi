@@ -47,6 +47,48 @@ export function finalText(name: string, gender?: string) {
   return `${n}, эта книга — только твоя. Второй такой нет ни у кого на свете: в ней ты — ${girl ? "главная героиня" : "главный герой"}. Возвращайся сюда, когда захочется чуда.`;
 }
 
+/**
+ * «Сказочная» вёрстка страниц-обращений (rev 19): строки из кусков разного начертания — общие для экрана и PDF.
+ * name — имя крупно декоративным шрифтом (Yeseva One), lead — курсив книжного шрифта (Lora), key — ключевое слово
+ * цветом акцента и декоративным шрифтом, text — обычный книжный текст; строка [{k:"div"}] — звёздочка-разделитель.
+ * Склеенный текст кусков = welcomeText / finalText (экранный диктор читает ту же фразу).
+ */
+export type FairySeg = { k: "name" | "lead" | "key" | "text" | "div"; t: string };
+export type FairyLine = FairySeg[];
+
+export function welcomeLines(name: string): FairyLine[] {
+  const n = normalizeName(name) || "Дорогой читатель";
+  return [[{ k: "name", t: `${n},` }], [{ k: "lead", t: "добро пожаловать в твою" }], [{ k: "key", t: "единственную" }], [{ k: "lead", t: "такую книгу!" }]];
+}
+
+export function finalLines(name: string, gender?: string): FairyLine[] {
+  const n = normalizeName(name);
+  const girl = gender === "girl";
+  return [
+    [{ k: "name", t: `${n},` }],
+    [{ k: "lead", t: "эта книга — только твоя." }],
+    [{ k: "div", t: "" }],
+    [{ k: "text", t: "Второй такой нет ни у кого на свете:" }],
+    [{ k: "text", t: "в ней ты — " }, { k: "key", t: `${girl ? "главная героиня" : "главный герой"}.` }],
+    [{ k: "text", t: "Возвращайся сюда, когда захочется " }, { k: "key", t: "чуда." }],
+  ];
+}
+
+export function backLines(name: string): FairyLine[] {
+  return [[{ k: "name", t: `${normalizeName(name)},` }], [{ k: "lead", t: "эта книга — только твоя." }]];
+}
+
+/** Текст строк одной фразой (для проверки и экранного диктора). */
+export const fairyText = (lines: FairyLine[]) =>
+  lines.filter((l) => l[0]?.k !== "div").map((l) => l.map((x) => x.t).join("")).join(" ");
+
+/** Цвета «сказочных» страниц по оформлению обложки: чернила (глубокий синий / бордо) и акцент. */
+export function fairyPalette(variant: number) {
+  if (variant === 1) return { ink: "#1d2a5c", accent: "#9a2f45", orn: "#b8892c" };
+  if (variant === 2) return { ink: "#5e1f2e", accent: "#1f3f78", orn: "#b8892c" };
+  return { ink: "#1f3566", accent: "#8f2a3e", orn: "#c39a4a" };
+}
+
 /** Строка автора: «Автор: мама и папа» (пусто — без строки). */
 export function authorLine(author: string | undefined | null) {
   const a = (author ?? "").replace(/\s+/g, " ").trim().slice(0, AUTHOR_MAX);

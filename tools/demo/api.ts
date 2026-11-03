@@ -34,7 +34,7 @@ import { cartoonScript, type Cue } from "../../src/lib/gen/cartoon-script";
 import { plainSpread } from "../../src/lib/spread-markup";
 import { checkFirstName, FIRST_NAME_ERROR } from "../../src/lib/first-name";
 import { layoutOf } from "../../src/lib/book-layout";
-import { applyLayoutEdit, LayoutEdit, NAME_AFTER_PAY } from "../../src/lib/book-edit";
+import { applyLayoutEdit, editLocked, LayoutEdit, NAME_AFTER_PAY } from "../../src/lib/book-edit";
 import { fullNameError, normalizeName } from "../../src/lib/names";
 import { applyBonus, bonusBalance, reviewBonusAllowed, reviewCredit, type BonusEntryLike } from "../../src/lib/bonuses";
 import { canChangeOrder, describeChange, type OrderShape } from "../../src/lib/order-change";
@@ -138,6 +138,8 @@ export interface Store {
   /** Настройки из админки демо: «Оживление книги» продаётся (по умолчанию — «скоро»), бонусы. */
   cartoonEnabled?: boolean;
   bonusCfg?: Partial<typeof DEFAULTS.bonus>;
+  /** rev 19: цена «Другой обложки» из админки демо (нет — 100 ₽). */
+  coverPriceRub?: number;
 }
 
 export const KEY = "bookimi.demo.v1";
@@ -239,6 +241,7 @@ export function applySettings() {
   DEFAULTS.cartoon.enabled = Boolean(S.cartoonEnabled);
   DEFAULTS.auth.smsLogin = true;
   Object.assign(DEFAULTS.bonus, BASE_BONUS, S.bonusCfg ?? {});
+  DEFAULTS.bookOptions.coverPriceRub = S.coverPriceRub ?? 100;
   for (const f of FORMATS as unknown as { key: string; price: number }[]) f.price = S.prices[f.key] ?? BASE_PRICES[f.key];
   for (const a of ADDONS as unknown as { key: string; price: number | null }[]) if (a.price !== null) a.price = S.prices[a.key] ?? BASE_PRICES[a.key];
 }
@@ -250,7 +253,8 @@ export function setPrices(p: Record<string, number>) {
   commit();
 }
 /** Админка демо → «Оживление книги» продаётся или «скоро»; бонусы за отзыв; режим админа. */
-export function setDemoFlags(p: { cartoonEnabled?: boolean; adminMode?: boolean; bonusCfg?: Partial<typeof DEFAULTS.bonus> }) {
+export function setDemoFlags(p: { cartoonEnabled?: boolean; adminMode?: boolean; bonusCfg?: Partial<typeof DEFAULTS.bonus>; coverPriceRub?: number }) {
+  if (p.coverPriceRub !== undefined) S.coverPriceRub = Math.max(0, Math.round(p.coverPriceRub));
   if (p.cartoonEnabled !== undefined) S.cartoonEnabled = p.cartoonEnabled;
   if (p.adminMode !== undefined) S.adminMode = p.adminMode;
   if (p.bonusCfg) S.bonusCfg = { ...S.bonusCfg, ...p.bonusCfg };
@@ -711,6 +715,9 @@ function priceCheckout(input: CheckoutInput) {
       addonsOnly: input.addonsOnly,
       paidAddons: paidAddonKeys(input.bookId),
       cartoonPaid: book ? cartoonOf(book).bought : false,
+      // rev 19: «Другая обложка» — по вёрстке книги, цена из настроек
+      coverVariant: book ? layoutOf(book.params).coverVariant : 0,
+      coverPriceRub: DEFAULTS.bookOptions.coverPriceRub,
     },
     formats,
     addons,
@@ -1040,10 +1047,13 @@ async function handle(method: string, path: string, q: URLSearchParams, body: un
         hero: { name: book.params.hero.name, gender: book.params.hero.gender },
         dedication: dedicationText(AnswersV2.parse(book.params)),
         layout: layoutOf(book.params),
+        coverPriceRub: DEFAULTS.bookOptions.coverPriceRub,
       });
     }
     if (seg.length === 3 && method === "PATCH") {
       const spreads = (b0?.spreads ?? []) as { index: number; text: string }[];
+      // rev 19: оплаченная книга не правится — как на сервере (src/lib/book-edit.ts)
+      if (editLocked(book, "text")) return err(editLocked(book, "text")!, 409);
       if (!book.text) return err("Текст ещё не готов");
       for (const s of spreads) {
         const t = String(s.text ?? "").trim();
@@ -1073,7 +1083,7 @@ async function handle(method: string, path: string, q: URLSearchParams, body: un
       // Фото для страницы «Фото и посвящение» (rev 13): как есть, без обработки, одно; только в памяти вкладки
       const fd = body as FormData;
       if (fd?.get?.("role") !== "keepsake") return err("Фото героя загружаются в анкете, на шаге «Герои»", 410);
-      if (book.paidFull) return err("Книга уже нарисована — фото больше не нужны", 409);
+      if (book.paidFull) return err(editLocked(book, "photo")!, 409);
       if (!S.consent.photo || !S.consent.pd) return err("Сначала дайте согласие на обработку фото", 403);
       const file = fd.get("file");
       if (!(file instanceof File)) return err("Выберите файл");
@@ -1369,6 +1379,9 @@ async function handle(method: string, path: string, q: URLSearchParams, body: un
 
 function bookAction(book: DBook, b: Record<string, unknown>): R {
   const limits = DEFAULTS.limits;
+  // rev 19: оплаченная книга не правится — как на сервере (src/lib/book-edit.ts)
+  const locked = editLocked(book, String(b.action ?? ""));
+  if (locked) return err(locked, 409);
   switch (b.action) {
     case "rewrite":
       if (book.rewritesLeft <= 0) return err("Сказку можно переписать не больше двух раз. Поправьте текст вручную.");

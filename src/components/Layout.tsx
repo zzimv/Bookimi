@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { getPromoBar, getSeller, sellerIsComplete } from "@/lib/settings";
+import { BotNotice } from "@/components/BotNotice";
 import { AUDIENCE_PAGES, getSoon } from "@/lib/storefront";
 import { SOON_SHORT } from "@/lib/shelf";
 import { SoonBadge } from "./Soon";
@@ -107,6 +108,8 @@ export async function Footer() {
             )}
           </p>
           <p>© {year} БУКИМИ. Копирование материалов сайта запрещено.</p>
+          {/* rev 19: вежливое обращение к явной автоматике (боты, агенты) — контакты из настроек продавца */}
+          <BotNotice email={seller.email} phone={seller.phone} site={`https://${process.env.DOMAIN ?? "bookimi.ru"}`} />
           <ThemeToggle />
         </div>
         <div>

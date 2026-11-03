@@ -7,7 +7,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { spreadHtml, SPREAD_PDF_CSS } from "./spread-markup";
 import { declineName, normalizeName } from "./declension";
-import { authorLine, COVER_VARIANTS, finalText, splitSpread, welcomeText } from "./book-layout";
+import { authorLine, backLines, COVER_VARIANTS, fairyPalette, finalLines, splitSpread, welcomeLines, type FairyLine } from "./book-layout";
 
 export interface BookPageData {
   title: string;
@@ -48,8 +48,10 @@ export type PdfKind =
 const BLEED = 3;
 const SAFE = 5;
 
-/** Книжный шрифт текста сказки: с засечками (системный, с кириллицей). */
-export const BOOK_SERIF = `"PT Serif","Literata","Noto Serif","Georgia","DejaVu Serif",serif`;
+/** Книжный шрифт текста сказки (rev 19): Lora (OFL, кириллица, встроен ниже), запасные — системные с засечками. */
+export const BOOK_SERIF = `"Lora","PT Serif","Literata","Noto Serif","Georgia","DejaVu Serif",serif`;
+/** Декоративный шрифт имени и ключевых слов (rev 19): Yeseva One (OFL, кириллица). */
+export const FAIRY_SERIF = `"Yeseva One","Lora",Georgia,serif`;
 
 let fontCss: string | null = null;
 /** Шрифты сайта (Nunito 800, Manrope 500) для PDF — встраиваются в HTML. */
@@ -57,8 +59,8 @@ export function fonts() {
   if (fontCss) return fontCss;
   const f = (pkg: string, file: string) =>
     readFileSync(join(process.cwd(), "node_modules/@fontsource", pkg, "files", file)).toString("base64");
-  const face = (family: string, weight: number, b64: string, range: string) =>
-    `@font-face{font-family:'${family}';font-weight:${weight};src:url(data:font/woff2;base64,${b64}) format('woff2');unicode-range:${range}}`;
+  const face = (family: string, weight: number, b64: string, range: string, style = "normal") =>
+    `@font-face{font-family:'${family}';font-weight:${weight};font-style:${style};src:url(data:font/woff2;base64,${b64}) format('woff2');unicode-range:${range}}`;
   const CYR = "U+0301,U+0400-045F,U+0490-0491,U+04B0-04B1,U+2116";
   const LAT = "U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD";
   fontCss = [
@@ -66,6 +68,13 @@ export function fonts() {
     face("Nunito", 800, f("nunito", "nunito-latin-800-normal.woff2"), LAT),
     face("Manrope", 500, f("manrope", "manrope-cyrillic-500-normal.woff2"), CYR),
     face("Manrope", 500, f("manrope", "manrope-latin-500-normal.woff2"), LAT),
+    // rev 19: «сказочная» книга — те же шрифты, что на экране (src/app/layout.tsx)
+    face("Yeseva One", 400, f("yeseva-one", "yeseva-one-cyrillic-400-normal.woff2"), CYR),
+    face("Yeseva One", 400, f("yeseva-one", "yeseva-one-latin-400-normal.woff2"), LAT),
+    face("Lora", 400, f("lora", "lora-cyrillic-400-normal.woff2"), CYR),
+    face("Lora", 400, f("lora", "lora-latin-400-normal.woff2"), LAT),
+    face("Lora", 400, f("lora", "lora-cyrillic-400-italic.woff2"), CYR, "italic"),
+    face("Lora", 400, f("lora", "lora-latin-400-italic.woff2"), LAT, "italic"),
   ].join("");
   return fontCss;
 }
@@ -86,6 +95,24 @@ export function bookWording(b: Pick<BookPageData, "heroName" | "audience" | "her
   }
 }
 
+/** Звёздочка-разделитель (как FairyDivider на экране). */
+const STAR = `<svg viewBox="0 0 24 24" width="1em" height="1em" style="display:block"><path d="M12 1.5c.7 5.6 4.9 9.8 10.5 10.5-5.6.7-9.8 4.9-10.5 10.5C11.3 16.9 7.1 12.7 1.5 12 7.1 11.3 11.3 7.1 12 1.5z" fill="currentColor"/></svg>`;
+export const fairyDivider = (widthMm: number) => `<span class="fk-div" style="width:${widthMm}mm">${STAR}</span>`;
+
+/** «Сказочные» строки (rev 19, src/lib/book-layout.ts): имя крупно Yeseva One, ключевые слова — акцентом, курсив Lora. */
+export function fairyHtml(lines: FairyLine[], fsPt: number, nameMaxPt: number, widthMm: number) {
+  const name = lines[0]?.[0]?.k === "name" ? lines[0][0].t : "";
+  // Имя не шире строки: Yeseva ≈ 0,62 em на букву
+  const namePt = Math.min(nameMaxPt, (widthMm * 2.835) / (Math.max(6, name.length) * 0.62));
+  return `<p class="fk" style="font-size:${fsPt}pt">${lines
+    .map((l) =>
+      l[0]?.k === "div"
+        ? fairyDivider(widthMm * 0.4)
+        : `<span class="fk-line fk-line--${l[0]?.k ?? "text"}">${l.map((x) => (x.k === "name" ? `<span class="fk-name" style="font-size:${namePt.toFixed(1)}pt">${esc(x.t)}</span>` : x.k === "key" ? `<em class="fk-key">${esc(x.t)}</em>` : esc(x.t))).join("")}</span>`,
+    )
+    .join(" ")}</p>`;
+}
+
 export const uri = (img: { data: Buffer; contentType: string }) => `data:${img.contentType};base64,${img.data.toString("base64")}`;
 export const esc = (s: string) => s.replace(/[<>&]/g, (c) => ({ "<": "&lt;", ">": "&gt;", "&": "&amp;" })[c]!);
 
@@ -97,10 +124,24 @@ function baseCss(pageW: number, pageH: number) {
   body{font-family:Manrope,sans-serif;color:#1a2b24;-webkit-print-color-adjust:exact;print-color-adjust:exact}
   .page{width:${pageW}mm;height:${pageH}mm;position:relative;overflow:hidden;page-break-after:always;break-after:page;background:#fff}
   .img{position:absolute;inset:0;background-size:cover;background-repeat:no-repeat}
-  .text{position:absolute;padding:7mm 10mm 10mm;font-family:${BOOK_SERIF};font-size:var(--fs);line-height:1.45;white-space:pre-line;text-align:center;color:#1f2a26;
+  .text{position:absolute;padding:7mm 10mm 10mm;font-family:${BOOK_SERIF};font-size:var(--fs);line-height:1.5;white-space:pre-line;text-align:center;color:var(--fk-ink,#1f2a26);
+    text-shadow:0 0 .5em rgba(253,250,242,.95),0 0 .18em rgba(253,250,242,.95);
     background:radial-gradient(ellipse 50% 50% at 50% 50%,rgba(253,250,242,.94) 0%,rgba(253,250,242,.86) 58%,rgba(253,250,242,0) 100%)}
-  .text.dark{color:#fdf8ea;background:radial-gradient(ellipse 50% 50% at 50% 50%,rgba(18,24,48,.74) 0%,rgba(18,24,48,.6) 58%,rgba(18,24,48,0) 100%)}
+  .text.dark{color:#fdf6e3;text-shadow:0 0 .55em rgba(10,14,40,.9),0 0 .2em rgba(10,14,40,.85);background:radial-gradient(ellipse 50% 50% at 50% 50%,rgba(18,24,48,.74) 0%,rgba(18,24,48,.6) 58%,rgba(18,24,48,0) 100%)}
   .serif{font-family:${BOOK_SERIF}}
+  .fk{font-family:${BOOK_SERIF};color:var(--fk-ink);text-align:center;line-height:1.3}
+  .fk[data-back]{text-align:left}
+  .fk[data-back] .fk-name{color:#f3d27a}
+  .fk-line{display:block}
+  .fk-name{font-family:${FAIRY_SERIF};line-height:1.1;color:var(--fk-ink)}
+  .fk-line--lead{font-style:italic}
+  .fk-key{font-family:${FAIRY_SERIF};font-style:normal;color:var(--fk-accent);letter-spacing:.02em}
+  .fk-line--key .fk-key{font-size:1.55em;line-height:1.15}
+  .fk-div{display:flex;align-items:center;gap:2mm;margin:2.5mm auto;color:var(--fk-orn);font-size:9pt}
+  .fk-div::before,.fk-div::after{content:"";flex:1;height:.25mm;background:linear-gradient(90deg,transparent,currentColor)}
+  .fk-div::after{background:linear-gradient(90deg,currentColor,transparent)}
+  .orn{position:absolute;border:.35mm solid var(--fk-orn);border-radius:6mm;box-shadow:inset 0 0 0 1.4mm #fdfaf2,inset 0 0 0 1.65mm var(--fk-orn)}
+  .orn i{position:absolute;left:50%;width:8mm;margin-left:-4mm;height:4mm;background:#fdfaf2;color:var(--fk-orn);display:flex;justify-content:center;align-items:center;font-size:7pt}
   .blob{position:absolute;inset:14%;border-radius:46% 54% 52% 48% / 55% 45% 55% 45%;background:radial-gradient(circle at 35% 35%,rgba(243,228,194,.95),rgba(227,237,230,.85) 60%,rgba(227,237,230,0) 78%)}
   .frame{position:absolute;border:2.5mm solid #fff;border-radius:3mm;box-shadow:0 1.5mm 5mm rgba(20,54,40,.25);background-size:cover;background-position:50% 50%}
   .brand{font-family:Nunito,sans-serif;font-weight:800;color:#1e4d3b}
@@ -148,15 +189,22 @@ function blockPages(b: BookPageData, pageW: number, pageH: number, inset: number
   const name = normalizeName(b.heroName);
   const author = authorLine(b.author);
   const art = (img: PdfImage) => `background-image:url(${uri(img)})`;
-  // 1. Приветствие
-  const d = Math.min(pageW, pageH) * 0.36;
-  pages.push(`<section class="page" style="text-align:center;background:#fdfaf2">
-    <div style="position:absolute;left:${pad}mm;right:${pad}mm;top:${pad + 4}mm">
-      <h1 style="font-size:${fs * 1.45}pt;color:#1e4d3b;line-height:1.2">${esc(b.title)}</h1>
-      <p class="serif" style="font-size:${fs * 1.15}pt;line-height:1.45;margin-top:6mm">${esc(welcomeText(name))}</p></div>
-    <div style="position:absolute;left:${(pageW - d) / 2}mm;top:${pageH * 0.47}mm;width:${d}mm;height:${d}mm;border-radius:50%;background-size:cover;background-position:50% 40%;${art(b.cover)};box-shadow:0 0 0 1.2mm #f3e4c2"></div>
-    <div style="position:absolute;left:${pad}mm;right:${pad}mm;bottom:${inset + 10}mm;font-size:${fs * 0.85}pt">
-      ${author ? `<p class="serif" style="font-style:italic;margin-bottom:3mm">${esc(author)}</p>` : ""}<p style="color:#4d5f57">Создано в <b class="brand">букими</b></p></div></section>`);
+  // rev 19: «сказочные» цвета по оформлению обложки — как на экране (fairyPalette)
+  const pal = fairyPalette(b.coverVariant ?? 0);
+  const vars = `--fk-ink:${pal.ink};--fk-accent:${pal.accent};--fk-orn:${pal.orn}`;
+  const textW = pageW - 2 * pad;
+  // 1. Приветствие: рамка-орнамент, имя крупно, «единственную» акцентом, звёздочка, портрет
+  const d = Math.min(pageW, pageH) * 0.33;
+  const o = inset + Math.min(pageW, pageH) * 0.035;
+  pages.push(`<section class="page" style="text-align:center;background:#fdfaf2;${vars}">
+    <div class="orn" style="inset:${o}mm"><i style="top:-2mm">${STAR}</i><i style="bottom:-2mm">${STAR}</i></div>
+    <div style="position:absolute;left:${pad}mm;right:${pad}mm;top:${pad}mm">
+      <p class="serif" style="font-size:${fs * 0.9}pt;font-style:italic;letter-spacing:.04em;color:var(--fk-ink);opacity:.85;line-height:1.25">${esc(b.title)}</p>
+      <div style="margin-top:4mm">${fairyHtml(welcomeLines(name), fs * 1.12, fs * 3, textW)}</div>
+      ${fairyDivider(textW * 0.28)}</div>
+    <div style="position:absolute;left:${(pageW - d) / 2}mm;top:${pageH * 0.42}mm;width:${d}mm;height:${d}mm;border-radius:50%;background-size:cover;background-position:50% 40%;${art(b.cover)};box-shadow:0 0 0 1mm #fdfaf2,0 0 0 1.3mm ${pal.orn}"></div>
+    <div style="position:absolute;left:${pad}mm;right:${pad}mm;bottom:${inset + 11}mm;font-size:${fs * 0.8}pt">
+      ${author ? `<p class="serif" style="font-style:italic;margin-bottom:2.5mm;color:var(--fk-ink)">${esc(author)}</p>` : ""}<p class="serif" style="color:#4d5f57;font-style:italic">Создано в <b class="brand" style="font-style:normal">букими</b></p></div></section>`);
   // 2. Фото (как есть, в мягкой рамке) или иллюстрация
   const fw = pageW * 0.62;
   const fh = b.photo ? fw * 1.22 : fw;
@@ -165,10 +213,10 @@ function blockPages(b: BookPageData, pageW: number, pageH: number, inset: number
     <div class="frame" style="left:${(pageW - fw) / 2}mm;top:${(pageH - fh) / 2}mm;width:${fw}mm;height:${fh}mm;${art(b.photo ?? b.cover)};transform:rotate(-2deg)${b.photo ? "" : ";border-radius:50%"}"></div></section>`);
   // 3. Посвящение на акварельном пятне
   const ded = b.dedication || bookWording(b).madeFor;
-  pages.push(`<section class="page" style="background:#fdfaf2">
+  pages.push(`<section class="page" style="background:#fdfaf2;${vars}">
     <div class="blob"></div>
-    <div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;padding:${pad + pageW * 0.12}mm;text-align:center">
-      <p class="serif" style="font-size:${fs * 1.1}pt;font-style:italic;line-height:1.5;white-space:pre-line">${esc(ded)}</p></div></section>`);
+    <div style="position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:${pad + pageW * 0.12}mm;text-align:center">
+      ${fairyDivider(pageW * 0.22)}<p class="serif" style="font-size:${fs * 1.15}pt;font-style:italic;line-height:1.5;white-space:pre-line;color:var(--fk-ink)">${esc(ded)}</p>${fairyDivider(pageW * 0.22)}</div></section>`);
   // 4. Развороты: текст на картинке — левая и правая страница
   b.spreads.forEach((s, i) => {
     const parts = splitSpread(s.text);
@@ -179,23 +227,26 @@ function blockPages(b: BookPageData, pageW: number, pageH: number, inset: number
       const half = s.halves?.[k];
       const bg = half ? `background-image:url(${uri(half)});background-size:cover;background-position:50% 50%` : `background-image:url(${uri(s.image)});background-size:200% 100%;background-position:${pos}`;
       const tone = b.tones?.[i]?.[k] === "dark" ? " dark" : "";
-      pages.push(`<section class="page" style="--fs:${fs}pt">
+      pages.push(`<section class="page" style="--fs:${fs}pt;${vars}">
         <div class="img" style="${bg}"></div>
         ${parts[k] ? `<div class="text${tone}" style="left:${inset + 3}mm;right:${inset + 3}mm;top:${inset + 3}mm">${spreadHtml(parts[k])}</div>` : ""}
         <span class="mark">${esc(b.orderCode ?? "")}</span></section>`);
     }
   });
   // 5. Финал
-  pages.push(`<section class="page" style="display:flex;align-items:center;justify-content:center;text-align:center;padding:${pad + 4}mm;background:#fdfaf2">
-    <div class="blob" style="inset:18%"></div>
-    <p class="serif" style="position:relative;font-size:${fs * 1.1}pt;line-height:1.5">${esc(finalText(name, b.heroGender))}<br><br><b class="brand">букими</b></p></section>`);
+  pages.push(`<section class="page" style="display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:${pad + 4}mm;background:#fdfaf2;${vars}">
+    <div class="blob" style="inset:14%"></div>
+    <div style="position:relative">${fairyHtml(finalLines(name, b.heroGender), fs * 1.02, fs * 2.6, textW - 8)}
+    <p style="margin-top:4mm"><b class="brand">букими</b></p></div></section>`);
   return pages.join("");
 }
 
 /** Задняя обложка (экран, А4): тёплая строка с именем и знак. */
 function backPage(b: BookPageData, fs: number) {
-  return `<section class="page" style="background:#1e4d3b;color:#f3e4c2;display:flex;align-items:flex-end;padding:14mm">
-    <p style="font-size:${fs}pt;line-height:1.5"><span class="serif">${esc(bookWording(b).back)}</span><br><b style="font-family:Nunito;font-size:${fs * 1.4}pt">букими</b> · ${bookWording(b).rating}</p></section>`;
+  const pal = fairyPalette(b.coverVariant ?? 0);
+  return `<section class="page" style="background:${pal.ink};color:#f3e4c2;display:flex;flex-direction:column;justify-content:flex-end;padding:14mm;--fk-ink:#f3e4c2;--fk-accent:#f3d27a;--fk-orn:#f3d27a">
+    <div style="text-align:left">${fairyHtml(backLines(b.heroName), fs * 1.1, fs * 2.6, 150).replace('class="fk"', 'class="fk" data-back')}</div>
+    <p style="font-size:${fs}pt;line-height:1.5;margin-top:4mm"><span class="serif" style="font-style:italic">${esc(bookWording(b).back)}</span><br><b style="font-family:Nunito;font-size:${fs * 1.4}pt">букими</b> · ${bookWording(b).rating}</p></section>`;
 }
 
 /** Тон текста на картинке по каждой странице: средняя яркость верхней части половины разворота. */
@@ -254,8 +305,8 @@ export function bookHtml(b: BookPageData, k: PdfKind): { html: string; wMm: numb
   const { spine, wrap, W, H } = coverGeometry(k);
   const html = `<style>${baseCss(W, H)}</style><section class="page">
     <div style="position:absolute;top:0;bottom:0;left:${wrap + k.wMm + spine}mm;right:0;overflow:hidden">${coverInner(b, k.wMm + wrap, H, wrap)}</div>
-    <div style="position:absolute;left:0;width:${wrap + k.wMm}mm;top:0;bottom:0;background:#1e4d3b"></div>
-    <p style="position:absolute;left:${wrap + 15}mm;width:${k.wMm - 30}mm;bottom:${wrap + 15}mm;color:#f3e4c2;font-size:10pt"><span class="serif">${esc(finalText(b.heroName, b.heroGender).split(".")[0])}.</span><br>${esc(bookWording(b).back)}<br><b style="font-family:Nunito;font-size:14pt">букими</b> · ${bookWording(b).rating}</p>
+    <div style="position:absolute;left:0;width:${wrap + k.wMm}mm;top:0;bottom:0;background:${fairyPalette(b.coverVariant ?? 0).ink}"></div>
+    <div style="position:absolute;left:${wrap + 15}mm;width:${k.wMm - 30}mm;bottom:${wrap + 15}mm;color:#f3e4c2;font-size:10pt;--fk-ink:#f3e4c2;--fk-accent:#f3d27a;--fk-orn:#f3d27a">${fairyHtml(backLines(b.heroName), 12, 30, k.wMm - 30).replace('class="fk"', 'class="fk" data-back')}<p style="margin-top:3mm;line-height:1.5"><span class="serif" style="font-style:italic">${esc(bookWording(b).back)}</span><br><b style="font-family:Nunito;font-size:14pt">букими</b> · ${bookWording(b).rating}</p></div>
     <div style="position:absolute;left:${wrap + k.wMm}mm;width:${spine}mm;top:0;bottom:0;background:#143628"></div>
     <span class="mark">${esc(b.orderCode ?? "")}</span></section>`;
   return { html, wMm: W, hMm: H };

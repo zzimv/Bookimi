@@ -4,10 +4,19 @@ import "@fontsource/nunito/800.css";
 import "@fontsource/manrope/400.css";
 import "@fontsource/manrope/600.css";
 import "@fontsource/manrope/700.css";
+// rev 19: «сказочная» книга — Yeseva One (имя героя, ключевые слова) и Lora 400 / 400 italic (текст книги); OFL,
+// только кириллица и латиница (браузер качает файл по unicode-range — лишь когда на странице есть книга)
+import "@fontsource/yeseva-one/cyrillic-400.css";
+import "@fontsource/yeseva-one/latin-400.css";
+import "@fontsource/lora/cyrillic-400.css";
+import "@fontsource/lora/latin-400.css";
+import "@fontsource/lora/cyrillic-400-italic.css";
+import "@fontsource/lora/latin-400-italic.css";
 import "./globals.css";
 import { Footer, Header, PromoBar } from "@/components/Layout";
 import { CookieBanner } from "@/components/CookieBanner";
 import { Vitals } from "@/components/Vitals";
+import { CopyGuard } from "@/components/CopyGuard";
 import { og } from "@/lib/og";
 
 const domain = process.env.DOMAIN ?? "bookimi.ru";
@@ -50,6 +59,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <Footer />
         <CookieBanner metrikaId={process.env.YANDEX_METRIKA_ID} />
         <Vitals />
+        <CopyGuard />
       </body>
     </html>
   );

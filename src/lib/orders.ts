@@ -2,6 +2,7 @@
 import type { Order, OrderStatus, PrismaClient } from "@prisma/client";
 import { db } from "./db";
 import { cfg, canAcceptPayments } from "./settings";
+import { layoutOf } from "./book-layout";
 import { pickDiscount, type CatalogAddon, type CatalogFormat, etaDate, ruDate } from "./pricing";
 import { SbpQrProvider, TransferProvider, YooKassaProvider, idempotencyKey, type PaymentProvider, type PaymentView } from "./payments";
 import { issueReceipt, cancelReceipts } from "./npd";
@@ -15,6 +16,12 @@ import { addonFits, audienceOfParams } from "./addons-core";
 import type { AudienceKey } from "../content/profiles";
 
 /** Аудитория книги (из анкеты): от неё зависит набор допов. Нет книги или анкеты — детская. */
+/** Оформление обложки книги (rev 19): из сохранённой вёрстки (params.layout) — цену «Другой обложки» считает сервер. */
+export async function bookCoverVariant(bookId: string): Promise<number> {
+  const b = await db.book.findUnique({ where: { id: bookId }, select: { params: true } }).catch(() => null);
+  return layoutOf((b?.params as { layout?: unknown } | null) ?? null).coverVariant;
+}
+
 export async function bookAudience(bookId: string): Promise<AudienceKey> {
   const b = await db.book.findUnique({ where: { id: bookId }, select: { params: true } }).catch(() => null);
   return audienceOfParams(b?.params);
@@ -202,6 +209,8 @@ export async function priceCheckout(userId: string, input: CheckoutInput) {
       cartoonPaid: await cartoonPaidFor(input.bookId),
       audience,
       paidAddons: await paidAddonKeys(input.bookId),
+      coverVariant: await bookCoverVariant(input.bookId),
+      coverPriceRub: (await cfg("bookOptions")).coverPriceRub,
     },
     promo,
     newbie,

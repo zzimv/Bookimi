@@ -629,6 +629,7 @@ export function AdminSettings() {
 function Rev10Settings() {
   const b = DEFAULTS.bonus;
   const [f, setF] = useState({ reviewRub: String(b.reviewRub), maxSharePct: String(b.maxSharePct), expiryDays: String(b.expiryDays) });
+  const [cp, setCp] = useState(String(DEFAULTS.bookOptions.coverPriceRub));
   const [msg, setMsg] = useState("");
   return (
     <section className="panel" style={{ marginTop: 16 }} data-rev10-settings>
@@ -641,6 +642,18 @@ function Rev10Settings() {
         <input type="checkbox" name="admin-mode" checked={Boolean(S.adminMode)} onChange={(e: Event) => setDemoFlags({ adminMode: (e.target as HTMLInputElement).checked })} />
         <span>Режим админа: на превью книги — «Показать всю книгу (для админа)»</span>
       </label>
+      <h2 style={{ fontSize: "var(--fs-lg)", marginTop: 16 }} id="oblozhka">Книга: обложка</h2>
+      <form
+        className="grid3"
+        onSubmit={(e: Event) => {
+          e.preventDefault();
+          setDemoFlags({ coverPriceRub: Math.max(0, Number(cp) || 0) });
+          setMsg(`«Другая обложка» — ${DEFAULTS.bookOptions.coverPriceRub} ₽ («Классика» бесплатно).`);
+        }}
+      >
+        <label className="field"><span>Другая обложка, ₽</span><input className="input" type="number" min="0" name="cover-price" value={cp} onChange={(e: Event) => setCp((e.target as HTMLInputElement).value)} /><small>«Классика» — бесплатно; 0 — все обложки бесплатно</small></label>
+        <div><button className="btn btn--primary btn--sm" data-demo="save-cover-price">Сохранить</button></div>
+      </form>
       <h2 style={{ fontSize: "var(--fs-lg)", marginTop: 16 }} id="bonusy">Бонусы за отзыв</h2>
       <form
         className="grid3"

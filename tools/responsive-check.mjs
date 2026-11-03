@@ -224,6 +224,9 @@ function focusChecks() {
 // ───────── проход по сайту ─────────
 async function run(browser, vp, chromiumExe) {
   const ctx = await browser.newContext({ viewport: { width: vp.width, height: vp.height }, deviceScaleFactor: vp.scale ?? (vp.phone ? 2 : 1), isMobile: Boolean(vp.phone), hasTouch: Boolean(vp.phone), reducedMotion: "reduce" });
+  // Обход вежливой плашки для автоматики (rev 19, src/lib/bot-notice.ts): Playwright выставляет navigator.webdriver,
+  // а это наша собственная проверка — флаг localStorage["bookimi.qa"] = "1" (то же, что ?qa=1 в адресе)
+  await ctx.addInitScript(() => { try { localStorage.setItem("bookimi.qa", "1"); } catch {} });
   const page = await ctx.newPage();
   const issues = [];
   const errors = [];
