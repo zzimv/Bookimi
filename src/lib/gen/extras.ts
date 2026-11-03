@@ -7,6 +7,7 @@
 //  • Картинка: вид питомца — ExtraV2.species, иначе по кличке/описанию («кот», «кошка», «щенок»…); порода и окрас —
 //    из описания. Игрушки и «свой вариант» рисуются предметом.
 // Без Node API: модуль собирается и в демо-стенд (tools/demo).
+import { normalizeKidHairstyle } from "../../content/looks";
 import { extraGender, type ExtraV2T } from "../../content/answers";
 import { guessGender } from "../declension";
 
@@ -425,7 +426,8 @@ export function extraDemoLook(e: ExtraLookIn, o: { heroAge?: number; outfit?: st
     gender: g === "n" ? base?.gender : g,
     age,
     hair: p.hair || base?.hair,
-    hairstyle: p.hairstyle || base?.hairstyle,
+    // Ребёнок (брат, сестра, друг…) — причёска только из набора своего пола (rev 15)
+    hairstyle: kid ? normalizeKidHairstyle(p.hairstyle, g === "n" ? base?.gender : g) : p.hairstyle || base?.hairstyle,
     skin: p.skin || undefined,
     glasses: p.glasses ?? base?.glasses,
     beard: p.beard ?? base?.beard,
@@ -435,7 +437,7 @@ export function extraDemoLook(e: ExtraLookIn, o: { heroAge?: number; outfit?: st
     ...(e.role === "pet" && p.fur ? { furColor: p.fur } : {}),
     thing: e.role === "toy" && p.toy ? p.toy : extraThing(e),
   };
-  if (look.hairstyle) look.longHair = /длинн|хвост|косич|кудр|коса/i.test(look.hairstyle);
+  if (look.hairstyle && !kid) look.longHair = /длинн|хвост|косич|кудр|коса/i.test(look.hairstyle);
   for (const k of Object.keys(look) as (keyof typeof look)[]) if (look[k] === undefined) delete look[k];
   return look;
 }

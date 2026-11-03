@@ -8,7 +8,7 @@ import sharp from "sharp";
 import type { Book } from "@prisma/client";
 import { db } from "../db";
 import { cfg } from "../settings";
-import { Answers, appearanceLine, extraGender, heroAge, type QuizAnswers } from "../quiz";
+import { Answers, appearanceLine, extraGender, heroAge, heroHairAndClothes, type QuizAnswers } from "../quiz";
 import { personalize, plotForAnswers, textProvider, dedicationText, type StoryText } from "./text";
 import { imageProvider, type HeroRef, type ImageResult, type SceneJob } from "./image";
 import { watermark } from "../../content/art/render";
@@ -102,8 +102,9 @@ export function heroLook(a: QuizAnswers, style?: string): DemoLook {
     gender: a.hero.gender,
     age: heroAge(a),
     hair: p.hair,
-    hairstyle: p.hairstyle,
-    longHair: /длинн|хвост|косич|кудр|пучок|коса/i.test(p.hairstyle ?? ""),
+    // Причёска и вид одежды ребёнка — из набора своего пола (rev 15), на всю книгу и PDF
+    ...heroHairAndClothes(a),
+    longHair: a.audience === "CHILD" ? undefined : /длинн|хвост|косич|кудр|пучок|коса/i.test(p.hairstyle ?? ""),
     skin: p.skin,
     glasses: p.glasses,
     freckles: p.freckles,

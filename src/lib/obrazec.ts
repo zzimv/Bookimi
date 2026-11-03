@@ -28,6 +28,8 @@ export interface SampleOpts {
   smile?: string;
   blush?: boolean;
   outfit?: string;
+  /** rev 15: вид одежды ребёнка (KID_OUTFITS): «платье», «худи с джинсами»… */
+  clothes?: string;
   /** Водяной знак превью (эскизы страниц до оплаты). */
   wm?: boolean;
   /** Крупно лицо (true) или по пояс ("bust") — к portrait / extraPortrait. */
@@ -106,6 +108,7 @@ export function sampleUrl(o: SampleOpts) {
   put("sm", o.smile);
   put("bl", o.blush);
   put("oc", o.outfit);
+  put("ot", o.clothes);
   if (o.extraLooks) {
     q.set("x", o.extraLooks.map((e) => e.role).join(","));
     o.extraLooks.slice(0, 3).forEach((e, i) => put(`x${i + 1}`, encodeSampleExtra(e)));

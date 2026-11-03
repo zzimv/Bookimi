@@ -14,6 +14,7 @@ import { api, goal } from "@/lib/client";
 import {
   ADULT_AGES, AGE_GROUPS, AUDIENCE_EXTRA_ROLES, bookAgeLabel, kidGroupByKey, kidGroupOf, CLOTHES, dedicationsFor, EXTRA_ROLE_LABELS, FUR, HAIR, HAIR_ADULT, HAIRSTYLE, INTERESTS, occasionChips, SKIN, TEEN_INTERESTS,
   ADULT_HAIRSTYLE_F, ADULT_HAIRSTYLE_M, EYES, extraGender, OUTFIT_COLOR_KEYS, sampleExtras, SMILES, TOYS,
+  heroHairAndClothes, KID_HAIRSTYLE_DEFAULT, KID_HAIRSTYLE_KEYS, KID_OUTFIT_KEYS, normalizeKidHairstyle, normalizeKidOutfit,
   type QuizAnswers,
 } from "@/lib/quiz";
 import { fillTags, guessGender, normalizeName } from "@/lib/declension";
@@ -91,22 +92,23 @@ const HERO_SCENES = 3;
  * Готовые герои для выбора картинкой (rev 13): тон кожи, цвет волос и причёска. Рисует тот же рисовальщик, что книгу
  * (/obrazec?p=1), — ребёнок выбранного возраста. Тонкая настройка — в «Подробнее».
  */
+// rev 15: у каждого из 6 готовых героев своя причёска — только из набора своего пола (KID_HAIRSTYLES)
 const LOOK_PRESETS: Record<"boy" | "girl", { skin: string; hair: string; hairstyle: string }[]> = {
   boy: [
     { skin: "светлый", hair: "светлые", hairstyle: "короткая стрижка" },
-    { skin: "светлый", hair: "рыжие", hairstyle: "кудряшки" },
-    { skin: "светлый", hair: "русые", hairstyle: "чёлка" },
-    { skin: "смуглый", hair: "каштановые", hairstyle: "короткая стрижка" },
-    { skin: "смуглый", hair: "чёрные", hairstyle: "кудряшки" },
-    { skin: "тёмный", hair: "чёрные", hairstyle: "короткая стрижка" },
+    { skin: "светлый", hair: "рыжие", hairstyle: "кудрявые" },
+    { skin: "светлый", hair: "русые", hairstyle: "с чёлкой" },
+    { skin: "смуглый", hair: "каштановые", hairstyle: "волнистые до ушей" },
+    { skin: "смуглый", hair: "чёрные", hairstyle: "шапочка" },
+    { skin: "тёмный", hair: "чёрные", hairstyle: "ёжик" },
   ],
   girl: [
     { skin: "светлый", hair: "светлые", hairstyle: "косички" },
-    { skin: "светлый", hair: "рыжие", hairstyle: "хвостик" },
-    { skin: "светлый", hair: "русые", hairstyle: "длинные" },
-    { skin: "смуглый", hair: "каштановые", hairstyle: "кудряшки" },
-    { skin: "смуглый", hair: "тёмные", hairstyle: "длинные" },
-    { skin: "тёмный", hair: "чёрные", hairstyle: "кудряшки" },
+    { skin: "светлый", hair: "рыжие", hairstyle: "два хвостика" },
+    { skin: "светлый", hair: "русые", hairstyle: "длинные распущенные" },
+    { skin: "смуглый", hair: "каштановые", hairstyle: "хвост" },
+    { skin: "смуглый", hair: "тёмные", hairstyle: "каре" },
+    { skin: "тёмный", hair: "чёрные", hairstyle: "длинные кудри" },
   ],
 };
 const SKIN_WORD: Record<string, string> = { светлый: "светлая кожа", смуглый: "смуглая кожа", тёмный: "тёмная кожа" };
@@ -118,6 +120,7 @@ const PIC_LABEL = {
   hairstyle: (x: string) => cap1(x),
   eyes: (x: string) => `${cap1(x)} глаза`,
   outfit: (x: string) => `${cap1(x)} одежда`,
+  clothes: (x: string) => cap1(x),
   fur: (x: string) => `${cap1(x)} окрас`,
 };
 const SPECIES_PICS: { key: "cat" | "dog" | "other"; label: string; what?: string }[] = [
@@ -391,6 +394,22 @@ export function QuizWizard({
     } catch {}
   };
   const look = (patch: Partial<Draft["appearance"]>) => setA((cur) => ({ ...cur, appearance: { ...cur.appearance, ...patch } }));
+  // Смена пола (rev 15): причёска — по умолчанию нового пола (наборы мальчиков и девочек не пересекаются),
+  // одежда — своя, если её нет в наборе нового пола (комбинезон и спортивный костюм остаются)
+  const setGender = (gender: "boy" | "girl" | undefined) =>
+    setA((cur) => {
+      if (cur.audience !== "CHILD" || !gender || gender === cur.hero.gender) return { ...cur, hero: { ...cur.hero, gender } };
+      const ap0 = cur.appearance;
+      return {
+        ...cur,
+        hero: { ...cur.hero, gender },
+        appearance: {
+          ...ap0,
+          hairstyle: KID_HAIRSTYLE_KEYS[gender].includes(ap0.hairstyle ?? "") ? ap0.hairstyle : KID_HAIRSTYLE_DEFAULT[gender],
+          clothes: ap0.clothes && KID_OUTFIT_KEYS[gender].includes(ap0.clothes) ? ap0.clothes : ap0.clothes ? normalizeKidOutfit(ap0.clothes, gender) : "",
+        },
+      };
+    });
   const pet = (patch: Partial<Draft["pet"]>) => setA((cur) => ({ ...cur, pet: { ...cur.pet, ...patch } }));
   const adult = (patch: Partial<Draft["adult"]>) => setA((cur) => ({ ...cur, adult: { ...cur.adult, ...patch } }));
   const setExtra = (i: number, patch: Partial<DraftExtra>) => setA((cur) => ({ ...cur, extras: cur.extras.map((x, j) => (j === i ? { ...x, ...patch } : x)) }));
@@ -505,7 +524,8 @@ export function QuizWizard({
     gender: a.hero.gender,
     age: heroAgeNum,
     hair: a.appearance.hair,
-    hairstyle: a.appearance.hairstyle,
+    // Причёска и вид одежды — из набора своего пола (rev 15): та же функция, что у страниц книги и PDF
+    ...heroHairAndClothes(a),
     skin: a.appearance.skin,
     glasses: a.appearance.glasses,
     freckles: a.appearance.freckles,
@@ -808,6 +828,10 @@ export function QuizWizard({
   const g = (a.hero.gender === "girl" ? "girl" : "boy") as "boy" | "girl";
   // Внешность картинками (rev 14): каждый вариант — рисунок героя с этим вариантом поверх текущего выбора
   const ap = a.appearance;
+  // Ребёнок (rev 15): 6 причёсок и 6 видов одежды своего пола; подросток — прежний общий список причёсок
+  const kidSets = aud === "CHILD";
+  const hairNow = kidSets ? normalizeKidHairstyle(ap.hairstyle, g) : ap.hairstyle || LOOK_PRESETS[g][0].hairstyle;
+  const clothesNow = kidSets ? normalizeKidOutfit(ap.clothes, g) : undefined;
   const heroPic = (patch: Record<string, unknown>, face: boolean | "bust" = true) =>
     sampleUrl({
       portrait: true,
@@ -815,9 +839,12 @@ export function QuizWizard({
       kind,
       gender: g,
       age: heroAgeNum,
-      hair: ap.hair || LOOK_PRESETS[g][0].hair,
-      hairstyle: ap.hairstyle || LOOK_PRESETS[g][0].hairstyle,
-      skin: ap.skin || LOOK_PRESETS[g][0].skin,
+      // Тот же сюжет и те же значения по умолчанию, что у живой обложки и книги (иначе в выборе — светлые волосы, а в книге — другие)
+      slug: previewLook.slug,
+      hair: ap.hair || undefined,
+      hairstyle: hairNow,
+      clothes: clothesNow,
+      skin: ap.skin || undefined,
       glasses: ap.glasses,
       freckles: ap.freckles,
       blush: ap.blush,
@@ -831,7 +858,7 @@ export function QuizWizard({
     <div className="describe" data-describe="pics">
       <PicRow name="skin" label="Тон кожи" options={SKIN.map((x) => ({ key: x, label: PIC_LABEL.skin(x), src: heroPic({ skin: x }) }))} value={ap.skin ?? ""} onChange={(v) => look({ skin: v })} />
       <PicRow name="hair" label="Цвет волос" options={HAIR.map((x) => ({ key: x, label: PIC_LABEL.hair(x), src: heroPic({ hair: x }) }))} value={ap.hair ?? ""} onChange={(v) => look({ hair: v })} />
-      <PicRow name="hairstyle" label="Причёска" options={HAIRSTYLE.map((x) => ({ key: x, label: PIC_LABEL.hairstyle(x), src: heroPic({ hairstyle: x }, "bust") }))} value={ap.hairstyle ?? ""} onChange={(v) => look({ hairstyle: v })} />
+      <PicRow name="hairstyle" label="Причёска" options={(kidSets ? KID_HAIRSTYLE_KEYS[g] : HAIRSTYLE).map((x) => ({ key: x, label: `Причёска: ${PIC_LABEL.hairstyle(x).toLowerCase()}`, src: heroPic({ hairstyle: x }, "bust") }))} value={kidSets ? hairNow : ap.hairstyle ?? ""} onChange={(v) => look({ hairstyle: v || hairNow })} />
       <PicRow name="eyes" label="Цвет глаз" options={EYES.map((x) => ({ key: x, label: PIC_LABEL.eyes(x), src: heroPic({ eyes: x }) }))} value={ap.eyes ?? ""} onChange={(v) => look({ eyes: v })} allowEmpty />
       <PicToggles
         name="face"
@@ -845,10 +872,13 @@ export function QuizWizard({
         onToggle={(k) => look({ [k]: !ap[k as "freckles" | "glasses" | "blush"] })}
       />
       <PicRow name="smile" label="Улыбка" options={SMILES.map((x) => ({ key: x.key, label: x.label, src: heroPic({ smile: x.key }) }))} value={ap.smile ?? ""} onChange={(v) => look({ smile: v })} allowEmpty />
-      <PicRow name="outfit" label="Цвет одежды" options={OUTFIT_COLOR_KEYS.map((x) => ({ key: x, label: PIC_LABEL.outfit(x), src: heroPic({ outfit: x }, "bust") }))} value={ap.outfitColor ?? ""} onChange={(v) => look({ outfitColor: v })} allowEmpty />
+      {kidSets && (
+        <PicRow name="clothes" label="Одежда" options={KID_OUTFIT_KEYS[g].map((x) => ({ key: x, label: `Одежда: ${x}`, src: heroPic({ clothes: x }, false) }))} value={clothesNow ?? ""} onChange={(v) => look({ clothes: v || clothesNow })} />
+      )}
+      <PicRow name="outfit" label="Цвет одежды" options={OUTFIT_COLOR_KEYS.map((x) => ({ key: x, label: PIC_LABEL.outfit(x), src: heroPic({ outfit: x }, kidSets ? false : "bust") }))} value={ap.outfitColor ?? ""} onChange={(v) => look({ outfitColor: v })} allowEmpty />
       <details className="more look-own">
         <summary>Своё описание</summary>
-        {aud !== "ADULT" && (
+        {aud !== "ADULT" && !kidSets && (
           <>
             <span className="label">Любимая одежда</span>
             <Chips name="clothes" label="Любимая одежда" items={asItems(CLOTHES)} value={ap.clothes ?? ""} onChange={(v) => look({ clothes: v as string })} />
@@ -888,11 +918,13 @@ export function QuizWizard({
     if (e.role === "toy" || e.role === "custom") return null;
     const adult = HUMAN_ROLES.includes(e.role);
     const male = adult ? def.gender === "boy" : extraGender({ role: e.role, name: e.name ?? "", gender: e.gender }, guessGender) === "boy";
-    const styles = adult ? (male ? ADULT_HAIRSTYLE_M : ADULT_HAIRSTYLE_F) : HAIRSTYLE;
+    // Брат, сестра, друг — 6 причёсок своего пола (rev 15); взрослые — свои наборы (женщины / мужчины)
+    const kidG = male ? "boy" : "girl";
+    const styles = adult ? (male ? ADULT_HAIRSTYLE_M : ADULT_HAIRSTYLE_F) : KID_HAIRSTYLE_KEYS[kidG];
     return (
       <div className="describe" data-describe={`extra-pics-${i}`}>
         <PicRow name={`extra-hair-${i}`} label="Цвет волос" options={(adult ? HAIR_ADULT : HAIR).map((x) => ({ key: x, label: PIC_LABEL.hair(x), src: extraPic(e, { look: { hair: x } }, true) }))} value={L.hair ?? def.hair ?? ""} onChange={(v) => setL({ hair: v || undefined })} />
-        <PicRow name={`extra-hairstyle-${i}`} label="Причёска" options={styles.map((x) => ({ key: x, label: PIC_LABEL.hairstyle(x), src: extraPic(e, { look: { hairstyle: x } }, "bust") }))} value={L.hairstyle ?? def.hairstyle ?? ""} onChange={(v) => setL({ hairstyle: v || undefined })} />
+        <PicRow name={`extra-hairstyle-${i}`} label="Причёска" options={styles.map((x) => ({ key: x, label: `Причёска: ${PIC_LABEL.hairstyle(x).toLowerCase()}`, src: extraPic(e, { look: { hairstyle: x } }, "bust") }))} value={adult ? L.hairstyle ?? def.hairstyle ?? "" : normalizeKidHairstyle(L.hairstyle, kidG)} onChange={(v) => setL({ hairstyle: v || undefined })} />
         <PicRow name={`extra-skin-${i}`} label="Тон кожи" options={SKIN.map((x) => ({ key: x, label: PIC_LABEL.skin(x), src: extraPic(e, { look: { skin: x } }, true) }))} value={L.skin ?? ""} onChange={(v) => setL({ skin: v || undefined })} allowEmpty />
         {adult && (
           <PicToggles
@@ -921,11 +953,11 @@ export function QuizWizard({
     <div className="describe" data-describe="pictures">
       <div className="char-grid" role="radiogroup" aria-label="Внешность героя: выберите картинку">
         {LOOK_PRESETS[g].map((x, i) => {
-          const on = a.appearance.hair === x.hair && a.appearance.hairstyle === x.hairstyle && a.appearance.skin === x.skin;
+          const on = a.appearance.hair === x.hair && hairNow === x.hairstyle && a.appearance.skin === x.skin;
           return (
             <button key={`${g}-${i}`} type="button" role="radio" aria-checked={on} className="char-card" data-char={i} aria-label={presetLabel(x)} title={presetLabel(x)} onClick={() => look(x)}>
               {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src={sampleUrl({ portrait: true, kind, gender: g, age: heroAgeNum, ...x, glasses: ap.glasses, freckles: ap.freckles, blush: ap.blush, eyes: ap.eyes || undefined, smile: ap.smile || undefined, outfit: ap.outfitColor || undefined, style })} alt="" width={150} height={150} />
+              <img src={sampleUrl({ portrait: true, kind, gender: g, age: heroAgeNum, ...x, clothes: clothesNow, glasses: ap.glasses, freckles: ap.freckles, blush: ap.blush, eyes: ap.eyes || undefined, smile: ap.smile || undefined, outfit: ap.outfitColor || undefined, style })} alt="" width={150} height={150} />
               <span className="char-card__check" aria-hidden="true">✓</span>
             </button>
           );
@@ -1023,7 +1055,7 @@ export function QuizWizard({
                   )}
                 </div>
                 <span className="label">{aud === "PET" ? "Пол" : "Кто это?"} <span className="req">*</span></span>
-                <Chips name="gender" label="Пол" items={[{ key: "boy", label: GENDER[aud][0] }, { key: "girl", label: GENDER[aud][1] }]} value={(a.hero.gender ?? "") as "boy"} onChange={(v) => hero({ gender: (v || undefined) as "boy" })} />
+                <Chips name="gender" label="Пол" items={[{ key: "boy", label: GENDER[aud][0] }, { key: "girl", label: GENDER[aud][1] }]} value={(a.hero.gender ?? "") as "boy"} onChange={(v) => setGender((v || undefined) as "boy" | "girl" | undefined)} />
                 {aud === "CHILD" && (
                   <>
                     <span className="label">Возраст <span className="req">*</span></span>
@@ -1146,7 +1178,7 @@ export function QuizWizard({
                       <NameHint value={e.name} onFix={(v) => setExtra(i, { name: v })} />
                     </label>
                     {!HUMAN_ROLES.includes(e.role) && (
-                      <Chips name={`extra-gender-${i}`} label="Род" items={extraGenders(e.role)} value={(e.gender ?? "") as "boy"} onChange={(v) => setExtra(i, { gender: (v || undefined) as Extra["gender"] })} />
+                      <Chips name={`extra-gender-${i}`} label="Род" items={extraGenders(e.role)} value={(e.gender ?? "") as "boy"} onChange={(v) => setExtra(i, { gender: (v || undefined) as Extra["gender"], ...(HUMAN_ROLES.includes(e.role) || (v || undefined) === e.gender ? {} : { look: { ...e.look, hairstyle: undefined } }) })} />
                     )}
                     {modeTabs(k, photoOk)}
                     {photoOk && photoEnabled && mode(k) === "photo" ? (

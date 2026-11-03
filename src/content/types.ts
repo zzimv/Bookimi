@@ -344,6 +344,8 @@ export interface DemoLook {
   /** Румянец на щеках ярче (rev 14). */
   blush?: boolean;
   outfit?: string; // цвет одежды #rrggbb
+  /** Вид одежды ребёнка (rev 15): ключ из KID_OUTFITS (src/content/looks.ts) — «платье», «худи с джинсами»…; пусто — по полу. */
+  clothes?: string;
   species?: "dog" | "cat" | string;
   breed?: string;
   furColor?: string; // как в анкете: «рыжий», «чёрный с белым»

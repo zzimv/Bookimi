@@ -4,6 +4,7 @@
 //            &h=<волосы>&hs=<причёска>&sk=<кожа>&gl=1&fr=1&b=1&sp=<dog|cat>&br=<порода>&fur=<окрас>&x=<роли через запятую>&w=1
 //   &p=1 — портрет героя без сцены (выбор внешности картинкой в анкете, rev 13)
 //   rev 14: &f=1 — крупно лицо, &f=2 — по пояс (к p=1 / pr=); &ey=<глаза>&sm=<smile|wide|calm>&bl=1&oc=<цвет одежды>&wm=1 (водяной знак эскиза);
+//   rev 15: &ot=<вид одежды ребёнка> (KID_OUTFITS), &hs — причёска из набора своего пола (KID_HAIRSTYLES);
 //   x1..x3 — внешность доп. героев («g:girl;h:седые;gl:1;sp:cat;fur:рыжий;t:робот», src/lib/obrazec.ts):
 //   мама — женщина, бабушка — седая, дедушка — с усами, кошка — кошка. Всё — по белым спискам.
 import { plotBySlug, PLOTS } from "@/content/registry";
@@ -15,9 +16,11 @@ import { EXTRA_ROLES, HERO_KIND_BY_AUDIENCE, type DemoExtra, type DemoLook, type
 import { ADULT_HAIRSTYLE_F, ADULT_HAIRSTYLE_M, EYES, FUR, HAIR_ADULT, HAIRSTYLE, OUTFIT_COLOR_KEYS, SKIN, SMILES, TOYS } from "@/lib/quiz";
 import { OUTFIT_COLORS } from "@/content/art/shared";
 import { decodeSampleExtra } from "@/lib/obrazec";
+import { KID_HAIRSTYLE_KEYS, KID_OUTFIT_KEYS, normalizeKidHairstyle, normalizeKidOutfit } from "@/content/looks";
 import { extraDemoLook } from "@/lib/gen/extras";
 
-const STYLES_ALL = [...new Set([...HAIRSTYLE, ...ADULT_HAIRSTYLE_F, ...ADULT_HAIRSTYLE_M])];
+const STYLES_ALL = [...new Set([...HAIRSTYLE, ...KID_HAIRSTYLE_KEYS.boy, ...KID_HAIRSTYLE_KEYS.girl, ...ADULT_HAIRSTYLE_F, ...ADULT_HAIRSTYLE_M])];
+const OUTFITS_ALL = [...new Set([...KID_OUTFIT_KEYS.boy, ...KID_OUTFIT_KEYS.girl])];
 
 const KINDS: HeroKind[] = ["child", "teen", "adult", "pet"];
 const DEFAULT_AGE: Record<HeroKind, number> = { child: 5, teen: 14, adult: 35, pet: 3 };
@@ -62,7 +65,8 @@ export function GET(req: Request) {
     ...(q.get("g") === "boy" || q.get("g") === "girl" ? { gender: q.get("g")! } : {}),
     ...(Number.isFinite(age) && age > 0 && age < 120 ? { age } : {}),
     ...(pickFrom(q.get("h"), HAIR_ADULT) ? { hair: q.get("h")! } : {}),
-    ...(pickFrom(q.get("hs"), HAIRSTYLE) ? { hairstyle: q.get("hs")!, longHair: ["длинные", "косички", "хвостик"].includes(q.get("hs")!) } : {}),
+    ...(pickFrom(q.get("hs"), STYLES_ALL) ? { hairstyle: q.get("hs")!, longHair: ["длинные", "косички", "хвостик"].includes(q.get("hs")!) } : {}),
+    ...(pickFrom(q.get("ot"), OUTFITS_ALL) ? { clothes: q.get("ot")! } : {}),
     ...(pickFrom(q.get("sk"), SKIN) ? { skin: q.get("sk")! } : {}),
     ...(q.get("gl") === "1" ? { glasses: true } : {}),
     ...(q.get("fr") === "1" ? { freckles: true } : {}),
@@ -78,6 +82,12 @@ export function GET(req: Request) {
   if (q.get("g") && !q.get("hs") && kind !== "pet") {
     look.hairstyle = look.gender === "girl" ? "длинные" : "короткая стрижка";
     look.longHair = look.gender === "girl";
+  }
+  // Ребёнок (rev 15): причёска и одежда — только из набора своего пола (мальчику не достанутся косички)
+  if (kind === "child") {
+    look.hairstyle = normalizeKidHairstyle(look.hairstyle, look.gender);
+    look.clothes = normalizeKidOutfit(look.clothes, look.gender);
+    delete look.longHair;
   }
   // Доп. герои: явный список ролей или обязательные по сюжету (пара, хозяева питомца)
   const xParam = q.get("x");

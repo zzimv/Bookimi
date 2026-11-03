@@ -2,7 +2,7 @@
 // и API с теми же адресами и правилами, что src/app/api/** (перехват fetch). Текст — DemoTextProvider сайта,
 // картинки — renderDemoSpread, сумма — quote(), путь заказа — journey(), настройки — DEFAULTS из settings.ts.
 import { qrSvg } from "./qr";
-import { AnswersV2, appearanceLine, extraGender, heroAge, type QuizAnswers } from "../../src/lib/quiz";
+import { AnswersV2, appearanceLine, extraGender, heroAge, heroHairAndClothes, type QuizAnswers } from "../../src/lib/quiz";
 import { DemoTextProvider, personalize, plotForAnswers, type StoryText } from "../../src/lib/gen/text";
 import { moodsFor } from "../../src/content/moods";
 import { ART_STYLE_IDS } from "../../src/content/profiles";
@@ -323,8 +323,9 @@ function heroLook(a: QuizAnswers): DemoLook {
     blush: p.blush || undefined,
     outfit: OUTFIT_COLORS[p.outfitColor ?? ""],
     hair: p.hair,
-    hairstyle: p.hairstyle,
-    longHair: /длинн|хвост|косич|кудр|пучок|коса/i.test(p.hairstyle ?? ""),
+    // Причёска и вид одежды ребёнка — из набора своего пола (rev 15), на всю книгу и PDF
+    ...heroHairAndClothes(a),
+    longHair: a.audience === "CHILD" ? undefined : /длинн|хвост|косич|кудр|пучок|коса/i.test(p.hairstyle ?? ""),
     skin: p.skin,
     glasses: p.glasses,
     freckles: p.freckles,

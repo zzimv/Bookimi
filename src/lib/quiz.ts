@@ -10,6 +10,8 @@ import { dedicationsFor } from "./dedications";
 import { KID_AGE_GROUPS, kidGroupByAge, kidGroupByKey } from "../content/ages";
 
 export { AnswersV2, ContactV2, normalizePhone, extraGender } from "../content/answers";
+import { normalizeKidHairstyle, normalizeKidOutfit } from "../content/looks";
+export { KID_HAIRSTYLES, KID_HAIRSTYLE_KEYS, KID_HAIRSTYLE_DEFAULT, KID_OUTFITS, KID_OUTFIT_KEYS, KID_OUTFIT_DEFAULT, normalizeKidHairstyle, normalizeKidOutfit } from "../content/looks";
 
 /** Ответы анкеты (v2). Старое имя оставлено для совместимости импортов. */
 export const Answers = AnswersV2;
@@ -25,7 +27,7 @@ export const HAIRSTYLE = ["короткая стрижка", "чёлка", "дл
 export const CLOTHES = ["футболка", "платье", "комбинезон", "толстовка с капюшоном", "свитер", "спортивный костюм"];
 export const SKIN = ["светлый", "смуглый", "тёмный"];
 /** rev 14 — выбор внешности картинками. */
-export const EYES = ["карие", "голубые", "зелёные", "серые"];
+export const EYES = ["карие", "голубые", "зелёные", "серые", "ореховые"];
 export const SMILES: { key: string; label: string }[] = [
   { key: "smile", label: "Улыбка" },
   { key: "wide", label: "Широкая улыбка" },
@@ -174,6 +176,17 @@ export function sampleExtras(extras: Pick<QuizAnswers["extras"][number], "role" 
   });
 }
 
+/**
+ * Причёска и одежда героя для рисунка (rev 15): ребёнку — ключи из набора своего пола (старые ответы
+ * «длинные», «кудряшки», «футболка» переводятся по полу); остальным — как в анкете. Одна функция для живой обложки,
+ * эскизов, страниц книги и PDF (sampleLookOf, heroLook в pipeline.ts и в демо).
+ */
+export function heroHairAndClothes(a: { audience: string; hero: { gender?: string }; appearance: { hairstyle?: string; clothes?: string } }): { hairstyle?: string; clothes?: string } {
+  const p = a.appearance;
+  if (a.audience !== "CHILD") return { hairstyle: p.hairstyle || undefined, clothes: undefined };
+  return { hairstyle: normalizeKidHairstyle(p.hairstyle, a.hero.gender), clothes: normalizeKidOutfit(p.clothes, a.hero.gender) };
+}
+
 /** Внешность героя из анкеты для образца. */
 function sampleLookOf(a: QuizAnswers): SampleOpts {
   const kind = ({ CHILD: "child", TEEN: "teen", ADULT: "adult", PET: "pet" } as const)[a.audience];
@@ -183,7 +196,7 @@ function sampleLookOf(a: QuizAnswers): SampleOpts {
     gender: a.hero.gender,
     age: heroAge(a),
     hair: a.appearance.hair,
-    hairstyle: a.appearance.hairstyle,
+    ...heroHairAndClothes(a),
     skin: a.appearance.skin,
     glasses: a.appearance.glasses,
     freckles: a.appearance.freckles,

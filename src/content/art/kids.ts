@@ -15,6 +15,7 @@
 
 import type { ArtStyle, ArtStyleDemo, DemoHeroDrawer, DemoSceneCtx, DemoTheme } from "../types";
 import { colorFrom, EYE_COLORS, HAIR_COLORS, pick, SKIN_COLORS } from "./shared";
+import { kidHairCut, kidOutfitKind, type KidHairCut } from "../looks";
 
 // ---------------------------------------------------------------------------
 // Цвет
@@ -633,20 +634,11 @@ export const KIDS_THEMES: DemoTheme[] = [
 // Ребёнок
 // ---------------------------------------------------------------------------
 
-type HairCut = "short" | "buzz" | "curly" | "curlyLong" | "long" | "bob" | "ponytail" | "braids" | "bun";
+type HairCut = KidHairCut;
 
-function hairCut(hairstyle: string | undefined, longHair: boolean | undefined, girl: boolean): HairCut {
-  const hs = (hairstyle ?? "").toLowerCase();
-  const long = longHair ?? (/длинн|распущ|long/.test(hs) || (girl && !/коротк|short/.test(hs)));
-  if (/лыс|налысо|наголо|ёжик|ежик|под машинк|buzz|bald/.test(hs)) return "buzz";
-  if (/кос[аиыу]|косич|braid/.test(hs)) return "braids";
-  if (/хвост|pony/.test(hs)) return "ponytail";
-  if (/пуч|гульк|bun/.test(hs)) return "bun";
-  if (/кудр|кудряв|завит|локон|кучеряв|афро|curl/.test(hs)) return long ? "curlyLong" : "curly";
-  if (/каре|боб|bob/.test(hs)) return "bob";
-  if (/длинн|распущ|long/.test(hs)) return "long";
-  if (/коротк|стрижк|ч[её]лк|short/.test(hs)) return "short";
-  return long ? "long" : "short";
+/** Причёска ребёнка (rev 15): по ключу из набора своего пола (src/content/looks.ts), старые слова — по полу. */
+function hairCut(hairstyle: string | undefined, girl: boolean): HairCut {
+  return kidHairCut(hairstyle, girl ? "girl" : "boy");
 }
 
 type Pt = [number, number];
@@ -673,8 +665,8 @@ export const drawChild: DemoHeroDrawer = (o) => {
   const shirt = h.outfit && HEX6.test(h.outfit) ? h.outfit : pick(acc, idx);
   const others = acc.filter((c) => c.toLowerCase() !== shirt.toLowerCase());
   const trim = others.length ? pick(others, idx + 1) : mix(shirt, "#ffffff", 0.55);
-  const pants = girl ? mix(shirt, "#2b2b3a", 0.5) : mix("#3b4a6b", st.palette.paper, 0.08);
   const shoes = girl ? mix(trim, "#2a1a14", 0.35) : mix("#7a4a32", "#2a1a14", 0.2);
+  const outfitKind = kidOutfitKind(h.clothes, girl ? "girl" : "boy");
 
   // линия по стилю
   const lw = { thin: 2.2, bold: 4.2, sketch: 3, none: 0 }[st.line];
@@ -726,21 +718,30 @@ export const drawChild: DemoHeroDrawer = (o) => {
     tilt = 4;
   }
 
-  const cut = hairCut(h.hairstyle, h.longHair, girl);
-  const framed = cut === "long" || cut === "bob" || cut === "braids" || cut === "curlyLong";
+  const cut = hairCut(h.hairstyle, girl);
+  const framed = cut === "long" || cut === "bob" || cut === "braids" || cut === "curlyLong" || cut === "wavy" || cut === "cap";
+  // координаты в радиусах головы: X(-1) — левый край, Y(0) — центр головы, Y(-1) — макушка
+  const X = (k: number) => f(R * k);
+  const Y = (k: number) => f(hc + R * k);
+  const P = (x: number, y: number) => `${X(x)} ${Y(y)}`;
 
   // ── волосы сзади ──
   let back = "";
   if (cut === "long")
     back = `<path d="M${f(-R * 1.08)} ${f(hc - R * 0.25)} C${f(-R * 1.3)} ${f(hc + R * 1.1)} ${f(-R * 1.1)} ${f(hc + R * 1.6)} ${f(-R * 0.55)} ${f(hc + R * 1.62)} Q0 ${f(hc + R * 1.5)} ${f(R * 0.55)} ${f(hc + R * 1.62)} C${f(R * 1.1)} ${f(hc + R * 1.6)} ${f(R * 1.3)} ${f(hc + R * 1.1)} ${f(R * 1.08)} ${f(hc - R * 0.25)}Z" fill="${hair}"${s}/>`;
   else if (cut === "bob")
-    back = `<path d="M${f(-R * 1.1)} ${f(hc - R * 0.2)} C${f(-R * 1.22)} ${f(hc + R * 0.6)} ${f(-R * 1.1)} ${f(hc + R * 0.9)} ${f(-R * 0.7)} ${f(hc + R * 0.92)} H${f(R * 0.7)} C${f(R * 1.1)} ${f(hc + R * 0.9)} ${f(R * 1.22)} ${f(hc + R * 0.6)} ${f(R * 1.1)} ${f(hc - R * 0.2)}Z" fill="${hair}"${s}/>`;
+    back = `<path d="M${P(-1.12, -0.2)} C${P(-1.26, 0.5)} ${P(-1.2, 0.9)} ${P(-0.86, 0.94)} Q${P(-0.8, 0.8)} ${P(-0.7, 0.84)} H${X(0.7)} Q${P(0.8, 0.8)} ${P(0.86, 0.94)} C${P(1.2, 0.9)} ${P(1.26, 0.5)} ${P(1.12, -0.2)}Z" fill="${hair}"${s}/>`;
   else if (cut === "ponytail")
-    back = `<path d="M${f(R * 0.5)} ${f(hc - R * 0.8)} C${f(R * 1.65)} ${f(hc - R * 1.0)} ${f(R * 1.7)} ${f(hc + R * 0.4)} ${f(R * 1.2)} ${f(hc + R * 1.2)} C${f(R * 1.25)} ${f(hc + R * 0.4)} ${f(R * 1.1)} ${f(hc - R * 0.2)} ${f(R * 0.45)} ${f(hc - R * 0.45)}Z" fill="${hair}"${s}/><circle cx="${f(R * 0.86)}" cy="${f(hc - R * 0.72)}" r="${f(R * 0.13)}" fill="${trim}"${sThin}/>`;
-  else if (cut === "bun") back = `<circle cx="${f(R * 0.1)}" cy="${f(hc - R * 1.02)}" r="${f(R * 0.4)}" fill="${hair}"${s}/>`;
+    // один высокий хвост сбоку-сзади, с резинкой
+    back = `<path d="M${P(0.42, -0.86)} C${P(1.4, -1.25)} ${P(1.95, -0.3)} ${P(1.5, 0.9)} C${P(1.42, 1.25)} ${P(1.2, 1.4)} ${P(1.05, 1.5)} C${P(1.3, 0.9)} ${P(1.32, 0.0)} ${P(0.6, -0.48)}Z" fill="${hair}"${s}/><path d="M${P(1.05, -0.7)} Q${P(1.5, -0.2)} ${P(1.3, 0.9)}" stroke="${hairDark}" stroke-width="${f(R * 0.04)}" fill="none" opacity=".6"/>`;
+  else if (cut === "pigtails")
+    // два хвостика по бокам — торчат в стороны
+    back = [-1, 1]
+      .map((sd) => `<path d="M${P(sd * 0.72, -0.8)} C${P(sd * 1.55, -1.12)} ${P(sd * 2.05, -0.45)} ${P(sd * 1.82, 0.42)} C${P(sd * 1.7, 0.1)} ${P(sd * 1.62, 0.0)} ${P(sd * 1.5, 0.24)} C${P(sd * 1.5, -0.2)} ${P(sd * 1.3, -0.36)} ${P(sd * 0.86, -0.36)}Z" fill="${hair}"${s}/><path d="M${P(sd * 1.1, -0.62)} Q${P(sd * 1.62, -0.5)} ${P(sd * 1.7, 0.12)}" stroke="${hairDark}" stroke-width="${f(R * 0.04)}" fill="none" opacity=".6"/>`)
+      .join("");
   else if (cut === "curlyLong") {
     for (const side of [-1, 1])
-      for (let j = 0; j < 5; j++) back += `<circle cx="${f(side * R * (1.0 + (j % 2) * 0.12))}" cy="${f(hc - R * 0.1 + j * R * 0.32)}" r="${f(R * 0.3)}" fill="${hair}"${sThin}/>`;
+      for (let j = 0; j < 6; j++) back += `<circle cx="${f(side * R * (1.0 + (j % 2) * 0.14))}" cy="${f(hc - R * 0.2 + j * R * 0.32)}" r="${f(R * 0.3)}" fill="${hair}"${sThin}/>`;
   }
 
   // ── косички (поверх плеч, под головой) ──
@@ -753,37 +754,164 @@ export const drawChild: DemoHeroDrawer = (o) => {
       braids += `<path d="M${f(bx)} ${f(by - 4)} l${f(-R * 0.2)} ${f(-R * 0.12)} v${f(R * 0.24)}z M${f(bx)} ${f(by - 4)} l${f(R * 0.2)} ${f(-R * 0.12)} v${f(R * 0.24)}z" fill="${trim}"${sThin}/><path d="M${f(bx)} ${f(by)} q${f(-R * 0.06)} ${f(R * 0.2)} 0 ${f(R * 0.26)} q${f(R * 0.06)} ${f(-R * 0.1)} 0 ${f(-R * 0.26)}" fill="${hair}"/>`;
     }
 
+  // ── одежда (rev 15): вид одежды по полу (KID_OUTFITS) + выбранный цвет ──
+  const WHITE = "#f7f4ee";
+  const DENIM = "#4a6fa5";
+  const SLACKS = mix("#474d5e", st.palette.paper, 0.06);
+  const dk = (c: string, k = 0.25) => mix(c, "#000000", k);
+  const lt = (c: string, k = 0.5) => mix(c, "#ffffff", k);
+  /** Кусок руки/ноги от t0 до t1 (та же кривая): рукав, шорты, носок, манжета. */
+  const seg = (pts: Pt[], t0: number, t1: number): Pt[] => {
+    const L = (a: Pt, b: Pt, t: number): Pt => [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t];
+    if (pts.length === 2) return [L(pts[0], pts[1], t0), L(pts[0], pts[1], t1)];
+    const [p0, p1, p2] = pts;
+    const B = (t: number): Pt => [(1 - t) ** 2 * p0[0] + 2 * (1 - t) * t * p1[0] + t * t * p2[0], (1 - t) ** 2 * p0[1] + 2 * (1 - t) * t * p1[1] + t * t * p2[1]];
+    const c = (i: 0 | 1) => p0[i] * (1 - t0) * (1 - t1) + p1[i] * ((1 - t0) * t1 + t0 * (1 - t1)) + p2[i] * t0 * t1;
+    return [B(t0), [c(0), c(1)], B(t1)];
+  };
+  const line = (pts: Pt[], color: string, w: number, extra = "") => {
+    const d = pts.length === 3 ? `M${f(pts[0][0])} ${f(pts[0][1])} Q${f(pts[1][0])} ${f(pts[1][1])} ${f(pts[2][0])} ${f(pts[2][1])}` : `M${f(pts[0][0])} ${f(pts[0][1])} L${f(pts[1][0])} ${f(pts[1][1])}`;
+    return `<path d="${d}" stroke="${color}" stroke-width="${f(w)}" fill="none" stroke-linecap="round"${extra}/>`;
+  };
+  type Wear = { sleeve: "long" | "short" | "puff"; sleeveColor: string; cuff?: string; armStripe?: string; leg: string; shorts?: string; legStripe?: string; seam?: string; sock?: string; kneeSock?: boolean };
+  const W: Wear = (() => {
+    switch (outfitKind) {
+      case "tee-shorts": return { sleeve: "short", sleeveColor: shirt, leg: skin, shorts: "#34466b", sock: WHITE };
+      case "sweater-pants": return { sleeve: "long", sleeveColor: shirt, cuff: dk(shirt, 0.2), leg: SLACKS };
+      case "sweater-jeans": return { sleeve: "long", sleeveColor: shirt, cuff: dk(shirt, 0.2), leg: DENIM, seam: lt(DENIM, 0.35) };
+      case "shirt-pants": return { sleeve: "long", sleeveColor: shirt, cuff: lt(shirt, 0.55), leg: SLACKS };
+      case "overalls": return { sleeve: "short", sleeveColor: WHITE, leg: shirt };
+      case "hoodie-jeans": return { sleeve: "long", sleeveColor: shirt, cuff: dk(shirt, 0.18), leg: DENIM, seam: lt(DENIM, 0.35) };
+      case "tracksuit": return { sleeve: "long", sleeveColor: shirt, armStripe: WHITE, leg: shirt, legStripe: WHITE };
+      case "dress": return { sleeve: "puff", sleeveColor: shirt, leg: skin, sock: WHITE };
+      case "sarafan": return { sleeve: "long", sleeveColor: WHITE, leg: skin, sock: WHITE, kneeSock: true };
+      case "skirt-cardigan": return { sleeve: "long", sleeveColor: shirt, cuff: dk(shirt, 0.2), leg: mix(trim, "#2b2b3a", 0.45) };
+    }
+  })();
+
   // ── ноги и обувь ──
   const legs = [legL, legR]
     .map((L) => {
       const foot = L[L.length - 1];
       return (
-        limb(L, pants, legW) +
-        (girl ? `<path d="M${f(foot[0] - legW * 0.5)} ${f(foot[1] - 8)} h${f(legW)}" stroke="#ffffff" stroke-width="5" opacity=".9"/>` : "") +
+        limb(L, W.leg, legW) +
+        (W.shorts ? limb(seg(L, 0, 0.42), W.shorts, legW * 1.14) : "") +
+        (W.seam ? line(seg(L, 0.08, 0.86), W.seam, 1.6, ` stroke-dasharray="4 3"`) : "") +
+        (W.legStripe ? line(seg(L, 0.06, 0.86), W.legStripe, legW * 0.2) : "") +
+        (W.sock ? limb(seg(L, W.kneeSock ? 0.5 : 0.8, 0.97), W.sock, legW * 1.02) : "") +
         `<ellipse cx="${f(foot[0] + legW * 0.35)}" cy="${f(foot[1] + 1)}" rx="${f(legW * 0.82)}" ry="${f(legW * 0.48)}" fill="${shoes}"${sThin}/>`
       );
     })
     .join("");
 
-  // ── туловище: платье или футболка с брюками ──
-  let body: string;
-  if (girl) {
-    const hem = hipY + legLen * 0.32;
-    body =
-      `<path d="M${f(-sw + 2)} ${f(shY + 4)} Q0 ${f(shY - 4)} ${f(sw - 2)} ${f(shY + 4)} L${f(sw + 4)} ${f(shY + torso * 0.45)} L${f(sw + 18)} ${f(hem)} Q0 ${f(hem + 10)} ${f(-sw - 18)} ${f(hem)} L${f(-sw - 4)} ${f(shY + torso * 0.45)}Z" fill="${shirt}"${s}/>` +
-      `<path d="M${f(-sw - 15)} ${f(hem - 10)} Q0 ${f(hem)} ${f(sw + 15)} ${f(hem - 10)}" stroke="${trim}" stroke-width="7" fill="none"/>` +
-      `<path d="M-14 ${f(shY + 1)} q7 12 14 1 q7 11 14 -1" fill="#ffffff" stroke="${mix(shirt, "#000000", 0.25)}" stroke-width="1.6"/>`;
-  } else {
-    body =
-      `<path d="M${f(-sw - 2)} ${f(hipY - 6)} H${f(sw + 2)} L${f(sw + 2)} ${f(hipY + 14)} H${f(-sw - 2)}Z" fill="${pants}"${s}/>` +
-      `<path d="M${f(-sw + 1)} ${f(shY + 4)} Q0 ${f(shY - 4)} ${f(sw - 1)} ${f(shY + 4)} L${f(sw + 3)} ${f(hipY + 4)} Q0 ${f(hipY + 9)} ${f(-sw - 3)} ${f(hipY + 4)}Z" fill="${shirt}"${s}/>` +
-      `<path d="M${f(-sw)} ${f(shY + torso * 0.42)} H${f(sw + 1)}" stroke="${trim}" stroke-width="${f(torso * 0.11)}"/>` +
-      `<path d="M-11 ${f(shY + 1)} Q0 ${f(shY + 12)} 11 ${f(shY + 1)}" stroke="${mix(shirt, "#000000", 0.3)}" stroke-width="2.5" fill="none"/>`;
+  // ── туловище ──
+  const topPath = (hem: number, fill: string) => `<path d="M${f(-sw + 1)} ${f(shY + 4)} Q0 ${f(shY - 4)} ${f(sw - 1)} ${f(shY + 4)} L${f(sw + 3)} ${f(hem)} Q0 ${f(hem + 5)} ${f(-sw - 3)} ${f(hem)}Z" fill="${fill}"${s}/>`;
+  const waist = (color: string) => `<path d="M${f(-sw - 2)} ${f(hipY - 6)} H${f(sw + 2)} L${f(sw + 2)} ${f(hipY + 14)} H${f(-sw - 2)}Z" fill="${color}"${s}/>`;
+  const crew = (c: string) => `<path d="M-11 ${f(shY + 1)} Q0 ${f(shY + 12)} 11 ${f(shY + 1)}" stroke="${c}" stroke-width="2.5" fill="none"/>`;
+  const hemBand = (hem: number, c: string) => `<path d="M${f(-sw - 2)} ${f(hem - 5)} Q0 ${f(hem)} ${f(sw + 2)} ${f(hem - 5)}" stroke="${c}" stroke-width="${f(torso * 0.1)}" fill="none"/>`;
+  const dressShape = (top: number, hem: number, fill: string, wide = 18) =>
+    `<path d="M${f(-sw + 2)} ${f(top + 4)} Q0 ${f(top - 4)} ${f(sw - 2)} ${f(top + 4)} L${f(sw + 4)} ${f(shY + torso * 0.5)} L${f(sw + wide)} ${f(hem)} Q0 ${f(hem + 10)} ${f(-sw - wide)} ${f(hem)} L${f(-sw - 4)} ${f(shY + torso * 0.5)}Z" fill="${fill}"${s}/>`;
+  let body = "";
+  let collar = ""; // поверх шеи (капюшон, завязки, воротник)
+  const chestY = shY + torso * 0.36;
+  switch (outfitKind) {
+    case "tee-shorts":
+      body = waist(W.shorts!) + topPath(hipY + 2, shirt) + crew(dk(shirt, 0.3)) +
+        `<path d="M0 ${f(chestY - 8)}l2.6 5.6 6 .7-4.4 4.1 1.2 6-5.4-3-5.4 3 1.2-6-4.4-4.1 6-.7z" fill="${trim}"${sThin}/>`;
+      break;
+    case "sweater-pants":
+    case "sweater-jeans": {
+      const hem = hipY + 6;
+      // вязаный узор: зигзаг (мальчик) или сердечко (девочка) на груди
+      let zig = `M${f(-sw)} ${f(chestY)}`;
+      for (let i = 1; i <= 8; i++) zig += ` L${f(-sw + (i * 2 * sw) / 8)} ${f(chestY + (i % 2 ? -5 : 5))}`;
+      body = waist(W.leg) + topPath(hem, shirt) + hemBand(hem, dk(shirt, 0.2)) +
+        (girl
+          ? `<path d="M0 ${f(chestY + 10)} c-12 -8 -10 -20 0 -12 c10 -8 12 4 0 12z" fill="${trim}"${sThin}/>`
+          : `<path d="${zig}" stroke="${trim}" stroke-width="4" fill="none" stroke-linejoin="round"/>`) +
+        `<path d="M-12 ${f(shY + 1)} Q0 ${f(shY + 12)} 12 ${f(shY + 1)}" stroke="${dk(shirt, 0.2)}" stroke-width="5" fill="none"/>`;
+      break;
+    }
+    case "shirt-pants":
+      body = waist(W.leg) + topPath(hipY + 2, shirt) +
+        `<path d="M0 ${f(shY + 8)} V${f(hipY - 4)}" stroke="${dk(shirt, 0.3)}" stroke-width="1.8"/>` +
+        [0.3, 0.55, 0.8].map((k) => `<circle cx="2.5" cy="${f(shY + torso * k)}" r="2.2" fill="${WHITE}" stroke="${dk(shirt, 0.35)}" stroke-width="1"/>`).join("") +
+        `<rect x="${f(-sw * 0.72)}" y="${f(chestY - 4)}" width="${f(sw * 0.42)}" height="${f(torso * 0.16)}" rx="1.5" fill="none" stroke="${dk(shirt, 0.3)}" stroke-width="1.8"/>` +
+        `<rect x="${f(-sw - 2)}" y="${f(hipY - 5)}" width="${f(2 * sw + 4)}" height="7" fill="#6b4a2e"/><rect x="-5" y="${f(hipY - 6)}" width="10" height="9" rx="1.5" fill="#e8c35a" stroke="#6b4a2e" stroke-width="1.2"/>`;
+      collar = [-1, 1].map((sd) => `<path d="M${sd * 1} ${f(shY + 9)} L${sd * 14} ${f(shY - 2)} L${sd * 7} ${f(shY - 5)} Z" fill="${lt(shirt, 0.6)}"${sThin}/>`).join("");
+      break;
+    case "overalls": {
+      const bibTop = shY + torso * 0.36;
+      const bw = sw * 0.66;
+      body = waist(shirt) + topPath(hipY, WHITE) + crew(dk(WHITE, 0.25)) +
+        `<path d="M${f(-bw)} ${f(bibTop)} H${f(bw)} V${f(hipY + 4)} H${f(-bw)}Z" fill="${shirt}"${s}/>` +
+        [-1, 1].map((sd) => line([[sd * (sw - 7), shY + 3], [sd * (bw - 3), bibTop + 2]], shirt, 7)).join("") +
+        [-1, 1].map((sd) => `<circle cx="${f(sd * (bw - 4))}" cy="${f(bibTop + 5)}" r="3.2" fill="#f2c94c" stroke="${dk(shirt, 0.4)}" stroke-width="1.2"/>`).join("") +
+        `<rect x="${f(-bw * 0.48)}" y="${f(bibTop + torso * 0.2)}" width="${f(bw * 0.96)}" height="${f(torso * 0.2)}" rx="2" fill="none" stroke="${dk(shirt, 0.35)}" stroke-width="1.8"/>`;
+      break;
+    }
+    case "hoodie-jeans": {
+      const hem = hipY + 8;
+      body = waist(W.leg) + topPath(hem, shirt) + hemBand(hem, dk(shirt, 0.18)) +
+        `<path d="M${f(-sw * 0.62)} ${f(hipY - torso * 0.02)} L${f(-sw * 0.45)} ${f(hipY - torso * 0.3)} H${f(sw * 0.45)} L${f(sw * 0.62)} ${f(hipY - torso * 0.02)}Z" fill="${dk(shirt, 0.12)}"${sThin}/>` +
+        // капюшон за шеей
+        `<ellipse cx="0" cy="${f(shY - 1)}" rx="${f(sw * 0.78)}" ry="${f(R * 0.22)}" fill="${dk(shirt, 0.14)}"${s}/>`;
+      collar = [-1, 1].map((sd) => `<path d="M${sd * 5} ${f(shY + 5)} v${f(torso * 0.26)}" stroke="${WHITE}" stroke-width="2.4" stroke-linecap="round"/><circle cx="${sd * 5}" cy="${f(shY + 6 + torso * 0.26)}" r="2.4" fill="${WHITE}"/>`).join("");
+      break;
+    }
+    case "tracksuit": {
+      const hem = hipY + 4;
+      body = waist(shirt) + topPath(hem, shirt) + hemBand(hem, dk(shirt, 0.2)) +
+        `<path d="M0 ${f(shY + 3)} V${f(hem)}" stroke="${lt(shirt, 0.6)}" stroke-width="2.6"/><rect x="-3" y="${f(shY + 8)}" width="6" height="9" rx="1.5" fill="${WHITE}"/>` +
+        [-1, 1].map((sd) => `<path d="M${f(sd * (sw - 3))} ${f(shY + 10)} L${f(sd * (sw + 2))} ${f(hem - 4)}" stroke="${WHITE}" stroke-width="3.5"/>`).join("");
+      collar = `<path d="M-12 ${f(shY - 3)} Q0 ${f(shY + 4)} 12 ${f(shY - 3)} L12 ${f(shY + 3)} Q0 ${f(shY + 10)} -12 ${f(shY + 3)}Z" fill="${dk(shirt, 0.15)}"${sThin}/>`;
+      break;
+    }
+    case "dress": {
+      const hem = hipY + legLen * 0.34;
+      body = dressShape(shY, hem, shirt) +
+        `<path d="M${f(-sw - 15)} ${f(hem - 10)} Q0 ${f(hem)} ${f(sw + 15)} ${f(hem - 10)}" stroke="${trim}" stroke-width="7" fill="none"/>` +
+        `<path d="M${f(-sw - 3)} ${f(shY + torso * 0.5)} H${f(sw + 3)}" stroke="${trim}" stroke-width="5"/><path d="M${f(sw - 4)} ${f(shY + torso * 0.5)} l8 -7 v14z M${f(sw - 4)} ${f(shY + torso * 0.5)} l-8 -7 v14z" fill="${trim}"${sThin}/>` +
+        `<path d="M-14 ${f(shY + 1)} q7 12 14 1 q7 11 14 -1" fill="#ffffff" stroke="${dk(shirt, 0.25)}" stroke-width="1.6"/>`;
+      break;
+    }
+    case "sarafan": {
+      const hem = hipY + legLen * 0.36;
+      const top = shY + torso * 0.3;
+      body = topPath(shY + torso * 0.62, WHITE) + crew(dk(WHITE, 0.25)) +
+        `<path d="M${f(-sw * 0.78)} ${f(top)} H${f(sw * 0.78)} L${f(sw + 4)} ${f(shY + torso * 0.6)} L${f(sw + 22)} ${f(hem)} Q0 ${f(hem + 10)} ${f(-sw - 22)} ${f(hem)} L${f(-sw - 4)} ${f(shY + torso * 0.6)}Z" fill="${shirt}"${s}/>` +
+        [-1, 1].map((sd) => line([[sd * sw * 0.6, top + 2], [sd * (sw - 7), shY + 3]], shirt, 6)).join("") +
+        `<path d="M${f(-sw - 18)} ${f(hem - 9)} Q0 ${f(hem + 1)} ${f(sw + 18)} ${f(hem - 9)}" stroke="${trim}" stroke-width="6" fill="none"/>` +
+        [[-0.5, 0.25], [0.45, 0.45], [-0.1, 0.62], [0.6, 0.8], [-0.7, 0.78]].map(([x, y]) => {
+          const cx = x * (sw + 8);
+          const cy = hipY - torso * 0.15 + y * (hem - hipY + torso * 0.1);
+          return `<g fill="${WHITE}">${[0, 1, 2, 3, 4].map((k) => `<circle cx="${f(cx + Math.cos(k * 1.257) * 3.4)}" cy="${f(cy + Math.sin(k * 1.257) * 3.4)}" r="2.3"/>`).join("")}</g><circle cx="${f(cx)}" cy="${f(cy)}" r="1.8" fill="${trim}"/>`;
+        }).join("");
+      break;
+    }
+    case "skirt-cardigan": {
+      const hem = hipY + legLen * 0.3;
+      const skirt = mix(trim, "#2b2b3a", 0.25);
+      body = `<path d="M${f(-sw - 1)} ${f(hipY - 4)} H${f(sw + 1)} L${f(sw + 16)} ${f(hem)} Q0 ${f(hem + 6)} ${f(-sw - 16)} ${f(hem)}Z" fill="${skirt}"${s}/>` +
+        [-0.5, 0, 0.5].map((k) => `<path d="M${f(k * sw)} ${f(hipY)} L${f(k * (sw + 16))} ${f(hem)}" stroke="${dk(skirt, 0.3)}" stroke-width="1.8"/>`).join("") +
+        topPath(hipY + 2, shirt) +
+        `<path d="M-10 ${f(shY - 1)} L0 ${f(shY + torso * 0.4)} L10 ${f(shY - 1)}Z" fill="${WHITE}"${sThin}/>` +
+        `<path d="M0 ${f(shY + torso * 0.4)} V${f(hipY + 3)}" stroke="${dk(shirt, 0.3)}" stroke-width="1.8"/>` +
+        [0.52, 0.72, 0.9].map((k) => `<circle cx="3" cy="${f(shY + torso * k)}" r="2.6" fill="${trim}" stroke="${dk(shirt, 0.35)}" stroke-width="1"/>`).join("") +
+        hemBand(hipY + 2, dk(shirt, 0.18));
+      break;
+    }
   }
   const neck = `<rect x="${f(-R * 0.18)}" y="${f(hc + R * 0.7)}" width="${f(R * 0.36)}" height="${f(shY - hc - R * 0.6)}" fill="${skin}"/>`;
 
   // ── руки ──
-  const arm = (A: Pt[]) => limb(A, shirt, armW) + `<circle cx="${f(A[2][0])}" cy="${f(A[2][1])}" r="${f(armW * 0.62)}" fill="${skin}"${sThin}/>`;
+  const arm = (A: Pt[]) =>
+    (W.sleeve === "long"
+      ? limb(A, W.sleeveColor, armW) + (W.cuff ? limb(seg(A, 0.8, 0.9), W.cuff, armW * 1.06) : "") + (W.armStripe ? line(seg(A, 0.04, 0.82), W.armStripe, armW * 0.2) : "")
+      : W.sleeve === "short"
+      ? limb(A, skin, armW * 0.92) + limb(seg(A, 0, 0.42), W.sleeveColor, armW * 1.14)
+      : limb(A, skin, armW * 0.9) + `<ellipse cx="${f(A[0][0])}" cy="${f(A[0][1] + 2)}" rx="${f(armW * 0.82)}" ry="${f(armW * 0.7)}" fill="${W.sleeveColor}"${sThin}/>`) +
+    `<circle cx="${f(A[A.length - 1][0])}" cy="${f(A[A.length - 1][1])}" r="${f(armW * 0.62)}" fill="${skin}"${sThin}/>`;
 
   // ── голова ──
   const ear = framed ? "" : [-1, 1].map((sd) => `<ellipse cx="${f(sd * R * 0.97)}" cy="${f(hc + R * 0.12)}" rx="${f(R * 0.16)}" ry="${f(R * 0.2)}" fill="${skin}"${sThin}/>`).join("");
@@ -802,7 +930,8 @@ export const drawChild: DemoHeroDrawer = (o) => {
           (sd) =>
             (eyeCol
               ? // Цвет глаз (rev 14): цветная радужка, тёмный зрачок, блик — крупнее, чтобы цвет было видно
-                `<ellipse cx="${f(sd * ex)}" cy="${f(ey)}" rx="${f(R * 0.12)}" ry="${f(R * 0.14)}" fill="${eyeCol}" stroke="${faceInk}" stroke-width="${f(R * 0.025)}" data-eyes="${eyeCol}"/><circle cx="${f(sd * ex)}" cy="${f(ey + R * 0.01)}" r="${f(R * 0.055)}" fill="${faceInk}"/><circle cx="${f(sd * ex + R * 0.04)}" cy="${f(ey - R * 0.05)}" r="${f(R * 0.035)}" fill="#ffffff"/>`
+                // rev 15: радужка крупнее, зрачок меньше — цвет виден и на маленькой картинке; светлое кольцо внутри
+                `<ellipse cx="${f(sd * ex)}" cy="${f(ey)}" rx="${f(R * 0.15)}" ry="${f(R * 0.17)}" fill="${eyeCol}" stroke="${faceInk}" stroke-width="${f(R * 0.028)}" data-eyes="${eyeCol}"/><ellipse cx="${f(sd * ex)}" cy="${f(ey + R * 0.03)}" rx="${f(R * 0.1)}" ry="${f(R * 0.1)}" fill="${mix(eyeCol, "#ffffff", 0.28)}" opacity=".55"/><circle cx="${f(sd * ex)}" cy="${f(ey + R * 0.01)}" r="${f(R * 0.05)}" fill="${faceInk}"/><circle cx="${f(sd * ex + R * 0.055)}" cy="${f(ey - R * 0.065)}" r="${f(R * 0.045)}" fill="#ffffff"/>`
               : `<ellipse cx="${f(sd * ex)}" cy="${f(ey)}" rx="${f(R * 0.085)}" ry="${f(R * 0.11)}" fill="${faceInk}"/><circle cx="${f(sd * ex + R * 0.03)}" cy="${f(ey - R * 0.04)}" r="${f(R * 0.032)}" fill="#ffffff"/>`) +
             (girl ? `<path d="M${f(sd * (ex + R * 0.07))} ${f(ey - R * 0.07)} l${f(sd * R * 0.07)} ${f(-R * 0.05)}" stroke="${faceInk}" stroke-width="${f(R * 0.035)}" stroke-linecap="round"/>` : ""),
         )
@@ -830,15 +959,36 @@ export const drawChild: DemoHeroDrawer = (o) => {
     ? `<g fill="#ffffff" fill-opacity=".18" stroke="${faceInk}" stroke-width="${f(R * 0.055)}"><circle cx="${f(-ex)}" cy="${f(ey)}" r="${f(R * 0.25)}"/><circle cx="${f(ex)}" cy="${f(ey)}" r="${f(R * 0.25)}"/><path d="M${f(-ex + R * 0.25)} ${f(ey - 2)} Q0 ${f(ey - R * 0.08)} ${f(ex - R * 0.25)} ${f(ey - 2)} M${f(-ex - R * 0.25)} ${f(ey - 2)} L${f(-R * 0.97)} ${f(ey - R * 0.06)} M${f(ex + R * 0.25)} ${f(ey - 2)} L${f(R * 0.97)} ${f(ey - R * 0.06)}" fill="none"/></g>`
     : "";
 
-  // ── волосы спереди ──
+  // ── волосы спереди (rev 15: 6 причёсок у мальчиков и 6 у девочек, все разные) ──
   let front: string;
+  let ties = ""; // резинки, заколка — поверх волос
   const top = (k: number) => hc - R * k;
-  if (cut === "buzz") {
-    front = `<path d="M${f(-R * 0.98)} ${f(hc - R * 0.05)} C${f(-R * 1.02)} ${f(top(1.36))} ${f(R * 1.02)} ${f(top(1.36))} ${f(R * 0.98)} ${f(hc - R * 0.05)} C${f(R * 0.8)} ${f(top(0.62))} ${f(-R * 0.8)} ${f(top(0.62))} ${f(-R * 0.98)} ${f(hc - R * 0.05)}Z" fill="${hair}" opacity=".8"/>`;
-  } else if (cut === "short") {
+  const strand = (d: string) => `<path d="${d}" stroke="${hairDark}" stroke-width="${f(R * 0.045)}" fill="none" stroke-linecap="round" opacity=".7"/>`;
+  const centerPart = (sideY: number, inner: number) =>
+    `<path d="M${P(-1.06, sideY)} C${P(-1.16, -1.45 - sideY * 0.5)} ${P(1.16, -1.45 - sideY * 0.5)} ${P(1.06, sideY)} L${P(inner, sideY)} C${P(inner, -0.45)} ${P(0.42, -0.66)} ${P(0, -0.6)} C${P(-0.42, -0.66)} ${P(-inner, -0.45)} ${P(-inner, sideY)}Z" fill="${hair}"${s}/>` +
+    strand(`M${P(0, -0.62)} L${P(0, -0.98)}`);
+  if (cut === "short") {
+    // аккуратная короткая стрижка с пробором сбоку, уши открыты
     front =
-      `<path d="M${f(-R * 1.05)} ${f(hc + R * 0.05)} C${f(-R * 1.15)} ${f(top(1.42))} ${f(R * 1.15)} ${f(top(1.42))} ${f(R * 1.05)} ${f(hc + R * 0.05)} L${f(R * 0.88)} ${f(top(0.2))} L${f(R * 0.66)} ${f(top(0.46))} L${f(R * 0.42)} ${f(top(0.32))} L${f(R * 0.18)} ${f(top(0.52))} L${f(-R * 0.08)} ${f(top(0.36))} L${f(-R * 0.34)} ${f(top(0.54))} L${f(-R * 0.6)} ${f(top(0.38))} L${f(-R * 0.84)} ${f(top(0.46))} L${f(-R * 0.94)} ${f(top(0.1))}Z" fill="${hair}"${s}/>` +
-      `<path d="M${f(R * 0.05)} ${f(top(1.02))} q${f(R * 0.1)} ${f(-R * 0.3)} ${f(R * 0.3)} ${f(-R * 0.26)} q${f(-R * 0.16)} ${f(R * 0.06)} ${f(-R * 0.12)} ${f(R * 0.28)}" fill="${hair}"${sThin}/>`;
+      `<path d="M${P(-1.04, 0.02)} C${P(-1.14, -1.42)} ${P(1.14, -1.42)} ${P(1.04, 0.02)} L${P(0.93, -0.24)} C${P(0.82, -0.56)} ${P(0.35, -0.64)} ${P(-0.08, -0.56)} C${P(-0.42, -0.7)} ${P(-0.84, -0.58)} ${P(-0.93, -0.24)}Z" fill="${hair}"${s}/>` +
+      strand(`M${P(-0.42, -0.98)} Q${P(-0.36, -0.78)} ${P(-0.1, -0.58)}`) + strand(`M${P(-0.3, -0.9)} Q${P(0.3, -0.92)} ${P(0.75, -0.55)}`);
+  } else if (cut === "spiky") {
+    // ёжик: короткие волосы торчат острыми прядками вверх
+    const cy = hc - R * 0.12;
+    let d = `M${P(-1.0, -0.05)}`;
+    const n = 13;
+    for (let i = 0; i <= n; i++) {
+      const a = Math.PI * (1.04 + (i / n) * 0.92);
+      const r = i % 2 ? 1.34 : 0.98;
+      d += ` L${f(Math.cos(a) * R * r)} ${f(cy + Math.sin(a) * R * r)}`;
+    }
+    d += ` L${P(1.0, -0.05)} C${P(0.88, -0.48)} ${P(0.5, -0.5)} ${P(0.4, -0.56)} L${P(0.26, -0.46)} L${P(0.12, -0.6)} L${P(-0.04, -0.47)} L${P(-0.2, -0.6)} L${P(-0.34, -0.47)} L${P(-0.48, -0.58)} C${P(-0.7, -0.5)} ${P(-0.9, -0.45)} ${P(-1.0, -0.05)}Z`;
+    front = `<path d="${d}" fill="${hair}"${s}/>`;
+  } else if (cut === "fringe") {
+    // длинная косая чёлка на лоб, уши открыты
+    front =
+      `<path d="M${P(-1.05, 0.05)} C${P(-1.15, -1.45)} ${P(1.15, -1.45)} ${P(1.05, 0.05)} L${P(0.95, -0.08)} C${P(0.72, 0.0)} ${P(0.4, -0.04)} ${P(0.1, -0.18)} C${P(-0.2, -0.3)} ${P(-0.55, -0.5)} ${P(-0.88, -0.36)} L${P(-0.95, -0.1)}Z" fill="${hair}"${s}/>` +
+      strand(`M${P(-0.55, -0.95)} Q${P(-0.3, -0.6)} ${P(-0.12, -0.28)}`) + strand(`M${P(-0.05, -1.0)} Q${P(0.2, -0.6)} ${P(0.38, -0.08)}`) + strand(`M${P(0.45, -0.92)} Q${P(0.65, -0.5)} ${P(0.74, -0.04)}`);
   } else if (cut === "curly" || cut === "curlyLong") {
     front = `<path d="M${f(-R * 1.02)} ${f(hc)} C${f(-R * 1.1)} ${f(top(1.4))} ${f(R * 1.1)} ${f(top(1.4))} ${f(R * 1.02)} ${f(hc)} C${f(R * 0.7)} ${f(top(0.5))} ${f(-R * 0.7)} ${f(top(0.5))} ${f(-R * 1.02)} ${f(hc)}Z" fill="${hair}"/>`;
     for (let i = 0; i <= 9; i++) {
@@ -846,22 +996,44 @@ export const drawChild: DemoHeroDrawer = (o) => {
       front += `<circle cx="${f(Math.cos(a) * R * 0.96)}" cy="${f(hc - R * 0.12 + Math.sin(a) * R * 0.95)}" r="${f(R * 0.27)}" fill="${hair}"${sThin}/>`;
     }
     for (let i = 0; i < 4; i++) front += `<circle cx="${f(-R * 0.45 + i * R * 0.3)}" cy="${f(top(0.55) + (i % 2) * 4)}" r="${f(R * 0.2)}" fill="${hair}"/>`;
+  } else if (cut === "wavy") {
+    // волнистые до ушей: волнистые бока закрывают уши, волной чёлка
+    front =
+      `<path d="M${P(-1.08, 0.44)} Q${P(-1.3, 0.22)} ${P(-1.12, 0.02)} Q${P(-1.32, -0.22)} ${P(-1.1, -0.46)} C${P(-1.15, -1.46)} ${P(1.15, -1.46)} ${P(1.1, -0.46)} Q${P(1.32, -0.22)} ${P(1.12, 0.02)} Q${P(1.3, 0.22)} ${P(1.08, 0.44)} Q${P(0.98, 0.3)} ${P(0.84, 0.4)} L${P(0.84, 0.0)} C${P(0.84, -0.3)} ${P(0.66, -0.42)} ${P(0.44, -0.34)} Q${P(0.22, -0.14)} ${P(0.0, -0.34)} Q${P(-0.22, -0.54)} ${P(-0.44, -0.32)} C${P(-0.66, -0.42)} ${P(-0.84, -0.3)} ${P(-0.84, 0.0)} L${P(-0.84, 0.4)} Q${P(-0.98, 0.3)} ${P(-1.08, 0.44)}Z" fill="${hair}"${s}/>` +
+      strand(`M${P(-1.0, -0.3)} q${X(0.1)} ${X(0.15)} 0 ${X(0.3)} q${X(-0.1)} ${X(0.15)} 0 ${X(0.3)}`) + strand(`M${P(1.0, -0.3)} q${X(-0.1)} ${X(0.15)} 0 ${X(0.3)} q${X(0.1)} ${X(0.15)} 0 ${X(0.3)}`) +
+      strand(`M${P(-0.5, -0.95)} Q${P(-0.2, -0.75)} ${P(0.0, -0.4)}`);
+  } else if (cut === "cap") {
+    // «шапочка»: ровная круглая стрижка, прямая чёлка над бровями, уши закрыты
+    front =
+      `<path d="M${P(-1.12, 0.34)} L${P(-1.14, -0.2)} C${P(-1.18, -1.48)} ${P(1.18, -1.48)} ${P(1.14, -0.2)} L${P(1.12, 0.34)} Q${P(1.0, 0.38)} ${P(0.86, 0.34)} L${P(0.86, -0.22)} L${P(-0.86, -0.22)} L${P(-0.86, 0.34)} Q${P(-1.0, 0.38)} ${P(-1.12, 0.34)}Z" fill="${hair}"${s}/>` +
+      [-0.6, -0.3, 0, 0.3, 0.6].map((k) => strand(`M${P(k, -0.5)} L${P(k, -0.26)}`)).join("");
+  } else if (cut === "pigtails" || cut === "braids") {
+    front = centerPart(cut === "braids" ? 0.5 : 0.06, cut === "braids" ? 0.86 : 0.93);
+    if (cut === "pigtails") ties = [-1, 1].map((sd) => `<circle cx="${X(sd * 0.95)}" cy="${Y(-0.62)}" r="${f(R * 0.13)}" fill="${trim}"${sThin}/>`).join("");
+  } else if (cut === "bob") {
+    // каре: ровная чёлка и прямые пряди до подбородка, заколка-бантик
+    front =
+      `<path d="M${P(-1.12, 0.66)} L${P(-1.14, -0.2)} C${P(-1.18, -1.48)} ${P(1.18, -1.48)} ${P(1.14, -0.2)} L${P(1.12, 0.66)} Q${P(1.0, 0.74)} ${P(0.84, 0.66)} L${P(0.84, -0.2)} L${P(-0.84, -0.2)} L${P(-0.84, 0.66)} Q${P(-1.0, 0.74)} ${P(-1.12, 0.66)}Z" fill="${hair}"${s}/>` +
+      [-0.5, -0.15, 0.2, 0.55].map((k) => strand(`M${P(k, -0.52)} L${P(k + 0.02, -0.24)}`)).join("");
+    ties = `<path d="M${P(0.72, -0.62)} l${X(-0.2)} ${X(-0.12)} v${X(0.24)}z M${P(0.72, -0.62)} l${X(0.2)} ${X(-0.12)} v${X(0.24)}z" fill="${trim}"${sThin}/><circle cx="${X(0.72)}" cy="${Y(-0.62)}" r="${f(R * 0.05)}" fill="${trim}"${sThin}/>`;
   } else {
-    // гладкие волосы с чёлкой; у длинных/каре/косичек — пряди по бокам лица
+    // гладкие волосы с чёлкой набок; у длинных — пряди по бокам лица
     const side = framed ? R * 0.78 : R * 0.05;
     const inner = framed ? R * 0.82 : R * 1.0;
     front =
-      `<path d="M${f(-R * 1.08)} ${f(hc + side)} C${f(-R * 1.2)} ${f(top(1.45))} ${f(R * 1.2)} ${f(top(1.45))} ${f(R * 1.08)} ${f(hc + side)} L${f(inner)} ${f(hc + side)} C${f(inner)} ${f(top(0.2))} ${f(R * 0.55)} ${f(top(0.48))} ${f(R * 0.18)} ${f(top(0.44))} C${f(-R * 0.12)} ${f(top(0.66))} ${f(-inner * 0.9)} ${f(top(0.45))} ${f(-inner)} ${f(hc + side)}Z" fill="${hair}"${s}/>` +
+      `<path d="M${f(-R * 1.08)} ${f(hc + side)} C${f(-R * 1.2)} ${f(top(framed ? 1.8 : 1.45))} ${f(R * 1.2)} ${f(top(framed ? 1.8 : 1.45))} ${f(R * 1.08)} ${f(hc + side)} L${f(inner)} ${f(hc + side)} C${f(inner)} ${f(top(0.2))} ${f(R * 0.55)} ${f(top(0.48))} ${f(R * 0.18)} ${f(top(0.44))} C${f(-R * 0.12)} ${f(top(0.66))} ${f(-inner * 0.9)} ${f(top(0.45))} ${f(-inner)} ${f(hc + side)}Z" fill="${hair}"${s}/>` +
       `<path d="M${f(R * 0.1)} ${f(top(0.95))} Q${f(R * 0.3)} ${f(top(0.7))} ${f(R * 0.18)} ${f(top(0.46))}" stroke="${hairDark}" stroke-width="${f(R * 0.04)}" fill="none" opacity=".6"/>`;
   }
+  if (cut === "ponytail") ties = `<circle cx="${X(0.62)}" cy="${Y(-0.84)}" r="${f(R * 0.13)}" fill="${trim}"${sThin}/>`;
+  front += ties;
   // блик на волосах
-  if (cut !== "buzz") front += `<path d="M${f(-R * 0.58)} ${f(top(0.7))} Q${f(-R * 0.4)} ${f(top(0.88))} ${f(-R * 0.16)} ${f(top(0.92))}" stroke="#ffffff" stroke-width="${f(R * 0.07)}" fill="none" stroke-linecap="round" opacity=".28"/>`;
+  if (cut !== "spiky") front += `<path d="M${f(-R * 0.58)} ${f(top(0.7))} Q${f(-R * 0.4)} ${f(top(0.88))} ${f(-R * 0.16)} ${f(top(0.92))}" stroke="#ffffff" stroke-width="${f(R * 0.07)}" fill="none" stroke-linecap="round" opacity=".28"/>`;
 
   const rot = `rotate(${tilt} 0 ${f(shY)})`;
   const head = `<g transform="${rot}">${ear}${headShape}${cheeks}${freckles}${brows}${eyes}${nose}${mouth}${front}${glasses}</g>`;
 
-  return `<g data-figure="child" data-gender="${girl ? "f" : "m"}" transform="translate(${f(o.x)} ${f(o.y)}) scale(${f(o.flip ? -o.scale : o.scale)} ${f(o.scale)})">
+  return `<g data-figure="child" data-gender="${girl ? "f" : "m"}" data-haircut="${cut}" data-outfit="${outfitKind}" data-outfit-color="${shirt}" transform="translate(${f(o.x)} ${f(o.y)}) scale(${f(o.flip ? -o.scale : o.scale)} ${f(o.scale)})">
     <ellipse cx="0" cy="${footY + 6}" rx="${f(56 + age)}" ry="10" fill="rgba(0,0,0,.16)"/>
-    ${back ? `<g transform="${rot}">${back}</g>` : ""}${arm(armL)}${legs}${body}${neck}${braids}${head}${arm(armR)}
+    ${back ? `<g transform="${rot}">${back}</g>` : ""}${arm(armL)}${legs}${body}${neck}${collar}${braids}${head}${arm(armR)}
   </g>`;
 };

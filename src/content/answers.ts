@@ -141,11 +141,13 @@ export const AnswersV2 = z.preprocess(
     appearance: z
       .object({
         hair: str(40).optional().default(""),
+        /** Ребёнку (rev 15) — ключ из KID_HAIRSTYLES своего пола; старые «длинные», «кудряшки» → normalizeKidHairstyle. */
         hairstyle: str(40).optional().default(""),
         skin: str(40).optional().default(""),
         glasses: z.boolean().optional().default(false),
         freckles: z.boolean().optional().default(false),
         beard: z.boolean().optional().default(false),
+        /** Ребёнку (rev 15) — вид одежды картинкой, ключ из KID_OUTFITS своего пола; старые «футболка», «свитер» → normalizeKidOutfit. */
         clothes: str(60).optional().default(""),
         /** rev 14 — выбор картинками: цвет глаз, улыбка (smile | wide | calm), румянец, цвет одежды (OUTFIT_COLORS). */
         eyes: str(20).optional().default(""),

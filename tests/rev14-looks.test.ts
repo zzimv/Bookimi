@@ -122,7 +122,7 @@ describe("страницы книги, эскизы и PDF — та же вне�
       expect(svg).toContain('data-watermark="букими"');
       expect(svg).toMatch(/data-extra="1" data-kind="adult"><g data-figure="adult" data-gender="f" data-age="old"/);
       expect(svg).toMatch(/data-extra="2" data-kind="pet"><g data-species="cat"/);
-      expect(svg).toContain('data-eyes="#4f9a5a"');
+      expect(svg).toContain('data-eyes="#1fb847"');
     }
   });
 });
