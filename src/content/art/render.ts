@@ -10,6 +10,8 @@ import { MOODS } from "../moods";
 import { drawDeco, escapeXml, HAIR_COLORS, rnd } from "./shared";
 import { FIGURE_FILTERS, PROP_BACKDROPS, fxBackdrop, fxDefs, fxLayers } from "./fx";
 import { sceneProps } from "./props";
+import { childBody } from "./kids";
+import { castFor, drawCast, layoutCast } from "./cast";
 
 const DEFAULT_STYLE: ArtStyle["demo"] = { palette: { paper: "#fbf8f1", ink: "#3a3a44", accents: ["#d9534f", "#3e8ed0", "#f0ad4e", "#5cb85c"] }, line: "none", texture: "none" };
 
@@ -36,6 +38,11 @@ export interface DemoRenderOpts {
   layer?: "background" | "mask";
   /** Описание сцены разворота (англ.): по нему — реквизит (река, окно, сани, подарки…) и тон неба (art/props.ts). */
   scene?: string;
+  /**
+   * Персонажи сказки (rev 16, art/cast.ts): дракончик, Дед Мороз, сова, лиса… Не задано — по книге (PlotSpread.cast,
+   * сцена разворота, на обложке — главный спутник), для своей истории — по scene; [] — никого.
+   */
+  cast?: string[];
   /**
    * Группа на заднем плане (дети группы/класса и взрослые, до 40): маленькие фигуры рядами, как на общей
    * фотографии, никогда не заходят на героя и доп. героев. Внешность — crowdLooks(...). Рисуется, если передана.
@@ -339,6 +346,11 @@ export function renderDemoSpread(o: DemoRenderOpts): string {
     return heroDrawer(k)({ kind: k, look: crowdList[c.i].look, x: c.x, y: c.feet - 190 * c.scale, scale: c.scale, style, index: idx + c.i + 3, flip: c.x > heroX });
   });
   const hero = heroDrawer(heroKind)({ kind: heroKind, look: o.hero, x: heroX, y: H * 0.6, scale: heroScale, style, index: idx, flip: left && heroKind === "pet" });
+  // Персонажи сказки — в свободных полосах кадра, ниже текста, мимо героев и водяного знака
+  const castKeys = o.cast ?? castFor(o.plot.slug, idx, o.scene);
+  const castSvg = layoutCast(castKeys, { W, H, zoneLo, zoneHi, feet: heroFeet, heroScale, heroX, textBottom: H * (idx === 0 ? 0.3 : 0.38), crowd: crowd.length > 0 })
+    .map((c) => drawCast(c.key, { x: c.x, y: c.y, scale: c.scale, flip: c.flip, style }))
+    .join("");
   // Реквизит сцены — на свободной от героев стороне, за героями (у каждого разворота свой кадр)
   const props = sceneProps(o.scene, { W, H, zoneLo, zoneHi, feet: heroFeet, theme, ink: style.palette.ink, seed: idx });
 
@@ -348,9 +360,9 @@ export function renderDemoSpread(o: DemoRenderOpts): string {
   const layers = style.overlays?.length ? fxLayers(style, { W, H, heroX, feet: heroFeet, scale: heroScale, index: idx }) : { behind: "", above: "" };
   if (o.layer === "mask") {
     const white = `<filter id="mask-white" color-interpolation-filters="sRGB"><feColorMatrix type="matrix" values="0 0 0 0 1 0 0 0 0 1 0 0 0 0 1 0 0 0 1 0"/></filter>`;
-    return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${H}" width="${W}" height="${H}"><defs>${white}${textureDefs(style)}${extraFx ? fxDefs(style, W, H) : ""}</defs><rect width="${W}" height="${H}" fill="#000"/><g filter="url(#mask-white)"><g${fx}>${crowd.join("")}${extras.join("")}${hero}</g></g></svg>`;
+    return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${H}" width="${W}" height="${H}"><defs>${white}${textureDefs(style)}${extraFx ? fxDefs(style, W, H) : ""}</defs><rect width="${W}" height="${H}" fill="#000"/><g filter="url(#mask-white)"><g${fx}>${crowd.join("")}${castSvg}${extras.join("")}${hero}</g></g></svg>`;
   }
-  const figures = o.layer === "background" ? "" : `<g${fx}>${crowd.join("")}${extras.join("")}${hero}</g>`;
+  const figures = o.layer === "background" ? "" : `<g${fx}>${crowd.join("")}${castSvg}${extras.join("")}${hero}</g>`;
   const scenery = propsInBg ? fxBackdrop(style, `${bg}${props.sky}${props.behind}`, W, H) : `${bg}${props.sky}${props.behind}`;
   const art = `${scenery}${layers.behind}${figures}${layers.above}${textureOverlay(style, W, H)}`;
   let svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${H}" width="${W}" height="${H}">
@@ -392,12 +404,14 @@ export function renderDemoCharacter(o: { kind?: HeroKind | ExtraDrawKind; look: 
   const bg = o.bg ?? "#f3e4c2";
   const drawAs: HeroKind = kind === "toy" || kind === "custom" ? "child" : kind;
   // Крупно лицо (rev 14: варианты цвета глаз, улыбки, причёски — картинками): голова в центре кадра
-  const faceY = kind === "child" ? 184 - (50 + 3 * age) - (58 + 1.8 * age) - (47 - 0.75 * age) * 0.84 : kind === "adult" ? -128 + (age >= 72 ? 12 : age >= 60 ? 6 : 0) : kind === "teen" ? -120 : null;
+  const faceY = kind === "child" ? childBody(age, o.look.build).hc : kind === "adult" ? -128 + (age >= 72 ? 12 : age >= 60 ? 6 : 0) : kind === "teen" ? -120 : null;
   if (o.face && faceY !== null) {
     // bust — по пояс: видно косички, хвостик, длинные волосы и одежду
     const bust = o.face === "bust";
     const fs = (kind === "child" ? 2.5 : 3.1) * (bust ? 0.62 : 1);
-    const figF = heroDrawer(kind)({ kind: drawAs, look: o.look, x: W / 2, y: H * (bust ? 0.36 : 0.52) - faceY * fs, scale: fs, style, index: kind === "adult" ? 0 : 1 });
+    // В кепке или шапке с помпоном (rev 16) — лицо чуть ниже, чтобы помпон не срезался
+    const hatDown = kind === "child" && o.look.hat ? 0.07 : 0;
+    const figF = heroDrawer(kind)({ kind: drawAs, look: o.look, x: W / 2, y: H * ((bust ? 0.36 : 0.52) + hatDown) - faceY * fs, scale: fs, style, index: kind === "adult" ? 0 : 1 });
     return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${H}" width="${W}" height="${H}"><defs>${textureDefs(style)}<radialGradient id="ch-bg" cx="50%" cy="42%" r="62%"><stop offset="0" stop-color="#fffdf7"/><stop offset="1" stop-color="${bg}"/></radialGradient></defs><rect width="${W}" height="${H}" fill="url(#ch-bg)"/>${figF}</svg>`;
   }
   const fig = heroDrawer(kind)({ kind: drawAs, look: o.look, x: W / 2, y: feet - 190 * scale, scale, style, index: kind === "adult" ? 0 : 1 });

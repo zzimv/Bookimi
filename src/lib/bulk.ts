@@ -120,7 +120,7 @@ export function bulkCopyAnswers(a: AnswersV2T, i: number, dedication = DEFAULT_B
       birthDate: "",
       photoIds: m.photoId ? [m.photoId] : [],
     },
-    appearance: { hair: "", hairstyle: "", skin: "", glasses: false, freckles: false, beard: false, clothes: "", eyes: "", smile: "", blush: false, outfitColor: "", custom: m.description ?? "" },
+    appearance: { hair: "", hairstyle: "", skin: "", glasses: false, freckles: false, beard: false, clothes: "", eyes: "", smile: "", blush: false, outfitColor: "", dimples: false, toothGap: false, hairAcc: "", hairAccColor: "", hat: "", build: "", custom: m.description ?? "" },
     interests: [],
     interestCustom: "",
     extras: [],

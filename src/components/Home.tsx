@@ -29,7 +29,7 @@ export function HomeHero({ shelf, rating }: { shelf: ShelfLink[]; rating: { avg:
           Книга, где главный герой —{" "}
           <span className="home-hero__line">тот, кого вы любите</span>
         </h1>
-        <p className="home-hero__lead">Загрузите фото или опишите героя — и за 5 минут получите бесплатное превью сказки</p>
+        <p className="home-hero__lead">Загрузите фото или выберите внешность героя картинками — и за 5 минут получите бесплатное превью сказки</p>
         <div className="home-hero__cta">
           <Link href="/sozdat" className="btn btn--primary btn--lg">
             Создать книгу <span aria-hidden="true">→</span>

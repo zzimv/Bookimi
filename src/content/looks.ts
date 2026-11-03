@@ -116,3 +116,74 @@ export function kidOutfitKind(value: string | undefined, gender: string | undefi
   const key = normalizeKidOutfit(value, g);
   return KID_OUTFITS[g].find((x) => x.key === key)!.kind;
 }
+
+// ── rev 16: ямочки, щербинка, украшение для волос (только девочки), головной убор, рост ──
+// Всё выбирается картинками; в ответах — appearance.dimples / toothGap / hairAcc / hairAccColor / hat / build
+// (необязательные, по умолчанию пусто). Рисует drawChild (art/kids.ts) — на живой обложке, страницах, превью и в PDF.
+
+/** Украшение для волос (только девочки): ключ → как рисовать. Пусто — без украшения. */
+export const KID_HAIR_ACCS = [
+  { key: "бантик", kind: "bow", label: "Бантик", g: "m" },
+  { key: "заколка", kind: "clip", label: "Заколка", g: "f" },
+  { key: "ободок", kind: "band", label: "Ободок", g: "m" },
+] as const;
+export type KidHairAccKind = (typeof KID_HAIR_ACCS)[number]["kind"];
+
+/** Цвет украшения: маленькая палитра (ключи OUTFIT_COLORS); пусто — как одежда. Слова — для подписей по роду. */
+export const HAIR_ACC_COLOR_KEYS = ["красная", "розовая", "жёлтая", "голубая", "фиолетовая"] as const;
+export const HAIR_ACC_COLOR_WORD: Record<string, { m: string; f: string }> = {
+  красная: { m: "красный", f: "красная" },
+  розовая: { m: "розовый", f: "розовая" },
+  жёлтая: { m: "жёлтый", f: "жёлтая" },
+  голубая: { m: "голубой", f: "голубая" },
+  фиолетовая: { m: "фиолетовый", f: "фиолетовая" },
+};
+
+/** Головной убор (мальчики и девочки). Пусто — без головного убора. */
+export const KID_HATS = [
+  { key: "кепка", kind: "cap", label: "Кепка" },
+  { key: "шапка с помпоном", kind: "beanie", label: "Шапка с помпоном" },
+] as const;
+export type KidHatKind = (typeof KID_HATS)[number]["kind"];
+
+/** Рост и сложение: пониже / как обычно / повыше. Пусто или «обычный» — как обычно. */
+export const KID_BUILDS = [
+  { key: "пониже", kind: "short", label: "Пониже" },
+  { key: "обычный", kind: "normal", label: "Как обычно" },
+  { key: "повыше", kind: "tall", label: "Повыше" },
+] as const;
+export type KidBuildKind = (typeof KID_BUILDS)[number]["kind"];
+
+/** Украшение для волос: только у девочек и только из списка. */
+export function kidHairAccKind(value: string | undefined | null, gender: string | undefined): KidHairAccKind | undefined {
+  if (kg(gender) !== "girl") return undefined;
+  return KID_HAIR_ACCS.find((x) => x.key === (value ?? "").trim().toLowerCase())?.kind;
+}
+export function kidHatKind(value: string | undefined | null): KidHatKind | undefined {
+  const v = (value ?? "").trim().toLowerCase();
+  return KID_HATS.find((x) => x.key === v)?.kind ?? (v === "шапка" ? "beanie" : undefined);
+}
+export function kidBuildKind(value: string | undefined | null): KidBuildKind {
+  return KID_BUILDS.find((x) => x.key === (value ?? "").trim().toLowerCase())?.kind ?? "normal";
+}
+/** Пропорции по росту: ноги, туловище, ширина плеч (тонко — герой всё так же помещается в сцены). */
+export const KID_BUILD_K: Record<KidBuildKind, { leg: number; torso: number; width: number }> = {
+  short: { leg: 0.82, torso: 0.9, width: 1.07 },
+  normal: { leg: 1, torso: 1, width: 1 },
+  tall: { leg: 1.17, torso: 1.08, width: 0.95 },
+};
+
+/** Новые приметы ребёнка (rev 16) из ответов — только известные значения; украшение — только девочке. */
+export function kidLookExtras(p: { dimples?: boolean; toothGap?: boolean; hairAcc?: string; hairAccColor?: string; hat?: string; build?: string } | undefined, gender: string | undefined) {
+  const acc = kidHairAccKind(p?.hairAcc, gender) ? p!.hairAcc!.trim().toLowerCase() : undefined;
+  const hat = kidHatKind(p?.hat) ? KID_HATS.find((x) => x.kind === kidHatKind(p?.hat))!.key : undefined;
+  const build = kidBuildKind(p?.build);
+  return {
+    dimples: p?.dimples || undefined,
+    toothGap: p?.toothGap || undefined,
+    hairAcc: acc,
+    hairAccColor: acc && (HAIR_ACC_COLOR_KEYS as readonly string[]).includes(p?.hairAccColor ?? "") ? p!.hairAccColor : undefined,
+    hat,
+    build: build === "normal" ? undefined : KID_BUILDS.find((x) => x.kind === build)!.key,
+  };
+}

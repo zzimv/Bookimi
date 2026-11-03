@@ -10,7 +10,8 @@ import { dedicationsFor } from "./dedications";
 import { KID_AGE_GROUPS, kidGroupByAge, kidGroupByKey } from "../content/ages";
 
 export { AnswersV2, ContactV2, normalizePhone, extraGender } from "../content/answers";
-import { normalizeKidHairstyle, normalizeKidOutfit } from "../content/looks";
+import { HAIR_ACC_COLOR_WORD as HAIR_ACC_COLOR_WORD_, KID_HAIR_ACCS as KID_HAIR_ACCS_, kidLookExtras, normalizeKidHairstyle, normalizeKidOutfit } from "../content/looks";
+export { KID_HAIR_ACCS, KID_HATS, KID_BUILDS, HAIR_ACC_COLOR_KEYS, HAIR_ACC_COLOR_WORD, kidLookExtras } from "../content/looks";
 export { KID_HAIRSTYLES, KID_HAIRSTYLE_KEYS, KID_HAIRSTYLE_DEFAULT, KID_OUTFITS, KID_OUTFIT_KEYS, KID_OUTFIT_DEFAULT, normalizeKidHairstyle, normalizeKidOutfit } from "../content/looks";
 
 /** Ответы анкеты (v2). Старое имя оставлено для совместимости импортов. */
@@ -157,10 +158,24 @@ export function appearanceLine(a: QuizAnswers) {
     p.freckles && "веснушки",
     p.beard && "борода",
     p.clothes && `любит ${p.clothes}`,
+    // rev 16 — выбранное картинками (ребёнку)
+    ...(a.audience === "CHILD" ? kidLookWords(kidLookExtras(p, a.hero.gender)) : []),
     p.custom,
   ]
     .filter(Boolean)
     .join(", ");
+}
+
+/** Новые приметы ребёнка словами — для промпта картинок и брифа текста (rev 16). */
+function kidLookWords(x: ReturnType<typeof kidLookExtras>): string[] {
+  return [
+    x.dimples && "ямочки на щеках",
+    x.toothGap && "щербинка: выпал передний зуб",
+    x.hairAcc && `${x.hairAccColor ? `${HAIR_ACC_COLOR_WORD_[x.hairAccColor]?.[KID_HAIR_ACCS_.find((k) => k.key === x.hairAcc)?.g ?? "m"] ?? ""} ` : ""}${x.hairAcc} в волосах`,
+    x.hat && `в головном уборе: ${x.hat}`,
+    x.build === "пониже" && "невысокий для своего возраста",
+    x.build === "повыше" && "высокий для своего возраста",
+  ].filter((v): v is string => Boolean(v));
 }
 
 export { heroKindFor };
@@ -181,10 +196,11 @@ export function sampleExtras(extras: Pick<QuizAnswers["extras"][number], "role" 
  * «длинные», «кудряшки», «футболка» переводятся по полу); остальным — как в анкете. Одна функция для живой обложки,
  * эскизов, страниц книги и PDF (sampleLookOf, heroLook в pipeline.ts и в демо).
  */
-export function heroHairAndClothes(a: { audience: string; hero: { gender?: string }; appearance: { hairstyle?: string; clothes?: string } }): { hairstyle?: string; clothes?: string } {
+export function heroHairAndClothes(a: { audience: string; hero: { gender?: string }; appearance: { hairstyle?: string; clothes?: string } & Parameters<typeof kidLookExtras>[0] }): { hairstyle?: string; clothes?: string } & Partial<ReturnType<typeof kidLookExtras>> {
   const p = a.appearance;
   if (a.audience !== "CHILD") return { hairstyle: p.hairstyle || undefined, clothes: undefined };
-  return { hairstyle: normalizeKidHairstyle(p.hairstyle, a.hero.gender), clothes: normalizeKidOutfit(p.clothes, a.hero.gender) };
+  // rev 16: ямочки, щербинка, украшение для волос (только девочке), головной убор, рост — туда же, во все рисунки
+  return { hairstyle: normalizeKidHairstyle(p.hairstyle, a.hero.gender), clothes: normalizeKidOutfit(p.clothes, a.hero.gender), ...kidLookExtras(p, a.hero.gender) };
 }
 
 /** Внешность героя из анкеты для образца. */

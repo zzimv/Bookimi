@@ -138,7 +138,7 @@ describe("внешность главного героя картинками: �
     expect(new Set(await Promise.all(["smile", "wide", "calm"].map((sm) => svgOf(sampleUrl({ ...base, smile: sm }))))).size).toBe(3);
     expect(plain).not.toContain("data-eyes=");
   });
-  it("анкета: варианты — кнопки с aria-label, стрелки, выбранное видно; текст — только в «Своё описание»", () => {
+  it("анкета: варианты — кнопки с aria-label, стрелки, выбранное видно; текста о внешности нет (rev 16)", () => {
     const pp = read("src/components/quiz/PicPicker.tsx");
     expect(pp).toContain('role="radiogroup"');
     expect(pp).toContain("aria-label={o.label}");
@@ -146,7 +146,8 @@ describe("внешность главного героя картинками: �
     expect(pp).toContain("ArrowRight");
     const qw = read("src/components/quiz/QuizWizard.tsx");
     for (const row of ['name="skin"', 'name="hair"', 'name="hairstyle"', 'name="eyes"', 'name="face"', 'name="smile"', 'name="outfit"', "extra-species-", "extra-fur-", "extra-toy-", "extra-hair-", "extra-face-"]) expect(qw).toContain(row);
-    expect(qw).toContain("<summary>Своё описание</summary>");
+    // rev 16: «Своё описание» убрано — внешность только картинками
+    expect(qw).not.toContain("<summary>Своё описание</summary>");
     expect(qw).not.toContain('label="Кошка или собака" items=');
     const a = AnswersV2.parse({ audience: "CHILD", hero: { name: "Маша", gender: "girl", ageGroup: "5-7" }, extras: [{ role: "grandpa", name: "Коля", look: { beard: true, hair: "седые" } }] });
     expect(a.extras[0].look).toEqual({ beard: true, hair: "седые" });

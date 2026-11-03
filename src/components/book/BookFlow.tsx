@@ -279,12 +279,12 @@ export function BookFlow({
                     </label>
                   )}
                   <button className="btn btn--primary btn--block" disabled={busy || (!b.consent?.pd && !pdNow)} onClick={() => act({ action: "preview", withPhoto: b.withPhoto, ...(pdNow ? { pd: true } : {}) })}>
-                    {b.withPhoto ? "Нарисовать превью по фото" : "Нарисовать превью по описанию"}
+                    {b.withPhoto ? "Нарисовать превью по фото" : "Нарисовать превью по выбранной внешности"}
                   </button>
                 </div>
               )}
               <p className="small muted" style={{ marginTop: 12 }}>
-                {b.withPhoto ? "Нарисуем по фото, которое вы загрузили и мы уже обработали." : "Нарисуем по описанию из анкеты."}
+                {b.withPhoto ? "Нарисуем по фото, которое вы загрузили и мы уже обработали." : "Нарисуем по внешности, выбранной в анкете."}
               </p>
               {error && <p className="error" role="alert">{error}</p>}
               {buyNow && (

@@ -97,7 +97,7 @@ export default async function Page({ params }: { params: Promise<{ slug: string 
       <div className="wrap product">
         <div className="product__media">
           <Cover theme={story.coverTheme} title={title} coverUrl={story.coverUrl} colors={story.coverColors} sample={sampleUrl({ slug: story.slug })} rawTitle={story.title} heroWord={HERO_WORD[story.audience]} eager />
-          <p className="product__tag small muted">Обложка-пример. В вашей книге герой будет похож на себя — по фото или описанию.</p>
+          <p className="product__tag small muted">Обложка-пример. В вашей книге герой будет похож на себя — по фото или по внешности, выбранной картинками.</p>
         </div>
         <div className="product__info">
           <p className="eyebrow">{ageLabel(story.ageMin, story.ageMax, story.audience, story.segments)}</p>

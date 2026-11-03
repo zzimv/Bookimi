@@ -60,6 +60,11 @@ export interface PlotSpread {
   text: string;
   /** Сцена для иллюстрации, EN, без имён: «the child…», «the dog…», «the couple…». */
   scene: string;
+  /**
+   * Персонажи сказки на картинке разворота (rev 16): ключи CAST (art/cast.ts) — «dragon», «ded-moroz», «owl»…
+   * Не задано — по словам сцены и текста; [] — никого.
+   */
+  cast?: string[];
 }
 
 /** Как вплести повод в разворот 1 (opening) и 12 (closing). Тексты — с метками, в голосе сюжета. */
@@ -346,6 +351,16 @@ export interface DemoLook {
   outfit?: string; // цвет одежды #rrggbb
   /** Вид одежды ребёнка (rev 15): ключ из KID_OUTFITS (src/content/looks.ts) — «платье», «худи с джинсами»…; пусто — по полу. */
   clothes?: string;
+  /** rev 16 (ребёнок): ямочки на щеках, щербинка (виден при улыбке). */
+  dimples?: boolean;
+  toothGap?: boolean;
+  /** Украшение для волос девочки: «бантик» | «заколка» | «ободок» (KID_HAIR_ACCS); цвет — ключ HAIR_ACC_COLOR_KEYS или #rrggbb, пусто — как одежда. */
+  hairAcc?: string;
+  hairAccColor?: string;
+  /** Головной убор: «кепка» | «шапка с помпоном» (KID_HATS). */
+  hat?: string;
+  /** Рост: «пониже» | «повыше» (KID_BUILDS); пусто — как обычно. */
+  build?: string;
   species?: "dog" | "cat" | string;
   breed?: string;
   furColor?: string; // как в анкете: «рыжий», «чёрный с белым»

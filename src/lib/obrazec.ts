@@ -30,6 +30,13 @@ export interface SampleOpts {
   outfit?: string;
   /** rev 15: вид одежды ребёнка (KID_OUTFITS): «платье», «худи с джинсами»… */
   clothes?: string;
+  /** rev 16: ямочки, щербинка, украшение для волос и его цвет, головной убор, рост (src/content/looks.ts). */
+  dimples?: boolean;
+  toothGap?: boolean;
+  hairAcc?: string;
+  hairAccColor?: string;
+  hat?: string;
+  build?: string;
   /** Водяной знак превью (эскизы страниц до оплаты). */
   wm?: boolean;
   /** Крупно лицо (true) или по пояс ("bust") — к portrait / extraPortrait. */
@@ -109,6 +116,12 @@ export function sampleUrl(o: SampleOpts) {
   put("bl", o.blush);
   put("oc", o.outfit);
   put("ot", o.clothes);
+  put("dm", o.dimples);
+  put("tg", o.toothGap);
+  put("ha", o.hairAcc);
+  put("hac", o.hairAccColor);
+  put("hat", o.hat);
+  put("bd", o.build);
   if (o.extraLooks) {
     q.set("x", o.extraLooks.map((e) => e.role).join(","));
     o.extraLooks.slice(0, 3).forEach((e, i) => put(`x${i + 1}`, encodeSampleExtra(e)));

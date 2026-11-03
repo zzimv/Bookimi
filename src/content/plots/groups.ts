@@ -43,51 +43,51 @@ export const KIDS_GROUP_PLOTS: Plot[] = [
     spreads: [
       {
         text: "В тот майский день {ГЕРОЙ.им} {Р:пришёл|пришла} в детский сад {Р:самым первым|самой первой}. Раздевалка была пустая и тихая. А на шкафчике {ГЕРОЙ.род}, прямо под картинкой, белел конверт. На нём кто-то вывел крупными буквами: «Тем, кто вырос. Ищите там, где спят, где поют и где гуляют».",
-        scene: "the child alone in a quiet kindergarten cloakroom in the morning, rows of small wooden lockers with picture stickers on the doors, a white envelope taped to one locker",
+        scene: "the child alone in a quiet kindergarten cloakroom in the morning, rows of small wooden lockers with picture stickers on the doors, a white envelope taped to one locker", cast: [],
       },
       {
         text: "Скоро раздевалка наполнилась голосами — пришла вся группа. [[?ДРУГ1:{ДРУГ1.им} {РД1:прочитал|прочитала|прочитали} записку вслух — по слогам, зато без единой ошибки. || Записку прочитали вслух — по слогам, зато без единой ошибки.]] [[?ДРУГ2:— Где спят — это же спальня! — {РД2:догадался|догадалась|догадались} {ДРУГ2.им}. || — Где спят — это же спальня! — догадал{Р:ся|ась} {ГЕРОЙ.им}.]] Значит, искать нужно на тихом часе.",
-        scene: "{GROUP} crowding around the child in the kindergarten cloakroom, everyone looking at an open envelope with a note, morning light",
+        scene: "{GROUP} crowding around the child in the kindergarten cloakroom, everyone looking at an open envelope with a note, morning light", cast: [],
       },
       {
         text: "Наступил тихий час. Никто, конечно, не спал по-настоящему: все ждали. [[?ДРУГ3:{ДРУГ3.им} {РД3:считал|считала|считали} овечек и {РД3:досчитал|досчитала|досчитали} до тысячи.]] [[?ДРУГ4:А {ДРУГ4.им} {РД4:заметил|заметила|заметили}, что одна кроватка у окна скрипит не так, как все. || А {ГЕРОЙ.им} заметил{Р:|а}, что одна кроватка у окна скрипит не так, как все.]] Под ней, у самой стены, нашлись ключик на синей ленточке и вторая записка: «Где поют».",
-        scene: "a cozy kindergarten nap room with rows of small beds and striped blankets, {GROUP} peeking from under the blankets, the child kneeling by a bed near the window finding a small key on a blue ribbon",
+        scene: "a cozy kindergarten nap room with rows of small beds and striped blankets, {GROUP} peeking from under the blankets, the child kneeling by a bed near the window finding a small key on a blue ribbon", cast: [],
       },
       {
         text: "После полдника все пошли в музыкальный зал — репетировать песню к выпускному. [[?ДРУГ5:{ДРУГ5.им} {РД5:пел|пела|пели} громче всех — даже люстра звенела в такт.]] [[?ДРУГ6:А {ДРУГ6.им} так ловко {РД6:стучал|стучала|стучали} в бубен, что все пустились в пляс.]] Когда песня кончилась, {ГЕРОЙ.им} заглянул{Р:|а} внутрь старого барабана. Там лежала третья записка: «Где гуляют. Под самым старым деревом».",
-        scene: "a bright kindergarten music hall with a piano and a chandelier, {GROUP} singing and playing tambourines, the child peeking into an old big drum",
+        scene: "a bright kindergarten music hall with a piano and a chandelier, {GROUP} singing and playing tambourines, the child peeking into an old big drum", cast: [],
       },
       {
         text: "На прогулке группа побежала на свой участок — к веранде, песочнице и старой берёзе. [[?ДРУГ7:{ДРУГ7.им} {РД7:принёс|принесла|принесли} лопатки из песочницы.]] [[?ДРУГ8:{ДРУГ8.им} {РД8:нашёл|нашла|нашли} под берёзой камень с нарисованной звездой. || Под берёзой нашёлся камень с нарисованной звездой.]] Копали по очереди и осторожно, как настоящие археологи.",
-        scene: "a kindergarten playground on a sunny May day with a small wooden veranda, a sandbox and an old birch tree, {GROUP} digging carefully with toy shovels under the birch, the child holding a stone with a painted star",
+        scene: "a kindergarten playground on a sunny May day with a small wooden veranda, a sandbox and an old birch tree, {GROUP} digging carefully with toy shovels under the birch, the child holding a stone with a painted star", cast: [],
       },
       {
         text: "Лопатка стукнула обо что-то железное. Коробка из-под печенья! В ней лежали рисунки, засушенный кленовый лист и письмо: «Мы тоже были этой группой. Мы выросли и пошли в школу. Теперь ваша очередь оставить что-нибудь хорошее тем, кто придёт после вас». [[?ДРУГ9:{ДРУГ9.им} только {РД9:ахнул|ахнула|ахнули}: вот это клад!]]",
-        scene: "{GROUP} gathered around an old tin cookie box opened under the birch tree, inside are children's drawings, a dried maple leaf and a letter, the child reading the letter",
+        scene: "{GROUP} gathered around an old tin cookie box opened under the birch tree, inside are children's drawings, a dried maple leaf and a letter, the child reading the letter", cast: [],
       },
       {
         text: "— А что оставим мы? — спросил{Р:|а} {ГЕРОЙ.им}. [[?ВОСПИТАТЕЛЬ1:{ВОСПИТАТЕЛЬ.им} улыбнул{РВ:ся|ась}: «Подумайте, что вы умеете лучше всего». || Воспитательница улыбнулась: «Подумайте, что вы умеете лучше всего».]] [[?ДРУГ10:{ДРУГ10.им} {РД10:предложил|предложила|предложили} нарисовать самые лучшие рисунки.]] И ребята решили: каждый положит в коробку то, что сделает сам.",
-        scene: "the child asking a question, {GROUP_ADULTS} smiling and listening, {GROUP} sitting in a circle on the playground",
+        scene: "the child asking a question, {GROUP_ADULTS} smiling and listening, {GROUP} sitting in a circle on the playground", cast: [],
       },
       {
         text: "До самого вечера в группе кипела работа. [[?ДРУГ11:{ДРУГ11.им} {РД11:нарисовал|нарисовала|нарисовали} радугу во весь лист.]] [[?ДРУГ12:{ДРУГ12.им} {РД12:слепил|слепила|слепили} из пластилина ёжика, а потом ещё одного — про запас.]] А {ГЕРОЙ.им} написал{Р:|а} письмо — печатными буквами, немножко вкривь, зато от всего сердца: «Не бойтесь. Здесь хорошо».",
-        scene: "a busy kindergarten group room in the afternoon, {GROUP} drawing rainbows and modeling plasticine hedgehogs at small tables, the child writing a letter in big block letters",
+        scene: "a busy kindergarten group room in the afternoon, {GROUP} drawing rainbows and modeling plasticine hedgehogs at small tables, the child writing a letter in big block letters", cast: [],
       },
       {
         text: "Коробку снова закопали под берёзой — уже с новыми сокровищами. [[?ДРУГ13:{ДРУГ13.им} {РД13:утоптал|утоптала|утоптали} землю, чтобы никто не нашёл раньше времени.]] [[?ДРУГ14:А {ДРУГ14.им} {РД14:воткнул|воткнула|воткнули} рядом веточку — вместо флажка.]] Все переглянулись: теперь у группы есть своя тайна.",
-        scene: "{GROUP} burying the tin box under the birch tree again, soil being pressed down, a small twig stuck in the ground like a flag, warm evening light",
+        scene: "{GROUP} burying the tin box under the birch tree again, soil being pressed down, a small twig stuck in the ground like a flag, warm evening light", cast: [],
       },
       {
         text: "Вечером за ребятами приходили мамы, папы и бабушки. {ГЕРОЙ.им} в последний раз {Р:открыл|открыла} свой шкафчик и погладил{Р:|а} картинку ладошкой. [[?ВОСПИТАТЕЛЬ1:{ВОСПИТАТЕЛЬ.им} {РВ:обнимал|обнимала} каждого на прощание. || Воспитательница обнимала каждого на прощание.]] Скоро здесь появится чья-то новая картинка — и кто-то маленький найдёт под берёзой коробку.",
-        scene: "evening in the kindergarten cloakroom, parents arriving, the child touching the picture sticker on a small locker door, {GROUP_ADULTS} hugging children goodbye",
+        scene: "evening in the kindergarten cloakroom, parents arriving, the child touching the picture sticker on a small locker door, {GROUP_ADULTS} hugging children goodbye", cast: [],
       },
       {
         text: "[[?ГРУППА:А на память осталась фотография. На ней — вся наша группа, все до одного: {ПЕРЕКЛИЧКА}. || А на память осталась фотография: {ГЕРОЙ.им} и {Р:его|её} друзья из группы — все до одного.]] [[?ВОСПИТАТЕЛЬ1:И, конечно, {ВОСПИТАТЕЛИ.им} — рядом с нами.]]",
-        scene: "a group photo: {GROUP} standing in rows on the kindergarten steps with balloons, the child in the very middle of the front row, {GROUP_ADULTS} at the sides, everyone smiling",
+        scene: "a group photo: {GROUP} standing in rows on the kindergarten steps with balloons, the child in the very middle of the front row, {GROUP_ADULTS} at the sides, everyone smiling", cast: [],
       },
       {
         text: "На выпускном группа пела ту самую песню, а {ГЕРОЙ.им} знал{Р:|а} секрет: под старой берёзой спит коробка, полная хорошего. Детский сад остаётся тем, кто придёт следом. А {ГЕРОЙ.им} теперь {Р:большой|большая}, и впереди — школа. До свидания, наша группа!",
-        scene: "the kindergarten graduation party in the music hall with balloons and ribbons, {GROUP} singing together, the child smiling and glancing out of the window at the birch tree",
+        scene: "the kindergarten graduation party in the music hall with balloons and ribbons, {GROUP} singing together, the child smiling and glancing out of the window at the birch tree", cast: [],
       },
     ],
     occasionHooks: {
@@ -120,51 +120,51 @@ export const KIDS_GROUP_PLOTS: Plot[] = [
     spreads: [
       {
         text: "Утром в садик — топ-топ-топ!\nВырос кто-то прямо — хлоп!\nВ шкафчик больше не влезает,\nЛампу носом задевает!\nКто же это? Угадай-ка!\n— {ГЕРОЙ.им}!\nА за {Р:ним|ней} — вся наша стайка!",
-        scene: "the child in a kindergarten cloakroom comically too tall for a tiny locker, nose touching a lamp, {GROUP} peeking from behind, morning light",
+        scene: "the child in a kindergarten cloakroom comically too tall for a tiny locker, nose touching a lamp, {GROUP} peeking from behind, morning light", cast: [],
       },
       {
         text: "Раньше мама одевала,\nЛожкой кашу подавала.\nА теперь? Ну-ка, угадай:\nВсё мы сами! Проверяй!\n[[?ДРУГ1:Кто шнурки завяжет сам\nИ поможет малышам?\n— {ДРУГ1.им}!]]\n[[?ДРУГ2:Кто тарелку каши — хвать! —\nИ давай добавки ждать?\n— {ДРУГ2.им}!]]",
-        scene: "{GROUP} in the kindergarten cloakroom proudly tying their own shoelaces, then at small tables eating porridge and holding out bowls for more, the child laughing",
+        scene: "{GROUP} in the kindergarten cloakroom proudly tying their own shoelaces, then at small tables eating porridge and holding out bowls for more, the child laughing", cast: [],
       },
       {
         text: "Тихий час. Подушки в ряд.\nВсе лежат и все сопят.\nА проснулись — вот те раз! —\nВыросли за тихий час!\n[[?ДРУГ3:Кто на тихом часе спит\nИ во сне стихи твердит?\n— {ДРУГ3.им}!]]\n[[?ДРУГ4:Кто рисует, как художник, —\nДаже солнце, даже дождик?\n— {ДРУГ4.им}!]]",
-        scene: "a kindergarten nap room with pillows in a row, {GROUP} waking up and stretching comically taller, drawings of the sun and rain pinned to the wall",
+        scene: "a kindergarten nap room with pillows in a row, {GROUP} waking up and stretching comically taller, drawings of the sun and rain pinned to the wall", cast: [],
       },
       {
         text: "В зале музыка играет,\nНа утренник приглашает.\nКто танцует, кто поёт,\nКто в ладоши громко бьёт!\n[[?ДРУГ5:Кто на утреннике пел\nТак, что зал весь онемел?\n— {ДРУГ5.им}!]]\n[[?ДРУГ6:Кто зарядку делал так,\nЧто запрыгал даже шкаф?\n— {ДРУГ6.им}!]]",
-        scene: "a kindergarten music hall with a piano, {GROUP} singing, dancing and clapping, a cupboard comically hopping along with the morning exercises",
+        scene: "a kindergarten music hall with a piano, {GROUP} singing, dancing and clapping, a cupboard comically hopping along with the morning exercises", cast: [],
       },
       {
         text: "На прогулку — всей гурьбой,\nНа участок, на родной!\nТам веранда, там качели,\nТам вороны прилетели.\n[[?ДРУГ7:Кто по горке — вжух! — летит\nИ от счастья всё кричит?\n— {ДРУГ7.им}!]]\n[[?ДРУГ8:Кто построит из песка\nБашню выше потолка?\n— {ДРУГ8.им}!]]",
-        scene: "a kindergarten playground with a wooden veranda, swings, a slide and a sandbox, {GROUP} sliding down and building a towering sandcastle, curious crows on the fence",
+        scene: "a kindergarten playground with a wooden veranda, swings, a slide and a sandbox, {GROUP} sliding down and building a towering sandcastle, curious crows on the fence", cast: ["crow"],
       },
       {
         text: "В группе дел — невпроворот:\nКто-то клеит, кто-то шьёт,\nКто-то лепит пирожок,\nКто-то строит теремок.\n[[?ДРУГ9:Кто цветы на подоконнике\nПоливает, как садовники?\n— {ДРУГ9.им}!]]\n[[?ДРУГ10:Кто считает до ста раз —\nИ обратно, в тот же час?\n— {ДРУГ10.им}!]]",
-        scene: "a busy kindergarten group room, {GROUP} gluing, sewing, modeling plasticine and building a block tower, watering flowers on the windowsill, counting on fingers",
+        scene: "a busy kindergarten group room, {GROUP} gluing, sewing, modeling plasticine and building a block tower, watering flowers on the windowsill, counting on fingers", cast: [],
       },
       {
         text: "Вечер. Скоро по домам.\nНо порядок — тут и там!\nМишки — в ряд, машинки — в ряд,\nКубики в коробке спят.\n[[?ДРУГ11:Кто игрушки соберёт\nБыстро-быстро, в свой черёд?\n— {ДРУГ11.им}!]]\n[[?ДРУГ12:Кто так шутит, что до слёз\nХохотал весь наш завхоз?\n— {ДРУГ12.им}!]]",
-        scene: "a kindergarten group room in the evening, {GROUP} tidying toys into neat rows, teddy bears and toy cars lined up, a kindly caretaker laughing in the doorway",
+        scene: "a kindergarten group room in the evening, {GROUP} tidying toys into neat rows, teddy bears and toy cars lined up, a kindly caretaker laughing in the doorway", cast: [],
       },
       {
         text: "Скоро в школу — вот дела!\nДаже кошка поняла:\nВыросли мы, подросли —\nЧуть до неба не дошли!\n[[?ДРУГ13:Кто читает по слогам\nВсем-всем книжки по утрам?\n— {ДРУГ13.им}!]]\n[[?ДРУГ14:Кто обнимет крепче всех —\nТак, что слышен общий смех?\n— {ДРУГ14.им}!]]",
-        scene: "{GROUP} standing on tiptoe reaching up to the clouds outside the kindergarten, a surprised cat on the fence, one child reading a picture book aloud, a big group hug",
+        scene: "{GROUP} standing on tiptoe reaching up to the clouds outside the kindergarten, a surprised cat on the fence, one child reading a picture book aloud, a big group hug", cast: ["cat"],
       },
       {
         text: "Кто нам песни пел и сказки,\nКто в тарелку клал добавки,\nКто нам вытирал носы —\nЗнаем все, конечно, мы:\n[[?ВОСПИТАТЕЛЬ1:— {ВОСПИТАТЕЛЬ1.им}!]]\n[[?ВОСПИТАТЕЛЬ2:— {ВОСПИТАТЕЛЬ2.им}!]]\n[[?ВОСПИТАТЕЛЬ3:— {ВОСПИТАТЕЛЬ3.им}!]]\n[[?ВОСПИТАТЕЛИ: || — Наши воспитатели!]]\nВам — спасибо в сто сердец!\nВам — букет и леденец!",
-        scene: "{GROUP} giving flowers and candy to {GROUP_ADULTS} in the kindergarten music hall, hearts drawn on a big card, warm light",
+        scene: "{GROUP} giving flowers and candy to {GROUP_ADULTS} in the kindergarten music hall, hearts drawn on a big card, warm light", cast: [],
       },
       {
         text: "Кто же вырос всех сильней —\nВыше сосен, тополей?\n— {ГЕРОЙ.им}!\nДа и все мы — посмотри:\nВыросли! Раз-два-три!",
-        scene: "the child and {GROUP} standing on tiptoe in a row on the playground comparing heights with tall pines and poplars, a growth chart painted on the fence",
+        scene: "the child and {GROUP} standing on tiptoe in a row on the playground comparing heights with tall pines and poplars, a growth chart painted on the fence", cast: [],
       },
       {
         text: "Встали дружно — в три ряда.\nУлыбнулись: «Чи-и-из!» — да!\n[[?ГРУППА:Это мы — смотрите, вот —\nНаш весёлый, наш народ:\n{ПЕРЕКЛИЧКА} || Это мы — смотрите, вот —\nНаш весёлый, наш народ!]]",
-        scene: "a kindergarten group photo: {GROUP} standing in three rows on the steps saying cheese, the child in the very middle of the front row, {GROUP_ADULTS} at the sides, balloons",
+        scene: "a kindergarten group photo: {GROUP} standing in three rows on the steps saying cheese, the child in the very middle of the front row, {GROUP_ADULTS} at the sides, balloons", cast: [],
       },
       {
         text: "До свиданья, детский сад!\nМы теперь — большой отряд.\nНо тебя мы не забудем:\nНавещать тебя мы будем!\nА пока — ура! Вперёд!\nШкола, жди: идёт народ!",
-        scene: "the kindergarten graduation party with balloons and ribbons, {GROUP} marching out of the kindergarten gate waving goodbye, a school building on the horizon",
+        scene: "the kindergarten graduation party with balloons and ribbons, {GROUP} marching out of the kindergarten gate waving goodbye, a school building on the horizon", cast: [],
       },
     ],
     occasionHooks: {
@@ -197,51 +197,51 @@ export const KIDS_GROUP_PLOTS: Plot[] = [
     spreads: [
       {
         text: "В некотором городе, в детском саду за зелёным забором, в группе с весёлыми шкафчиками {Р:жил-был|жила-была} {ГЕРОЙ.им}. На {Р:его|её} шкафчике была картинка — и однажды вечером, когда все уже одевались домой, картинка вдруг подмигнула. Дверца скрипнула и сама собой распахнулась, а за ней, вместо курток и сменных тапочек, засветилась дорожка.",
-        scene: "a kindergarten cloakroom in the evening, a small wooden locker with a picture sticker glowing, its door open and a shining path leading inside instead of coats",
+        scene: "a kindergarten cloakroom in the evening, a small wooden locker with a picture sticker glowing, its door open and a shining path leading inside instead of coats", cast: [],
       },
       {
         text: "— Что там? — зашептались ребята и сгрудились у шкафчика. [[?ДРУГ1:{ДРУГ1.им} {РД1:заглянул|заглянула|заглянули} внутрь и {РД1:ахнул|ахнула|ахнули}: «Там целая страна!»]] [[?ДРУГ2:{ДРУГ2.им} {РД2:взял|взяла|взяли} {ГЕРОЙ.вин} за руку: «Вместе не страшно».]] Над дорожкой висела табличка: «В Страну Школу. Пройдёт тот, кто вырос».",
-        scene: "{GROUP} crowding around the glowing open locker, peeking in with wide eyes, a wooden sign above a shining path",
+        scene: "{GROUP} crowding around the glowing open locker, peeking in with wide eyes, a wooden sign above a shining path", cast: [],
       },
       {
         text: "Долго ли, коротко ли шли ребята по дорожке — пришли к Сонной реке. Моста нет, только лодочка-кроватка покачивается у берега, а на корме дремлет Сова-Тихоня: «Перевезу того, кто умеет лежать тихо, как на тихом часе». [[?ДРУГ3:{ДРУГ3.им} {РД3:улёгся|улеглась|улеглись} в лодочку и даже не {РД3:шелохнулся|шелохнулась|шелохнулись}.]] [[?ДРУГ4:А {ДРУГ4.им} так сладко {РД4:зевнул|зевнула|зевнули}, что Сова сама задремала.]] Так все и переплыли — тихо-тихо, как мышки.",
-        scene: "a calm sleepy river at dusk, a little boat shaped like a bed with a striped blanket, a sleepy owl on the stern, {GROUP} lying quietly in the boat, the child at the front",
+        scene: "a calm sleepy river at dusk, a little boat shaped like a bed with a striped blanket, a sleepy owl on the stern, {GROUP} lying quietly in the boat, the child at the front", cast: ["owl"],
       },
       {
         text: "На другом берегу стояла Гора-Молчунья. Давно на ней никто не пел, оттого и тропинка заросла. «Спойте мне, — гудит гора, — тогда пропущу». [[?ДРУГ5:{ДРУГ5.им} {РД5:запел|запела|запели} песню с утренника.]] [[?ДРУГ6:{ДРУГ6.им} {РД6:подхватил|подхватила|подхватили} — да так звонко, что по склонам распустились колокольчики.]] Подпели все, и {ГЕРОЙ.им} — громче всех. Гора заулыбалась и сама разложила под ногами ступеньки.",
-        scene: "a big friendly mountain with a sleepy face, {GROUP} singing loudly at its foot, bluebells blooming along a path of stone steps, the child singing in front",
+        scene: "a big friendly mountain with a sleepy face, {GROUP} singing loudly at its foot, bluebells blooming along a path of stone steps, the child singing in front", cast: [],
       },
       {
         text: "На вершине ждал старый Портфель с медными застёжками. — Я провожу вас в Страну Школу, — проскрипел он. — Только в пути пригодится всё, чему вы научились в саду. [[?ДРУГ7:{ДРУГ7.им} {РД7:показал|показала|показали}, как ловко {РД7:умеет|умеет|умеют} застёгивать пуговицы. || Ребята показали, как ловко умеют застёгивать пуговицы и считать до двадцати.]] [[?ДРУГ8:{ДРУГ8.им} {РД8:сосчитал|сосчитала|сосчитали} до двадцати и обратно.]] Портфель одобрительно щёлкнул застёжкой: «Годится!»",
-        scene: "an old talking leather school satchel with brass clasps on a hilltop, {GROUP} showing it how they button coats and count on fingers, the child laughing",
+        scene: "an old talking leather school satchel with brass clasps on a hilltop, {GROUP} showing it how they button coats and count on fingers, the child laughing", cast: [],
       },
       {
         text: "Третье испытание ждало в Лесу Перепутанных Шнурков: ветки там переплелись, как шнурки у малыша. [[?ДРУГ9:{ДРУГ9.им} {РД9:развязал|развязала|развязали} первый узел.]] [[?ДРУГ10:{ДРУГ10.им} {РД10:завязал|завязала|завязали} ветку бантиком — для красоты.]] А {ГЕРОЙ.им} догадал{Р:ся|ась}: распутывать надо по одному узелку, не торопясь. Так и сделали — и лес расступился.",
-        scene: "a whimsical forest where branches are tangled like shoelaces, {GROUP} patiently untangling knots and tying bows, the child pointing at the next knot",
+        scene: "a whimsical forest where branches are tangled like shoelaces, {GROUP} patiently untangling knots and tying bows, the child pointing at the next knot", cast: [],
       },
       {
         text: "За лесом показалась Страна Школа. Домики там были похожи на пеналы, дорожки — на линейки, а над крышами летали бумажные самолётики. Буквы гуляли по улицам парами, цифры играли в классики. [[?ДРУГ11:{ДРУГ11.им} {РД11:поймал|поймала|поймали} букву «А» — она оказалась щекотной.]] [[?ДРУГ12:{ДРУГ12.им} {РД12:сыграл|сыграла|сыграли} с цифрой Семь в классики и {РД12:выиграл|выиграла|выиграли}.]]",
-        scene: "a cheerful Land of School with houses shaped like pencil cases, streets like rulers, paper planes over rooftops, letters and numbers walking around like little people, {GROUP} playing hopscotch with a number seven",
+        scene: "a cheerful Land of School with houses shaped like pencil cases, streets like rulers, paper planes over rooftops, letters and numbers walking around like little people, {GROUP} playing hopscotch with a number seven", cast: [],
       },
       {
         text: "В самом большом доме, похожем на раскрытую книгу, жила Королева Первого Звонка. Она звякнула серебряным колокольчиком: — Вы прошли все испытания, значит, выросли. Осенью двери моей страны откроются для вас по-настоящему. [[?ДРУГ13:{ДРУГ13.им} {РД13:спросил|спросила|спросили}: «А там не страшно?» || — А там не страшно? — спросил{Р:|а} {ГЕРОЙ.им}.]] Королева улыбнулась: «Страшно бывает только до первого урока. А потом — интересно».",
-        scene: "a kind queen in a dress patterned with letters standing in a house shaped like an open book, ringing a small silver bell, {GROUP} listening, the child in front",
+        scene: "a kind queen in a dress patterned with letters standing in a house shaped like an open book, ringing a small silver bell, {GROUP} listening, the child in front", cast: [],
       },
       {
         text: "На прощание каждый получил подарок — цветной карандаш, который никогда не ломается. [[?ДРУГ14:{ДРУГ14.им} тут же {РД14:нарисовал|нарисовала|нарисовали} солнце прямо в воздухе — и оно засияло.]] А {ГЕРОЙ.дат} Королева дала ещё и ключик: «Это от твоего шкафчика. Пусть он помнит дорогу».",
-        scene: "the queen handing out colorful pencils to {GROUP}, a sun drawn in the air glowing, the child receiving a tiny golden key",
+        scene: "the queen handing out colorful pencils to {GROUP}, a sun drawn in the air glowing, the child receiving a tiny golden key", cast: [],
       },
       {
         text: "Портфель довёл ребят обратно до шкафчика — тем же путём, только короче, как всегда бывает дорога домой. Дверца тихо закрылась. [[?ВОСПИТАТЕЛЬ1:В раздевалку заглянул{РВ:|а} {ВОСПИТАТЕЛЬ.им}: «Ребята, за вами пришли!» || В раздевалку заглянула воспитательница: «Ребята, за вами пришли!»]] [[?ВОСПИТАТЕЛЬ2:{ВОСПИТАТЕЛЬ2.им} {РВ2:помог|помогла} застегнуть куртки и подмигнул{РВ2:|а}: «Что-то у вас глаза сияют».]] [[?ВОСПИТАТЕЛЬ3:А {ВОСПИТАТЕЛЬ3.им} {РВ3:раздал|раздала} всем забытые варежки.]] Никто ничего не сказал — только переглянулись: это их общая тайна.",
-        scene: "the kindergarten cloakroom in the evening again, the locker door closing softly, {GROUP_ADULTS} peeking in the doorway, {GROUP} exchanging secret smiles",
+        scene: "the kindergarten cloakroom in the evening again, the locker door closing softly, {GROUP_ADULTS} peeking in the doorway, {GROUP} exchanging secret smiles", cast: [],
       },
       {
         text: "[[?ГРУППА:А на выпускном вся группа встала для общей фотографии — те самые путешественники в Страну Школу: {ПЕРЕКЛИЧКА}. || А на выпускном {ГЕРОЙ.им} и {Р:его|её} друзья — те самые путешественники в Страну Школу — встали для общей фотографии.]] И у каждого в кармане был карандаш, который никогда не ломается.",
-        scene: "a kindergarten graduation group photo: {GROUP} standing in rows with balloons and ribbons, the child in the very middle of the front row, each child holding a colorful pencil",
+        scene: "a kindergarten graduation group photo: {GROUP} standing in rows with balloons and ribbons, the child in the very middle of the front row, each child holding a colorful pencil", cast: [],
       },
       {
         text: "Вот и сказке конец. Осенью {ГЕРОЙ.им} {Р:пошёл|пошла} в Страну Школу по-настоящему — с новым портфелем и с тем самым ключиком на шнурке. А шкафчик с картинкой остался ждать нового малыша. Говорят, иногда он подмигивает — тем, кто готов вырасти.",
-        scene: "an autumn morning, the child with a new school satchel and a tiny key on a string walking toward a school, a small locker with a picture sticker visible through a kindergarten window behind",
+        scene: "an autumn morning, the child with a new school satchel and a tiny key on a string walking toward a school, a small locker with a picture sticker visible through a kindergarten window behind", cast: [],
       },
     ],
     occasionHooks: {
@@ -280,51 +280,51 @@ export const KIDS_GROUP_PLOTS: Plot[] = [
     spreads: [
       {
         text: "Первого сентября {ГЕРОЙ.им} {Р:шёл|шла} в школу с букетом почти в свой рост. Новый рюкзак, новые ботинки, новые слова: «урок», «перемена», «{Р:первоклассник|первоклассница}». Сердце стучало: тук-тук — как будто тоже собиралось учиться.",
-        scene: "the child walking to school on September 1st holding a huge bouquet of autumn flowers almost as tall as them, a new backpack, a school building with balloons ahead",
+        scene: "the child walking to school on September 1st holding a huge bouquet of autumn flowers almost as tall as them, a new backpack, a school building with balloons ahead", cast: [],
       },
       {
         text: "На школьном дворе стояли такие же нарядные ребята — это был {Р:его|её} класс. [[?ДРУГ1:{ДРУГ1.им} {РД1:держал|держала|держали} табличку «1 класс» — гордо, как флаг.]] [[?ДРУГ2:{ДРУГ2.им} {РД2:протянул|протянула|протянули} {ГЕРОЙ.дат} {РД2:ладошку|ладошку|ладошки}: «Будем дружить?»]] [[?ВОСПИТАТЕЛЬ1:А впереди стоял{РВ:|а} {ВОСПИТАТЕЛЬ.им} — {РВ:наш учитель|наша учительница}. || А впереди стояла учительница.]]",
-        scene: "a festive school yard, {GROUP} in neat school uniforms with bouquets, a sign with the number one held up like a flag, {GROUP_ADULTS} smiling in front",
+        scene: "a festive school yard, {GROUP} in neat school uniforms with bouquets, a sign with the number one held up like a flag, {GROUP_ADULTS} smiling in front", cast: [],
       },
       {
         text: "Но линейка всё не начиналась. Старшеклассники растерянно шептались: у школьного колокольчика пропал голос! Его качали, трясли — а он только сипел: «Пш-ш». [[?ДРУГ3:{ДРУГ3.им} {РД3:предложил|предложила|предложили} подуть на него, как на горячий чай.]] [[?ДРУГ4:{ДРУГ4.им} {РД4:прислушался|прислушалась|прислушались} и {РД4:сказал|сказала|сказали}: «Он не сломался. Он просто стесняется».]]",
-        scene: "a school assembly in the yard, an older pupil holding a big brass hand bell that makes no sound, {GROUP} looking curious, the child stepping forward",
+        scene: "a school assembly in the yard, an older pupil holding a big brass hand bell that makes no sound, {GROUP} looking curious, the child stepping forward", cast: [],
       },
       {
         text: "{ГЕРОЙ.им} взял{Р:|а} колокольчик в ладони, и тот тихонько заговорил: — Я каждый год звоню для новеньких. А вдруг вы меня не полюбите? Вдруг я слишком громкий? — Мы тоже волнуемся, — честно сказал{Р:|а} {ГЕРОЙ.им}. — Давай волноваться вместе. Мы покажем тебе школу. [[?ДРУГ5:{ДРУГ5.им} бережно {РД5:поправил|поправила|поправили} колокольчику бантик.]]",
-        scene: "the child holding the shy brass school bell with a ribbon in cupped hands, the bell has a tiny worried face, {GROUP} gathered close",
+        scene: "the child holding the shy brass school bell with a ribbon in cupped hands, the bell has a tiny worried face, {GROUP} gathered close", cast: ["bell"],
       },
       {
         text: "Первым делом пошли в класс. Парты стояли ровно, как солдатики, а на доске было написано: «Здравствуйте, ребята!» [[?ДРУГ6:{ДРУГ6.им} {РД6:сел|села|сели} за первую парту и {РД6:показал|показала|показали} колокольчику новую тетрадку.]] [[?ДРУГ7:{ДРУГ7.им} {РД7:нарисовал|нарисовала|нарисовали} в уголке доски маленький колокольчик — с улыбкой.]] Колокольчик впервые звякнул — совсем чуть-чуть.",
-        scene: "a bright first-grade classroom with neat rows of desks and a chalkboard with a greeting, {GROUP} at the desks showing notebooks to the little bell, a chalk drawing of a smiling bell",
+        scene: "a bright first-grade classroom with neat rows of desks and a chalkboard with a greeting, {GROUP} at the desks showing notebooks to the little bell, a chalk drawing of a smiling bell", cast: ["bell"],
       },
       {
         text: "Потом заглянули в библиотеку. Там пахло бумагой и тайнами. [[?ДРУГ8:{ДРУГ8.им} {РД8:нашёл|нашла|нашли} книжку про колокола всего света.]] [[?ДРУГ9:{ДРУГ9.им} {РД9:прочитал|прочитала|прочитали} по слогам: «Ко-ло-коль-чик — са-мый глав-ный в шко-ле».]] Колокольчик зарделся и звякнул погромче.",
-        scene: "a cozy school library with tall shelves, {GROUP} reading a big picture book about bells, the brass bell blushing with a tiny smile",
+        scene: "a cozy school library with tall shelves, {GROUP} reading a big picture book about bells, the brass bell blushing with a tiny smile", cast: ["bell"],
       },
       {
         text: "В спортзале жило эхо — огромное, как в пещере. [[?ДРУГ10:{ДРУГ10.им} {РД10:крикнул|крикнула|крикнули} «Ау!» — и эхо ответило пять раз.]] [[?ДРУГ11:{ДРУГ11.им} {РД11:кувыркнулся|кувыркнулась|кувыркнулись} на мате — для настроения.]] — Ого, — сказал колокольчик. — Здесь и я могу погромче.",
-        scene: "a big school gym with mats and climbing bars, {GROUP} shouting to the echo and doing somersaults on a mat, the brass bell looking braver",
+        scene: "a big school gym with mats and climbing bars, {GROUP} shouting to the echo and doing somersaults on a mat, the brass bell looking braver", cast: ["bell"],
       },
       {
         text: "В столовой повара как раз пекли булочки с корицей. [[?ДРУГ12:{ДРУГ12.им} {РД12:угостил|угостила|угостили} колокольчик крошкой — понарошку, конечно.]] [[?ДРУГ13:{ДРУГ13.им} {РД13:объявил|объявила|объявили}: «Колокольчик, теперь ты наш — из первого класса!»]] И колокольчик засмеялся — звонко-звонко, на всю столовую.",
-        scene: "a school canteen with cooks baking cinnamon buns, {GROUP} laughing at a long table with the brass bell, warm light",
+        scene: "a school canteen with cooks baking cinnamon buns, {GROUP} laughing at a long table with the brass bell, warm light", cast: ["bell"],
       },
       {
         text: "— Я готов, — сказал колокольчик. — Только пусть меня держит кто-то из новеньких. Держать доверили {ГЕРОЙ.дат}: ведь это {Р:он|она} {Р:первым|первой} с ним заговорил{Р:|а}. [[?ДРУГ14:{ДРУГ14.им} {РД14:встал|встала|встали} рядом — помогать.]]",
-        scene: "the school yard again, the child holding the brass bell high, {GROUP} standing around cheering, balloons",
+        scene: "the school yard again, the child holding the brass bell high, {GROUP} standing around cheering, balloons", cast: [],
       },
       {
         text: "Динь-динь-динь! Колокольчик зазвенел так звонко, что с деревьев слетели листья, а голуби захлопали крыльями. Это был первый звонок — для {ГЕРОЙ.род} и для всего класса. [[?ВОСПИТАТЕЛЬ1:{ВОСПИТАТЕЛЬ.им} {РВ:сказал|сказала}: «Вот теперь — пора на урок». || Учительница сказала: «Вот теперь — пора на урок».]] [[?ВОСПИТАТЕЛЬ2:{ВОСПИТАТЕЛЬ2.им} {РВ2:открыл|открыла} дверь в класс и улыбнул{РВ2:ся|ась}: «Добро пожаловать!»]]",
-        scene: "the child ringing the brass bell loudly, autumn leaves flying and pigeons fluttering, {GROUP} and {GROUP_ADULTS} heading to the school door",
+        scene: "the child ringing the brass bell loudly, autumn leaves flying and pigeons fluttering, {GROUP} and {GROUP_ADULTS} heading to the school door", cast: ["pigeon"],
       },
       {
         text: "[[?ГРУППА:После уроков весь класс сфотографировали на школьном крыльце. Вот мы все, по именам: {ПЕРЕКЛИЧКА}. || После уроков {ГЕРОЙ.им} и {Р:его|её} новые друзья сфотографировались на школьном крыльце — всем классом.]] Колокольчик тоже попал в кадр: он висел у двери и сиял.",
-        scene: "a first-grade class photo on the school steps: {GROUP} standing in rows with bouquets, the child in the very middle of the front row, {GROUP_ADULTS} at the side, a shining brass bell by the door",
+        scene: "a first-grade class photo on the school steps: {GROUP} standing in rows with bouquets, the child in the very middle of the front row, {GROUP_ADULTS} at the side, a shining brass bell by the door", cast: [],
       },
       {
         text: "Вечером {ГЕРОЙ.им} рассказывал{Р:|а} дома про всё: про парты-солдатики, про эхо, про булочки. И про то, что у {Р:него|неё} теперь есть класс — свой, настоящий. А колокольчик звенит каждое утро. И каждый раз — немножко для {Р:него|неё}.",
-        scene: "evening at home, the child excitedly telling the family about the first school day, a backpack by the door, a class photo on the table",
+        scene: "evening at home, the child excitedly telling the family about the first school day, a backpack by the door, a class photo on the table", cast: [],
       },
     ],
     occasionHooks: {

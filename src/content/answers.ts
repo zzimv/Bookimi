@@ -154,6 +154,16 @@ export const AnswersV2 = z.preprocess(
         smile: str(20).optional().default(""),
         blush: z.boolean().optional().default(false),
         outfitColor: str(20).optional().default(""),
+        /** rev 16 — картинками (ребёнку): ямочки, щербинка, украшение для волос (девочкам: бантик | заколка | ободок)
+         *  и его цвет (HAIR_ACC_COLOR_KEYS, пусто — как одежда), головной убор (кепка | шапка с помпоном), рост
+         *  (пониже | обычный | повыше). Пусто — нет / как обычно (src/content/looks.ts). */
+        dimples: z.boolean().optional().default(false),
+        toothGap: z.boolean().optional().default(false),
+        hairAcc: str(20).optional().default(""),
+        hairAccColor: str(20).optional().default(""),
+        hat: str(30).optional().default(""),
+        build: str(20).optional().default(""),
+        /** Своё описание словами: с rev 16 в анкете поля нет; старые черновики читаются (идёт в промпт GPU как раньше). */
         custom: str(300).optional().default(""),
       })
       .default({}),

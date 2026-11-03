@@ -43,51 +43,51 @@ export const NEWYEAR_PLOTS: Plot[] = [
     spreads: [
       {
         text: "Зима. Тихо-тихо. У самого дома, на опушке, растёт маленькая ёлочка — без шариков, без огоньков. {ГЕРОЙ.им} погладил{Р:|а} колючую веточку:\n— Не грусти, ёлочка! Скоро Новый год. Мы тебя нарядим!",
-        scene: "a toddler in warm winter clothes gently touching a branch of a small bare fir tree at the edge of a snowy forest, a house with a glowing window right behind, quiet falling snow",
+        scene: "a toddler in warm winter clothes gently touching a branch of a small bare fir tree at the edge of a snowy forest, a house with a glowing window right behind, quiet falling snow", cast: [],
       },
       {
         text: "Хруп-хруп — скачет по снегу зайка-попрыгайка.\n— Кто-кто у ёлочки стоит?\n— Это я, {ГЕРОЙ.им}. Ёлочку наряжаю.\n— А можно с тобой?\n— Иди!\nПрыг — и зайка повесил на ветку шишку.",
-        scene: "a white hare hopping through the snow toward the toddler by the little fir tree, the hare hanging a pine cone on a low branch",
+        scene: "a white hare hopping through the snow toward the toddler by the little fir tree, the hare hanging a pine cone on a low branch", cast: ["hare"],
       },
       {
         text: "Цок-цок — спускается с сосны белочка-хлопотунья.\n— Кто-кто у ёлочки стоит?\n— Это мы: {ГЕРОЙ.им} да зайка.\n— А можно с вами?\n— Иди!\nБелочка повесила на ветку золотой орешек. Блестит!",
-        scene: "a red squirrel climbing down a tall pine trunk, hanging a small golden nut on the little fir tree, the toddler and the hare watching happily",
+        scene: "a red squirrel climbing down a tall pine trunk, hanging a small golden nut on the little fir tree, the toddler and the hare watching happily", cast: ["hare", "squirrel"],
       },
       {
         text: "Чик-чирик — прилетел снегирь-красногрудик.\n— Кто-кто у ёлочки стоит?\n— {ГЕРОЙ.им}, зайка да белочка.\n— А можно с вами?\n— Лети!\nСнегирь принёс бусы из рябины — красные-красные.",
-        scene: "a round red-breasted bullfinch flying in with a string of red rowan berries in its beak, draping it over the little fir tree, the toddler, hare and squirrel looking up",
+        scene: "a round red-breasted bullfinch flying in with a string of red rowan berries in its beak, draping it over the little fir tree, the toddler, hare and squirrel looking up", cast: ["hare", "squirrel", "bullfinch"],
       },
       {
         text: "Шурх-шурх — идёт лисичка-сестричка, хвост пушистый.\n— Кто-кто у ёлочки стоит?\n— {ГЕРОЙ.им}, зайка, белочка да снегирь.\n— А можно с вами?\n— Иди!\nЛисичка повязала на ёлочку рыжий бантик.",
-        scene: "a friendly fox with a fluffy tail tying an orange ribbon bow on the little fir tree, the toddler, hare, squirrel and bullfinch around it in the snow",
+        scene: "a friendly fox with a fluffy tail tying an orange ribbon bow on the little fir tree, the toddler, hare, squirrel and bullfinch around it in the snow", cast: ["hare", "squirrel", "bullfinch", "fox"],
       },
       {
         text: "Топ-топ — идёт мишка-топтыжка, сонный-сонный: проснулся на минуточку, на Новый год посмотреть.\n— Кто-кто у ёлочки стоит?\n— Это мы, все-все-все!\n— А можно с вами?\n— Иди!\nМишка принёс звезду — большую, блестящую.",
-        scene: "a sleepy bear cub in the snow carrying a big shiny star, yawning, the toddler and all the little forest animals welcoming him by the fir tree",
+        scene: "a sleepy bear cub in the snow carrying a big shiny star, yawning, the toddler and all the little forest animals welcoming him by the fir tree", cast: ["hare", "squirrel", "bullfinch", "fox", "bear-cub"],
       },
       {
         text: "Шишка от зайки, орешек от белочки, бусы от снегиря, бантик от лисички. А звезду — куда? На самую макушку! Зайка прыгал — не достал. Белочка тянулась — не дотянулась.",
-        scene: "the little fir tree decorated with a pine cone, a golden nut, rowan beads and an orange bow, the hare jumping and the squirrel stretching toward the top, the toddler holding the star",
+        scene: "the little fir tree decorated with a pine cone, a golden nut, rowan beads and an orange bow, the hare jumping and the squirrel stretching toward the top, the toddler holding the star", cast: ["hare", "squirrel", "bullfinch", "fox", "bear-cub"],
       },
       {
         text: "Мишка поднял {ГЕРОЙ.вин} высоко-высоко — выше зайки, выше белочки, выше лисьего хвоста. Раз — и звезда на макушке! Вот так!",
-        scene: "the gentle bear cub lifting the smiling toddler up high, the toddler placing the big star on top of the little fir tree, the animals cheering below",
+        scene: "the gentle bear cub lifting the smiling toddler up high, the toddler placing the big star on top of the little fir tree, the animals cheering below", cast: ["hare", "squirrel", "bullfinch", "fox", "bear-cub"],
       },
       {
         text: "— Ой, а огоньков-то нет! — вздохнул зайка.\nТут из-за облачка выглянул месяц.\n— Кто-кто у ёлочки стоит?\n— Это мы, все-все-все!\n— А можно с вами?\n— Свети!",
-        scene: "a smiling crescent moon peeking out from behind a soft cloud above the snowy edge of the forest, the toddler and the animals by the fir tree looking up at it",
+        scene: "a smiling crescent moon peeking out from behind a soft cloud above the snowy edge of the forest, the toddler and the animals by the fir tree looking up at it", cast: ["moon", "hare", "squirrel", "bullfinch", "fox", "bear-cub"],
       },
       {
         text: "Месяц рассыпал по веточкам звёздочки — динь-динь, динь-динь! Засияла ёлочка: шишка, орешек, бусы, бантик, звезда — и огоньки.\n— С Новым годом! — закричали все-все-все.",
-        scene: "the little fir tree glowing with tiny golden star lights scattered by the moon, the toddler and all the forest animals dancing around it, gentle snowfall",
+        scene: "the little fir tree glowing with tiny golden star lights scattered by the moon, the toddler and all the forest animals dancing around it, gentle snowfall", cast: ["hare", "squirrel", "bullfinch", "fox", "bear-cub"],
       },
       {
         text: "Падает снег. Тихо-тихо. Зайка зевает. Белочка зевает. Снегирь прячет нос в пёрышки. А мишка зевает громче всех: а-а-ах! Пора спать.",
-        scene: "the forest animals growing sleepy around the glowing fir tree, the bear cub yawning widely, the bullfinch tucking its beak into its feathers, soft blue evening",
+        scene: "the forest animals growing sleepy around the glowing fir tree, the bear cub yawning widely, the bullfinch tucking its beak into its feathers, soft blue evening", cast: ["hare", "squirrel", "bullfinch", "fox", "bear-cub"],
       },
       {
         text: "— {ЛАСКОВО.им}, домой! — зовут из окошка.\nТёплая кроватка, мягкая подушка. А за окном светится маленькая ёлочка. Зима. Тихо-тихо. С Новым годом!",
-        scene: "the toddler tucked into a cozy bed under a warm blanket, through the window the little decorated fir tree glowing softly at the edge of the snowy forest",
+        scene: "the toddler tucked into a cozy bed under a warm blanket, through the window the little decorated fir tree glowing softly at the edge of the snowy forest", cast: [],
       },
     ],
     occasionHooks: {
@@ -135,51 +135,51 @@ export const NEWYEAR_PLOTS: Plot[] = [
     spreads: [
       {
         text: "Тридцать первое декабря, без пяти три. {ГЕРОЙ.им} {Р:клеил|клеила} на окно бумажную снежинку, когда старый глобус на полке вдруг зажужжал и закрутился сам собой. На Камчатке вспыхнула искра. А потом оттуда выкатилась девочка ростом с напёрсток — в шапке с помпоном, с часами на цепочке и с охапкой разноцветных карточек. Снежинка на окне так и осталась приклеенной наполовину.",
-        scene: "a child sticking a paper snowflake on a window in the afternoon, turning in surprise toward an old globe on a shelf that spins by itself, a spark on the far east of the map and a tiny girl in a pompom hat tumbling out with an armful of colorful cards",
+        scene: "a child sticking a paper snowflake on a window in the afternoon, turning in surprise toward an old globe on a shelf that spins by itself, a spark on the far east of the map and a tiny girl in a pompom hat tumbling out with an armful of colorful cards", cast: ["tiny-girl"],
       },
       {
         text: "— Минутка, Служба Новогодней Полуночи, — представилась гостья и чихнула. — Беда! Сквозняк перепутал всё расписание. Новый год ведь приходит не везде сразу: он шагает по стране с востока на запад, из одного часового пояса в другой. А у России их одиннадцать! Одиннадцать полуночей — и каждую нужно встретить вовремя. Первая — через пять минут. Поможешь?",
-        scene: "the tiny girl in a pompom hat standing on the desk next to a pocket watch, pointing at a globe with eleven glowing stripes across Russia, the child leaning in to listen",
+        scene: "the tiny girl in a pompom hat standing on the desk next to a pocket watch, pointing at a globe with eleven glowing stripes across Russia, the child leaning in to listen", cast: ["tiny-girl"],
       },
       {
         text: "Карточки разлетелись по ковру: Москва, Якутск, Калининград, Камчатка… С какой начать? «Земля вращается с запада на восток, — рассуждал{Р:|а} {ГЕРОЙ.им}. — Значит, восток первым встречает утро. И полночь — тоже. Всё по очереди, как в хороводе». На глобус легла карточка «Камчатка и Чукотка».\n— Пятнадцать ноль-ноль по Москве — на Камчатке полночь! — пискнула Минутка.",
-        scene: "the child sitting on the rug among scattered colorful cards, thoughtfully placing one card on the far eastern tip of the globe, the tiny girl holding up her pocket watch showing three o'clock",
+        scene: "the child sitting on the rug among scattered colorful cards, thoughtfully placing one card on the far eastern tip of the globe, the tiny girl holding up her pocket watch showing three o'clock", cast: ["tiny-girl"],
       },
       {
         text: "— Ура-а! — донеслось из глобуса. А на кухне пахло оливье: здесь до Нового года было ещё далеко.\n— Смотри, — Минутка показала на крошечный остров у Чукотки. — Это остров Ратманова. В четырёх километрах от него — остров, где уже Америка. Между ними почти сутки разницы: у нас Новый год, а там ещё вчера.\n— Значит, можно сплавать во вчера?\n— Лёд, граница, и никто не разрешит, — вздохнула Минутка.",
-        scene: "a close-up of the globe with two tiny islands in a frozen strait, one with festive fireworks and one in calm morning light, the tiny girl pointing at them and the child grinning, a bowl of salad visible through the kitchen door",
+        scene: "a close-up of the globe with two tiny islands in a frozen strait, one with festive fireworks and one in calm morning light, the tiny girl pointing at them and the child grinning, a bowl of salad visible through the kitchen door", cast: ["tiny-girl"],
       },
       {
         text: "Четыре часа — полночь в Магадане и на Сахалине. Пять — во Владивостоке. И тут из стопки выпрыгнула карточка «Екатеринбург»:\n— Теперь я! Я большой город!\n— Большой — не значит первый, — {Р:сказал|сказала} {ГЕРОЙ.им}. — Важно, где ты на глобусе. Сначала Якутск: он восточнее.\nКарточка подумала и вежливо отползла в конец очереди. А Минутка что-то черкнула в блокноте — кажется, «помощник толковый».",
-        scene: "a paper card with a little face jumping up impatiently from a stack, the child holding up a finger and explaining calmly while pointing at the globe, the tiny girl laughing",
+        scene: "a paper card with a little face jumping up impatiently from a stack, the child holding up a finger and explaining calmly while pointing at the globe, the tiny girl laughing", cast: ["tiny-girl"],
       },
       {
         text: "Шесть часов — полночь в Якутии. Из глобуса дохнуло таким морозом, что снежинка на окне покрылась инеем.\n— Тут зимой бывает и минус пятьдесят, — гордо сказала Минутка. — А люди всё равно выходят к ёлке на площадь. В шубах до пят!\nСемь часов — Иркутск и Байкал, самое глубокое озеро на Земле: больше полутора километров воды подо льдом, а на льду — хоровод.",
-        scene: "frosty breath swirling out of the globe and frost covering the paper snowflake on the window, inside the globe a tiny scene of people in long fur coats dancing around a fir tree on the clear ice of a huge lake",
+        scene: "frosty breath swirling out of the globe and frost covering the paper snowflake on the window, inside the globe a tiny scene of people in long fur coats dancing around a fir tree on the clear ice of a huge lake", cast: [],
       },
       {
         text: "И тут {ГЕРОЙ.им} {Р:нахмурился|нахмурилась}. Часовых поясов — одиннадцать. А карточек… раз, два, три… На одну меньше! Пересчитали ещё раз. И ещё. Не помогло: не хватало карточки «Красноярск и Новосибирск». До их полуночи — восьми часов по Москве — оставалось двадцать минут. Минутка так побледнела, что стала похожа на снежинку.",
-        scene: "the child counting cards laid out in a row on the rug with a puzzled frown, one empty gap in the row, the tiny girl turned pale and wringing her hands, a wall clock showing twenty to eight",
+        scene: "the child counting cards laid out in a row on the rug with a puzzled frown, one empty gap in the row, the tiny girl turned pale and wringing her hands, a wall clock showing twenty to eight", cast: ["tiny-girl"],
       },
       {
         text: "Пришлось браться за дело по-сыщицки. Улика первая: на ковре — оранжевая корочка. Улика вторая: на пальцах — липко и сладко. Улика третья: Минутка принюхалась и сказала: «Пахнет Новым годом». И тут {ГЕРОЙ.им} {Р:вспомнил|вспомнила}: утром {Р:он|она} {Р:носил|носила} мимо глобуса миску с мандаринами. Миску подняли — и на донышке, приклеенная мандариновым соком, нашлась карточка! Без пяти восемь. Успели!",
-        scene: "the child lifting a bowl of tangerines from the kitchen table and finding a paper card stuck to the bottom, an orange peel on the rug as a clue, the tiny girl cheering on the edge of the bowl",
+        scene: "the child lifting a bowl of tangerines from the kitchen table and finding a paper card stuck to the bottom, an orange peel on the rug as a clue, the tiny girl cheering on the edge of the bowl", cast: ["tiny-girl"],
       },
       {
         text: "Восемь — Красноярск и Новосибирск. Девять — Омск. Десять — Екатеринбург, тот самый нетерпеливый. Глобус загорался полоска за полоской, как ступеньки.\n— А знаешь, что тут особенного? — спросила Минутка. — Рядом с ним проходит граница Европы и Азии. Новый год только что перешагнул из одной части света в другую!\n— Одной ногой, — уточнил{Р:|а} {ГЕРОЙ.им}.\nВ одиннадцать полночь пришла в Самару.",
-        scene: "the globe glowing stripe after stripe from east to west, a tiny marker post on the Ural mountains with one side labeled by a European tree and the other by an Asian tree, the child and the tiny girl watching a glowing footprint step across",
+        scene: "the globe glowing stripe after stripe from east to west, a tiny marker post on the Ural mountains with one side labeled by a European tree and the other by an Asian tree, the child and the tiny girl watching a glowing footprint step across", cast: ["tiny-girl"],
       },
       {
         text: "Одна из одиннадцати полуночей была особенной — своя. Когда очередь дошла до часового пояса, где живёт {ГЕРОЙ.им}, Минутка спрятала карточки за спину:\n— Эту полночь не зажигают. Её встречают.\nЗа столом сидела вся семья. Часы пробили двенадцать, и {Р:он|она} успел{Р:|а} загадать желание на седьмом ударе — с запасом. Минутка на подоконнике тоже что-то загадала, но не сказала что.",
-        scene: "the child at a festive family table at midnight, everyone raising cups and smiling, a clock showing twelve, the tiny girl hiding cards behind her back on the windowsill and winking",
+        scene: "the child at a festive family table at midnight, everyone raising cups and smiling, a clock showing twelve, the tiny girl hiding cards behind her back on the windowsill and winking", cast: ["tiny-girl"],
       },
       {
         text: "Полночь в Москве — бьют куранты, и полстраны хором кричит «Ура!». А последняя полночь приходит в Калининград, когда в Москве уже час ночи. Её Минутка зажгла сама и уселась на Северный полюс глобуса. Глобус тихонько гудел, как довольный кот.\n— Десять часов пути через всю страну, — сказала она. — И ни одной полуночи не потеряли.",
-        scene: "late at night, the whole globe glowing with eleven lit stripes, the tiny girl sitting on the North Pole of the globe swinging her legs, the sleepy child resting their chin on folded arms beside it",
+        scene: "late at night, the whole globe glowing with eleven lit stripes, the tiny girl sitting on the North Pole of the globe swinging her legs, the sleepy child resting their chin on folded arms beside it", cast: ["tiny-girl"],
       },
       {
         text: "Утром на Северном полюсе глобуса лежала золотая карточка: «Почётный сотрудник Службы Новогодней Полуночи. Следующее дежурство — 31 декабря, 15:00 по Москве». Карточку {ГЕРОЙ.им} {Р:спрятал|спрятала} в самый надёжный ящик. Ещё бы: не каждый за одну ночь встречает Новый год одиннадцать раз! А Минутка, говорят, теперь хранит запасное расписание в банке из-под мандаринов. На всякий случай. С Новым годом, {ЛАСКОВО.им}!",
-        scene: "New Year morning, snowy light through the window, the child holding a small golden card found on top of the quiet globe, the paper snowflake still on the glass",
+        scene: "New Year morning, snowy light through the window, the child holding a small golden card found on top of the quiet globe, the paper snowflake still on the glass", cast: [],
       },
     ],
     occasionHooks: {
