@@ -263,12 +263,41 @@ function fir(k: Kit, x: number, base: number, h: number, green: string, snow: bo
 function roundTree(k: Kit, x: number, base: number, h: number, crown: string, trunk: string) {
   const R = h * 0.32;
   const crownD = `M${f(x - R)} ${f(base - h * 0.62)} a${f(R * 0.7)} ${f(R * 0.7)} 0 0 1 ${f(R * 0.3)} ${f(-R * 0.9)} a${f(R * 0.8)} ${f(R * 0.8)} 0 0 1 ${f(R * 1.3)} ${f(-R * 0.1)} a${f(R * 0.7)} ${f(R * 0.7)} 0 0 1 ${f(R * 0.4)} ${f(R * 1.1)} a${f(R * 0.75)} ${f(R * 0.6)} 0 0 1 ${f(-R * 2)} ${f(-R * 0.1)}Z`;
-  // rev 17 «Зимнее»: снежная шапка — та же крона, сжатая к макушке (верхняя треть)
-  const topY = base - h * 0.62 - R * 1.45;
-  const cap = k.winter ? `<path data-snowcap="1" d="${crownD}" fill="#fbfdff" transform="translate(0 ${f(topY * 0.66)}) scale(1 0.34)"/>` : "";
+  // «Зимнее» (rev 18): снег лежит на самой кроне — белая верхушка обрезана по контуру кроны, снизу неровный край
+  // с подтёками и комья снега на ветках. Раньше шапка была отдельным сплющенным овалом и на тёмной кроне в сумерках
+  // читалась как облако, повисшее в воздухе.
+  const y0 = base - h * 0.62;
+  let cap = "";
+  if (k.winter) {
+    const id = `snow-crown-${Math.round(x)}-${Math.round(base)}-${Math.round(h)}`;
+    k.defs.push(`<clipPath id="${id}"><path d="${crownD}"/></clipPath>`);
+    const edge = y0 - R * 0.78;
+    const n = 6;
+    let d = `M${f(x - R * 1.5)} ${f(y0 - R * 2.2)} H${f(x + R * 1.6)} V${f(edge)}`;
+    for (let i = n; i > 0; i--) {
+      const xa = x - R * 1.5 + (R * 3.1 * (i - 0.5)) / n;
+      const xb = x - R * 1.5 + (R * 3.1 * (i - 1)) / n;
+      d += ` Q${f(xa)} ${f(edge + R * (i % 2 ? 0.34 : 0.16))} ${f(xb)} ${f(edge + (i % 3 ? 0 : R * 0.06))}`;
+    }
+    d += "Z";
+    // Снег на ветках — пологие «подушки» (выпуклые сверху), не овалы
+    const lumps = [[-0.62, 0.02, 0.18], [0.28, 0.32, 0.3]]
+      .map(([dx, dy, ww]) => {
+        const cx = x + R * dx, cy = y0 + R * dy, w = R * ww;
+        return `<path d="M${f(cx - w)} ${f(cy)} Q${f(cx)} ${f(cy - R * 0.17)} ${f(cx + w)} ${f(cy)} Q${f(cx)} ${f(cy + R * 0.05)} ${f(cx - w)} ${f(cy)}Z" fill="#f4f8ff"/>`;
+      })
+      .join("");
+    cap = `<g data-snowcap="1" clip-path="url(#${id})"><path d="${d}" fill="#fbfdff"/>${lumps}</g>`;
+  }
+  // Зимой крона — плотная морозная зелень с тенью снизу: под снегом читается как дерево, а не как облако
+  const crownFill = k.winter ? mix(crown, "#9cc2b0", 0.55) : crown;
   return (
     k.p(`M${f(x - h * 0.05)} ${f(base)} L${f(x - h * 0.035)} ${f(base - h * 0.55)} L${f(x + h * 0.035)} ${f(base - h * 0.55)} L${f(x + h * 0.05)} ${f(base)}Z`, trunk, 2) +
-    k.p(crownD, crown, 2.5) +
+    k.p(crownD, crownFill, 2.5) +
+    (k.winter
+      ? `<g clip-path="url(#snow-crown-${Math.round(x)}-${Math.round(base)}-${Math.round(h)})"><path d="${crownD}" fill="${mix(crownFill, "#0e2a22", 0.5)}" transform="translate(${f(R * 0.12)} ${f(R * 0.55)})" opacity=".5"/></g>` +
+        `<path d="${crownD}" fill="none" stroke="#2c4a40" stroke-width="${f(Math.max(2.5, R * 0.03))}" stroke-opacity=".7"/>`
+      : "") +
     cap
   );
 }

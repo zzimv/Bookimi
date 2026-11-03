@@ -30,6 +30,8 @@ export const viewport: Viewport = {
   ],
   width: "device-width",
   initialScale: 1,
+  // Страница до краёв экрана (iPhone с «чёлкой»): отступы липких панелей — по env(safe-area-inset-*) в globals.css
+  viewportFit: "cover",
 };
 
 // Выбранная вручную тема — до первой отрисовки (без вспышки). "auto" — как в системе.

@@ -539,6 +539,24 @@ export const drawAdult: DemoHeroDrawer = (o) => {
     parts.push(b + `<circle cx="${R - 2}" cy="${hy + R + 92}" r="5" fill="${second}"/>`);
   }
 
+  // rev 18, «Зимнее» на улице: вязаная шапка с помпоном и шарф, как у ребёнка (render.ts ставит winter: true)
+  if (h.winter) {
+    const hatCol = shade(second, -0.05);
+    const band = hy - R * 0.42;
+    parts.push(
+      `<g data-adult-hat="1"><path d="M${-R - 4} ${r0(band)} Q${-R - 4} ${r0(top - 14)} 0 ${r0(top - 16)} Q${R + 4} ${r0(top - 14)} ${R + 4} ${r0(band)}Z" fill="${hatCol}"${s}/>` +
+        `<rect x="${-R - 6}" y="${r0(band - 9)}" width="${2 * R + 12}" height="14" rx="7" fill="${shade(hatCol, -0.2)}"${sThin}/>` +
+        [-0.5, 0, 0.5].map((k) => `<path d="M${r0(k * R)} ${r0(top - 8)} V${r0(band - 10)}" stroke="${shade(hatCol, -0.18)}" stroke-width="2.2"/>`).join("") +
+        `<circle cx="0" cy="${r0(top - 20)}" r="10" fill="#f4f1ea"${sThin}/></g>`,
+    );
+    const scarfCol = shade(outfit === "#c8323c" ? "#3d6fc4" : "#c8323c", 0.05);
+    parts.push(
+      `<g data-scarf="1"><path d="M${-sw * 0.62} ${sY - 4} Q0 ${sY + 10} ${sw * 0.62} ${sY - 4} L${sw * 0.6} ${sY + 8} Q0 ${sY + 22} ${-sw * 0.6} ${sY + 8}Z" fill="${scarfCol}"${s}/>` +
+        `<path d="M${r0(sw * 0.18)} ${sY + 10} l5 ${fem ? 46 : 52} l15 -2 l-6 ${fem ? -46 : -52}Z" fill="${scarfCol}"${s}/>` +
+        `<path d="M${r0(sw * 0.2)} ${sY + 30} h14 M${r0(sw * 0.22)} ${sY + 44} h14" stroke="${shade(scarfCol, 0.35)}" stroke-width="2.2"/></g>`,
+    );
+  }
+
   // Очки
   if (h.glasses)
     parts.push(`<g data-glasses="1" fill="#fff" fill-opacity=".18" stroke="#2b2523" stroke-width="2.6"><rect x="-19" y="${hy - 7}" width="16" height="13" rx="5"/><rect x="3" y="${hy - 7}" width="16" height="13" rx="5"/><path d="M-3 ${hy - 2} h6 M-19 ${hy - 3} l-9 -2 M19 ${hy - 3} l9 -2" fill="none"/></g>`);

@@ -10,13 +10,20 @@
 .demo-tabs a[aria-current="page"], .demo-theme button[aria-pressed="true"] { background: var(--accent-bg); color: var(--white); }
 .demo-theme button { padding: 0 10px; }
 .demo-theme__icon { display: none; font-size: 1.05rem; }
-@media (max-width: 640px) {
-  .demo-bar__in { gap: 6px 8px; }
-  .demo-bar__text { flex-basis: 100%; }
+/* rev 18: полоса демо — одна строка на ноутбуке (длинное пояснение — только на широком мониторе), на телефоне —
+   строка текста и ряд кнопок, листается вбок; шапку сайта не закрывает и экран не съедает */
+@media (max-width: 1599px) {
   .demo-bar__long { display: none; }
   .demo-bar__text::after { content: "оплата понарошку, фото не покидает браузер."; }
-  .demo-tabs { flex: 1; }
-  .demo-tabs a { flex: 1; justify-content: center; }
+}
+@media (max-width: 640px) {
+  .demo-bar__in { gap: 4px 8px; flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; padding-top: 4px; padding-bottom: 4px; }
+  .demo-bar__in::-webkit-scrollbar { display: none; }
+  .demo-bar__text { flex: none; white-space: nowrap; }
+  .demo-bar__text::after { content: none; }
+  .demo-bar__text b { font-weight: 800; }
+  .demo-bar__in > * { flex: none; }
+  .demo-tabs a { justify-content: center; }
   .demo-theme__icon { display: inline; }
   .demo-theme__label { display: none; }
   .demo-theme button { min-width: 40px; justify-content: center; padding: 0 8px; }

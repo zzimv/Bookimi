@@ -303,17 +303,17 @@ function snowGround(W: number, H: number, r: () => number) {
   d += ` V${H} H0Z`;
   let shade = "";
   for (let i = 0; i < n * 2; i++) shade += `<ellipse cx="${(r() * W).toFixed(0)}" cy="${(y0 + 40 + r() * (H - y0 - 60)).toFixed(0)}" rx="${(60 + r() * 90).toFixed(0)}" ry="${(8 + r() * 10).toFixed(0)}" fill="#c9d9ef" opacity=".55"/>`;
-  // Земля от горизонта белеет к сугробам (трава под снегом)
+  // Земля от горизонта белеет к сугробам (трава под снегом); дымка ниже крон — деревья по краям не тонут в ней (rev 18)
   const veil = `<linearGradient id="snow-veil" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#f4f8ff" stop-opacity="0"/><stop offset=".35" stop-color="#f4f8ff" stop-opacity=".75"/><stop offset="1" stop-color="#f4f8ff" stop-opacity=".9"/></linearGradient>`;
-  return `<g data-snow-ground="1"><defs>${veil}</defs><rect x="0" y="${(H * 0.6).toFixed(0)}" width="${W}" height="${(H * 0.4).toFixed(0)}" fill="url(#snow-veil)"/><path d="${d}" fill="#f6f9ff" stroke="#d3e1f3" stroke-width="4"/>${shade}</g>`;
+  return `<g data-snow-ground="1"><defs>${veil}</defs><rect x="0" y="${(H * 0.66).toFixed(0)}" width="${W}" height="${(H * 0.34).toFixed(0)}" fill="url(#snow-veil)"/><path d="${d}" fill="#f6f9ff" stroke="#d3e1f3" stroke-width="4"/>${shade}</g>`;
 }
 
 export function renderDemoSpread(o: DemoRenderOpts): string {
   const style = resolveStyle(o.artStyle);
   const moodObj = resolveMood(o.mood);
   const winterOut = moodObj?.id === "wintry" && !INDOOR.test(o.scene ?? "");
-  // На улице зимой ребёнок — в шапке и шарфе, с паром изо рта (если шапка выбрана — своя)
-  const winterLook = <T extends DemoLook | undefined>(l: T, kind: string): T => (winterOut && l && (kind === "child" || kind === "teen") ? ({ ...l, winter: true, hat: l.hat || "шапка с помпоном" } as T) : l);
+  // На улице зимой ребёнок — в шапке и шарфе, с паром изо рта (если шапка выбрана — своя); взрослые (rev 18) — тоже в шапке и шарфе
+  const winterLook = <T extends DemoLook | undefined>(l: T, kind: string): T => (winterOut && l && (kind === "child" || kind === "teen" || kind === "adult") ? ({ ...l, winter: true, hat: l.hat || "шапка с помпоном" } as T) : l);
   const theme = themeFor(o.plot.theme);
   const idx = o.spreadIndex;
   const W = (o.wide ?? idx > 0) ? 2048 : 1024;

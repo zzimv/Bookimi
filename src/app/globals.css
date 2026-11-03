@@ -49,7 +49,7 @@
   --r-ui: 12px;
   --r-pill: 999px;
   --gutter: 16px;
-  --maxw: 1160px;
+  --maxw: 72.5rem;          /* 1160 px при 16 px; на больших мониторах растёт вместе с корневым шрифтом (rev 18) */
   --shadow-book: -6px 0 0 -2px rgba(20, 54, 40, 0.18), 0 14px 30px -18px rgba(20, 54, 40, 0.45);
 
   --hero-name: "";
@@ -414,7 +414,7 @@ body:has(.flow-nav):has(.cookie), body:has(.sticky-cta):has(.cookie) { padding-b
 .btn--sm { min-height: 40px; padding: 0 16px; font-size: var(--fs-sm); }
 .link-btn { background: none; border: 0; color: var(--forest); font: 600 var(--fs-sm) var(--font-body); text-decoration: underline; cursor: pointer; padding: 4px 0; }
 .chips { display: flex; flex-wrap: wrap; gap: 8px; margin: 6px 0 12px; }
-.chip small { color: inherit; opacity: .75; font-weight: 500; margin-left: 4px; }
+.chip small { color: inherit; opacity: .8; font-weight: 600; font-size: max(12px, .9em); margin-left: 4px; }
 .panel { background: var(--surface); border: 1.5px solid var(--line); border-radius: var(--r-ui); padding: 20px; }
 .panel + .panel { margin-top: 16px; }
 .muted-panel { background: var(--sage); border-radius: var(--r-ui); padding: 16px 18px; }
@@ -426,7 +426,7 @@ body:has(.flow-nav):has(.cookie), body:has(.sticky-cta):has(.cookie) { padding-b
 @keyframes spin { to { transform: rotate(360deg); } }
 
 /* ───────── Квиз и создание книги ───────── */
-.flow { max-width: 720px; margin: 0 auto; padding: 20px var(--gutter) 120px; }
+.flow { max-width: 45rem; margin: 0 auto; padding: 20px var(--gutter) 120px; }
 .progress { height: 8px; background: var(--sage); border-radius: 4px; overflow: hidden; margin: 8px 0 6px; }
 .progress i { display: block; height: 100%; background: var(--gold); border-radius: 4px; transition: width .3s; }
 .stepline { display: flex; justify-content: space-between; font-size: var(--fs-sm); color: var(--ink-soft); }
@@ -652,7 +652,7 @@ details.edit summary { cursor: pointer; color: var(--forest); font-weight: 600; 
 .about-book { margin-top: 32px; max-width: 760px; }
 
 /* ───────── Анкета ───────── */
-.quiz--wide { max-width: 1080px; }
+.quiz--wide { max-width: 67.5rem; }
 .quiz__top { max-width: 720px; }
 .quiz--wide .quiz__top { max-width: none; }
 .quiz__book { margin: 8px 0 0; color: var(--ink-soft); }
@@ -701,10 +701,10 @@ details.edit summary { cursor: pointer; color: var(--forest); font-weight: 600; 
 .style-card img { width: 100%; aspect-ratio: 1; border-radius: 10px; background: var(--sage); }
 .style-card strong { font-family: var(--font-head); color: var(--forest-deep); font-size: .95rem; line-height: 1.2; }
 .style-card[aria-checked="true"] { border-color: var(--forest); box-shadow: 0 0 0 3px var(--sage); }
-.moods { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 200px), 1fr)); gap: 8px; margin: 8px 0 18px; }
+.moods { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 13rem), 1fr)); gap: 8px; margin: 8px 0 18px; }
 .mood { display: grid; grid-template-columns: 34px 1fr; grid-template-rows: auto auto; column-gap: 10px; align-items: center; text-align: left; padding: 10px 12px; min-height: 56px; border: 2px solid var(--line); border-radius: 14px; background: var(--surface); cursor: pointer; font: inherit; color: inherit; }
 .mood i { grid-row: 1 / 3; width: 34px; height: 34px; border-radius: 50%; box-shadow: inset 0 0 0 1px rgba(0,0,0,.08); }
-.mood b { font-family: var(--font-head); color: var(--forest-deep); line-height: 1.2; }
+.mood b { font-family: var(--font-head); color: var(--forest-deep); line-height: 1.2; overflow-wrap: anywhere; min-width: 0; }
 .mood span { font-size: 12px; color: var(--ink-soft); line-height: 1.35; }
 .mood[aria-checked="true"] { border-color: var(--forest); box-shadow: 0 0 0 3px var(--sage); }
 .mood:disabled { opacity: .5; cursor: not-allowed; }
@@ -1083,7 +1083,7 @@ body:has([data-flow-page]) .footer { display: none; }
 /* Окно на странице (увеличенный доп и др.) */
 html.modal-open { overflow: hidden; }
 .modal { position: fixed; inset: 0; z-index: 200; background: rgba(10, 20, 15, 0.6); display: flex; align-items: center; justify-content: center; padding: 16px; }
-.modal__box { background: var(--surface); color: var(--ink); border-radius: 16px; width: min(640px, 100%); max-height: calc(100vh - 32px); overflow: auto; padding: 16px 18px 18px; box-shadow: 0 20px 60px rgba(0, 0, 0, 0.35); }
+.modal__box { background: var(--surface); color: var(--ink); border-radius: 16px; width: min(640px, 100%); max-height: calc(100vh - 32px); max-height: calc(100dvh - 32px - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px)); overflow: auto; padding: 16px 18px 18px; box-shadow: 0 20px 60px rgba(0, 0, 0, 0.35); }
 .modal__head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; margin-bottom: 10px; }
 .modal__head h2 { margin: 0; font-size: var(--fs-lg); }
 .modal__close { flex: none; width: 40px; height: 40px; border-radius: 50%; border: 1px solid var(--line); background: var(--surface); color: var(--ink); font-size: 24px; line-height: 1; cursor: pointer; }
@@ -1260,15 +1260,15 @@ html.modal-open { overflow: hidden; }
 /* rev 14: внешность картинками — ряды маленьких рисунков (PicPicker.tsx) */
 .pic-row-wrap { margin: 8px 0 4px; }
 .pic-row { display: flex; flex-wrap: wrap; gap: 8px; margin: 4px 0 6px; }
-.pic { position: relative; flex: 0 0 auto; width: 72px; padding: 0; border: 2.5px solid var(--line); border-radius: 14px; background: #f3e4c2; overflow: hidden; cursor: pointer; transition: transform .15s, border-color .15s, box-shadow .15s; }
+.pic { position: relative; flex: 0 0 auto; width: 4.5rem; padding: 0; border: 2.5px solid var(--line); border-radius: 14px; background: #f3e4c2; overflow: hidden; cursor: pointer; transition: transform .15s, border-color .15s, box-shadow .15s; }
 .pic img { display: block; width: 100%; height: auto; aspect-ratio: 1; object-fit: cover; }
-@media (min-width: 640px) { .pic { width: 84px; } }
+@media (min-width: 640px) { .pic { width: 5.25rem; } } /* rem: на большом мониторе картинки крупнее вместе с текстом */
 .pic:hover { transform: translateY(-2px); border-color: var(--forest); }
 .pic:focus-visible { outline: 3px solid var(--forest); outline-offset: 2px; }
 .pic[aria-checked="true"], .pic[aria-pressed="true"] { border-color: var(--forest); box-shadow: 0 0 0 3px var(--gold); }
 .pic__check { position: absolute; right: 4px; top: 4px; width: 20px; height: 20px; border-radius: 50%; display: grid; place-items: center; background: var(--accent-bg); color: var(--white); font-weight: 800; font-size: 12px; opacity: 0; transform: scale(.4); transition: opacity .2s, transform .25s; }
 .pic[aria-checked="true"] .pic__check, .pic[aria-pressed="true"] .pic__check { opacity: 1; transform: none; }
-.pic__cap { display: block; padding: 2px 2px 3px; font-size: 11px; line-height: 1.15; text-align: center; background: var(--white, #fff); color: var(--ink, #2a2a2a); }
+.pic__cap { display: block; padding: 2px 2px 3px; font-size: max(11px, .6875rem); line-height: 1.15; text-align: center; background: var(--white, #fff); color: var(--ink, #2a2a2a); }
 .look-own { margin-top: 6px; }
 @media (prefers-reduced-motion: reduce) { .pic, .pic__check { transition: none; } .pic:hover { transform: none; } }
 /* rev 17: возраст и пол картинками; все ряды внешности сразу (без «Подробнее»); на телефоне ряды листаются вбок */
@@ -1309,5 +1309,91 @@ html.modal-open { overflow: hidden; }
 .sparkle i:nth-child(2n) { background: #f3d27a; width: 9px; height: 9px; }
 @keyframes sparkle { 0% { opacity: 1; } 100% { opacity: 0; transform: rotate(var(--a)) translateY(-34px) scale(1); } }
 /* Страница книги с превью — шире, чтобы разворот был крупным */
-.flow:has(.bk) { max-width: 1040px; }
+.flow:has(.bk) { max-width: 65rem; }
 .flow:has(.bk) .flow-nav .in { max-width: 720px; }
+
+/* ───────── rev 18: экраны от 360 px до 2560 px и масштаб 125 % (проверка — npm run check:responsive) ───────── */
+/* Точки перестройки сайта: 560 · 640 · 760 (телефон → планшет) · 900 (две колонки) · 1000 (меню в шапке) · 1800 / 2200 (большие мониторы). */
+
+/* Большой монитор: всё крупнее вместе — текст, поля, ширина колонки (rem), а не пустые поля по бокам */
+@media (min-width: 1800px) { html { font-size: 106.25%; } }
+@media (min-width: 2200px) { html { font-size: 118.75%; } }
+
+/* Прокрутка к полю, якорю или разделу не прячет его под липкой шапкой сверху и панелью «Дальше» / «Создать книгу» снизу */
+html { scroll-padding-top: 80px; }
+html:has(.flow-nav) { scroll-padding-bottom: calc(92px + env(safe-area-inset-bottom, 0px)); }
+@media (max-width: 759px) { html:has(.sticky-cta) { scroll-padding-bottom: calc(84px + env(safe-area-inset-bottom, 0px)); } }
+#kak { scroll-margin-top: 0; }
+
+/* Шапка: логотип и иконки — удобные цели для пальца; меню-бургер не уходит за нижний край */
+.logo { min-height: 44px; }
+.burger__menu { max-height: calc(100dvh - 120px - env(safe-area-inset-bottom, 0px)); }
+
+/* Раскрывашки «+ ласковое имя», «указать дату рождения», «Поправить текст вручную» — высотой с кнопку */
+.more > summary, details.more > summary { display: flex; align-items: center; gap: 6px; min-height: 40px; }
+.hol__aud .chip { min-height: 40px; }
+
+/* Телефон: основной текст не мельче 14 px */
+@media (max-width: 759px) {
+  .home-hero__note { font-size: var(--fs-sm); }
+}
+
+/* Нижняя панель анкеты и книги: на узком экране длинная подпись («Всё нравится, дальше») не рвётся в три строки */
+.flow-nav .in { max-width: 45rem; }
+.flow-nav .btn { line-height: 1.15; text-align: center; }
+@media (max-width: 479px) {
+  .flow-nav .in { gap: 8px; }
+  .flow-nav .btn { padding: 0 14px; font-size: .95rem; }
+  .flow-nav .btn--ghost { padding: 0 14px; }
+}
+
+/* Анкета на телефоне и планшете: шаг начинается в первом экране — живая обложка компактной строкой сверху,
+   значок сцены и заголовок меньше */
+@media (max-width: 899px) {
+  .quiz__preview { grid-template-columns: 60px 1fr; gap: 10px; padding: 8px 10px; margin-top: 10px; border-radius: 12px; }
+  .quiz__preview .quiz__cover, .quiz__preview .cover { width: 60px; }
+  .quiz__preview .cover__name, .quiz__preview .cover__title { display: none; }
+  .quiz__preview p { font-size: 13px; line-height: 1.35; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+  .scene__head { gap: 10px; margin: 10px 0 8px; }
+  .scene__icon { width: 40px; height: 40px; }
+  .flow h1, .scene__head h1 { font-size: clamp(1.45rem, 6vw, var(--fs-xl)); }
+  .scene__head p { font-size: .95rem; line-height: 1.5; }
+}
+/* Ноутбук: 6 готовых героев одним рядом — ряды внешности видны сразу под ними */
+@media (min-width: 700px) {
+  .char-grid { grid-template-columns: repeat(6, minmax(0, 1fr)); max-width: none; gap: 10px; }
+  .char-card { border-radius: 14px; }
+}
+/* Широкая анкета: обложка сбоку не выше экрана */
+@media (min-width: 900px) {
+  .quiz__preview { max-height: calc(100dvh - 110px); }
+  .quiz__preview .quiz__cover { width: min(100%, calc(100dvh - 260px)); margin: 0 auto; }
+}
+
+/* Превью книги: разворот вместе с панелью и кнопками правок помещается в экран ноутбука (1280×720, 1366×768,
+   масштаб 125 %) — ширину книги ограничивает и высота окна. 300 px — шапка, панель «Дальше», строка «Обложка · 1 из 16»,
+   отступы сцены и ряд кнопок правок (с запасом). */
+.bk { --bk-room: calc(100dvh - 300px); }
+.bk__book { max-width: min(61.25rem, max(440px, 2 * var(--bk-room))); }
+.bk__book--single, .bk__book--one { max-width: min(32.5rem, max(280px, var(--bk-room))); }
+.bk__book--spread.bk__book--one { max-width: min(30.625rem, max(280px, var(--bk-room))); }
+.bk__nav { z-index: 3; } /* листание не перекрывается страницей во время анимации */
+@media (min-width: 760px) { .bk__nav { position: relative; } }
+.bk__views button { min-height: 40px; }
+.bk__tools { gap: 6px 8px; }
+.bk__tools .btn { padding: 0 14px; }
+@media (max-width: 759px) {
+  .bk__nav { width: 40px; height: 56px; }
+}
+/* Страница «Приветствие»: название, текст, портрет, автор и подпись помещаются в страницу любого размера */
+.bk-page--paper { padding: 6% 8%; gap: 2.2cqi; }
+.bk-welcome__title { font-size: clamp(11px, 5.4cqi, 30px); }
+.bk-welcome__text { font-size: clamp(10px, 4.2cqi, 22px); }
+.bk-welcome__hero { width: auto; height: 36cqi; flex: 0 1 36cqi; min-height: 12cqi; } /* сжимается, если длинное название */
+.bk-welcome .bk-add { min-height: 0; padding: 1.4cqi 3.6cqi; }
+
+/* Окно (увеличенный доп) на телефоне — с отступом от «чёлки» и полосы жестов */
+.modal { padding: max(12px, env(safe-area-inset-top, 0px)) 12px max(12px, env(safe-area-inset-bottom, 0px)); }
+
+/* Нижние липкие панели — с учётом полосы жестов (safe-area) и слева/справа на телефоне в альбомной ориентации */
+.flow-nav, .sticky-cta { padding-left: max(var(--gutter), env(safe-area-inset-left, 0px)); padding-right: max(var(--gutter), env(safe-area-inset-right, 0px)); }
