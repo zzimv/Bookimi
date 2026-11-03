@@ -119,6 +119,7 @@ export function kidOutfitKind(value: string | undefined, gender: string | undefi
 
 // ── rev 16: ямочки, щербинка, украшение для волос (только девочки), головной убор, рост ──
 // Всё выбирается картинками; в ответах — appearance.dimples / toothGap / hairAcc / hairAccColor / hat / build
+// (rev 17: + body — сложение)
 // (необязательные, по умолчанию пусто). Рисует drawChild (art/kids.ts) — на живой обложке, страницах, превью и в PDF.
 
 /** Украшение для волос (только девочки): ключ → как рисовать. Пусто — без украшения. */
@@ -146,13 +147,22 @@ export const KID_HATS = [
 ] as const;
 export type KidHatKind = (typeof KID_HATS)[number]["kind"];
 
-/** Рост и сложение: пониже / как обычно / повыше. Пусто или «обычный» — как обычно. */
+/** Рост (rev 17: заметно — ~13% роста): пониже / средний / повыше. Пусто или «обычный» — средний.
+ *  Ключ в ответах — appearance.build (как в rev 16, старые ответы читаются). */
 export const KID_BUILDS = [
   { key: "пониже", kind: "short", label: "Пониже" },
-  { key: "обычный", kind: "normal", label: "Как обычно" },
+  { key: "обычный", kind: "normal", label: "Средний" },
   { key: "повыше", kind: "tall", label: "Повыше" },
 ] as const;
 export type KidBuildKind = (typeof KID_BUILDS)[number]["kind"];
+
+/** Сложение (rev 17): тоненький / обычный / плотненький (подписи по полу — бережные). Ключ — appearance.body. */
+export const KID_BODIES = [
+  { key: "тоненький", kind: "slim", label: { boy: "Тоненький", girl: "Тоненькая" } },
+  { key: "обычный", kind: "normal", label: { boy: "Обычный", girl: "Обычная" } },
+  { key: "плотненький", kind: "sturdy", label: { boy: "Плотненький", girl: "Плотненькая" } },
+] as const;
+export type KidBodyKind = (typeof KID_BODIES)[number]["kind"];
 
 /** Украшение для волос: только у девочек и только из списка. */
 export function kidHairAccKind(value: string | undefined | null, gender: string | undefined): KidHairAccKind | undefined {
@@ -166,18 +176,32 @@ export function kidHatKind(value: string | undefined | null): KidHatKind | undef
 export function kidBuildKind(value: string | undefined | null): KidBuildKind {
   return KID_BUILDS.find((x) => x.key === (value ?? "").trim().toLowerCase())?.kind ?? "normal";
 }
-/** Пропорции по росту: ноги, туловище, ширина плеч (тонко — герой всё так же помещается в сцены). */
-export const KID_BUILD_K: Record<KidBuildKind, { leg: number; torso: number; width: number }> = {
-  short: { leg: 0.82, torso: 0.9, width: 1.07 },
-  normal: { leg: 1, torso: 1, width: 1 },
-  tall: { leg: 1.17, torso: 1.08, width: 0.95 },
+/** Сложение по ключу (и по женским словам: «тоненькая», «плотненькая»). */
+export function kidBodyKind(value: string | undefined | null): KidBodyKind {
+  const v = (value ?? "").trim().toLowerCase();
+  if (/^тонень|^строй|^худ/.test(v)) return "slim";
+  if (/^плотн|^крепы|^пухл|^круг/.test(v)) return "sturdy";
+  return "normal";
+}
+/** Пропорции по росту (rev 17 — заметно, ~±13% роста): ноги, туловище, голова чуть-чуть. */
+export const KID_BUILD_K: Record<KidBuildKind, { leg: number; torso: number; head: number }> = {
+  short: { leg: 0.76, torso: 0.84, head: 0.96 },
+  normal: { leg: 1, torso: 1, head: 1 },
+  tall: { leg: 1.24, torso: 1.14, head: 1.03 },
+};
+/** Ширина по сложению: плечи и туловище, руки, ноги; плотненькому — круглые щёки и животик (рисует drawChild). */
+export const KID_BODY_K: Record<KidBodyKind, { sw: number; arm: number; leg: number; cheeks: number; belly: number }> = {
+  slim: { sw: 0.8, arm: 0.82, leg: 0.8, cheeks: 0, belly: 0 },
+  normal: { sw: 1, arm: 1, leg: 1, cheeks: 0, belly: 0 },
+  sturdy: { sw: 1.3, arm: 1.22, leg: 1.26, cheeks: 1, belly: 0.2 },
 };
 
 /** Новые приметы ребёнка (rev 16) из ответов — только известные значения; украшение — только девочке. */
-export function kidLookExtras(p: { dimples?: boolean; toothGap?: boolean; hairAcc?: string; hairAccColor?: string; hat?: string; build?: string } | undefined, gender: string | undefined) {
+export function kidLookExtras(p: { dimples?: boolean; toothGap?: boolean; hairAcc?: string; hairAccColor?: string; hat?: string; build?: string; body?: string } | undefined, gender: string | undefined) {
   const acc = kidHairAccKind(p?.hairAcc, gender) ? p!.hairAcc!.trim().toLowerCase() : undefined;
   const hat = kidHatKind(p?.hat) ? KID_HATS.find((x) => x.kind === kidHatKind(p?.hat))!.key : undefined;
   const build = kidBuildKind(p?.build);
+  const body = kidBodyKind(p?.body);
   return {
     dimples: p?.dimples || undefined,
     toothGap: p?.toothGap || undefined,
@@ -185,5 +209,6 @@ export function kidLookExtras(p: { dimples?: boolean; toothGap?: boolean; hairAc
     hairAccColor: acc && (HAIR_ACC_COLOR_KEYS as readonly string[]).includes(p?.hairAccColor ?? "") ? p!.hairAccColor : undefined,
     hat,
     build: build === "normal" ? undefined : KID_BUILDS.find((x) => x.kind === build)!.key,
+    body: body === "normal" ? undefined : KID_BODIES.find((x) => x.kind === body)!.key,
   };
 }

@@ -15,7 +15,7 @@
 
 import type { ArtStyle, ArtStyleDemo, DemoHeroDrawer, DemoSceneCtx, DemoTheme } from "../types";
 import { colorFrom, EYE_COLORS, HAIR_COLORS, OUTFIT_COLORS, pick, SKIN_COLORS } from "./shared";
-import { KID_BUILD_K, kidBuildKind, kidHairAccKind, kidHairCut, kidHatKind, kidOutfitKind, type KidHairCut } from "../looks";
+import { KID_BODY_K, KID_BUILD_K, kidBodyKind, kidBuildKind, kidHairAccKind, kidHairCut, kidHatKind, kidOutfitKind, type KidHairCut } from "../looks";
 
 // ---------------------------------------------------------------------------
 // Цвет
@@ -158,6 +158,8 @@ function styleIdOf(style: ArtStyleDemo) {
 }
 
 interface Kit {
+  /** rev 17 «Зимнее»: снег на ёлках, кронах и крышах. */
+  winter?: boolean;
   W: number;
   H: number;
   /** Горизонт. */
@@ -194,7 +196,7 @@ function kit(ctx: DemoSceneCtx): Kit {
     );
   const p = (d: string, fill: string, w = 2.5, extra = "") =>
     `<path d="${d}" fill="${fill}"${ol(w)}${extra}/>` + (hatch && w >= 2 ? `<path d="${d}" fill="url(#ks-hatch)"/>` : "");
-  return { W: ctx.W, H: ctx.H, gy: ctx.H * 0.7, r: ctx.rnd, heroRight: ctx.index % 2 === 1, wash, ink, c, ol, p, defs };
+  return { winter: ctx.winter, W: ctx.W, H: ctx.H, gy: ctx.H * 0.7, r: ctx.rnd, heroRight: ctx.index % 2 === 1, wash, ink, c, ol, p, defs };
 }
 
 /** Небо-градиент темы (с поправкой на стиль). */
@@ -252,7 +254,7 @@ function fir(k: Kit, x: number, base: number, h: number, green: string, snow: bo
     const bot = top + h * 0.42;
     const ww = h * (0.18 + i * 0.1);
     out += k.p(`M${f(x)} ${f(top)} L${f(x + ww)} ${f(bot)} Q${f(x)} ${f(bot + h * 0.04)} ${f(x - ww)} ${f(bot)}Z`, green, 2);
-    if (snow) out += `<path d="M${f(x)} ${f(top)} L${f(x + ww * 0.45)} ${f(top + (bot - top) * 0.45)} Q${f(x + ww * 0.15)} ${f(top + (bot - top) * 0.36)} ${f(x)} ${f(top + (bot - top) * 0.5)} Q${f(x - ww * 0.15)} ${f(top + (bot - top) * 0.36)} ${f(x - ww * 0.45)} ${f(top + (bot - top) * 0.45)}Z" fill="#fbfdff"/>`;
+    if (snow || k.winter) out += `<path d="M${f(x)} ${f(top)} L${f(x + ww * 0.45)} ${f(top + (bot - top) * 0.45)} Q${f(x + ww * 0.15)} ${f(top + (bot - top) * 0.36)} ${f(x)} ${f(top + (bot - top) * 0.5)} Q${f(x - ww * 0.15)} ${f(top + (bot - top) * 0.36)} ${f(x - ww * 0.45)} ${f(top + (bot - top) * 0.45)}Z" fill="#fbfdff"/>`;
     if (bauble) out += `<circle cx="${f(x + ww * 0.5)}" cy="${f(bot - 6)}" r="${f(h * 0.03)}" fill="${bauble}"/><circle cx="${f(x - ww * 0.35)}" cy="${f(bot - 10)}" r="${f(h * 0.025)}" fill="#f2c443"/>`;
   }
   return out;
@@ -260,13 +262,14 @@ function fir(k: Kit, x: number, base: number, h: number, green: string, snow: bo
 
 function roundTree(k: Kit, x: number, base: number, h: number, crown: string, trunk: string) {
   const R = h * 0.32;
+  const crownD = `M${f(x - R)} ${f(base - h * 0.62)} a${f(R * 0.7)} ${f(R * 0.7)} 0 0 1 ${f(R * 0.3)} ${f(-R * 0.9)} a${f(R * 0.8)} ${f(R * 0.8)} 0 0 1 ${f(R * 1.3)} ${f(-R * 0.1)} a${f(R * 0.7)} ${f(R * 0.7)} 0 0 1 ${f(R * 0.4)} ${f(R * 1.1)} a${f(R * 0.75)} ${f(R * 0.6)} 0 0 1 ${f(-R * 2)} ${f(-R * 0.1)}Z`;
+  // rev 17 «Зимнее»: снежная шапка — та же крона, сжатая к макушке (верхняя треть)
+  const topY = base - h * 0.62 - R * 1.45;
+  const cap = k.winter ? `<path data-snowcap="1" d="${crownD}" fill="#fbfdff" transform="translate(0 ${f(topY * 0.66)}) scale(1 0.34)"/>` : "";
   return (
     k.p(`M${f(x - h * 0.05)} ${f(base)} L${f(x - h * 0.035)} ${f(base - h * 0.55)} L${f(x + h * 0.035)} ${f(base - h * 0.55)} L${f(x + h * 0.05)} ${f(base)}Z`, trunk, 2) +
-    k.p(
-      `M${f(x - R)} ${f(base - h * 0.62)} a${f(R * 0.7)} ${f(R * 0.7)} 0 0 1 ${f(R * 0.3)} ${f(-R * 0.9)} a${f(R * 0.8)} ${f(R * 0.8)} 0 0 1 ${f(R * 1.3)} ${f(-R * 0.1)} a${f(R * 0.7)} ${f(R * 0.7)} 0 0 1 ${f(R * 0.4)} ${f(R * 1.1)} a${f(R * 0.75)} ${f(R * 0.6)} 0 0 1 ${f(-R * 2)} ${f(-R * 0.1)}Z`,
-      crown,
-      2.5,
-    )
+    k.p(crownD, crown, 2.5) +
+    cap
   );
 }
 
@@ -283,6 +286,7 @@ function house(k: Kit, x: number, base: number, s: number, wall: string, roof: s
   return (
     k.p(`M${f(x - 40 * s)} ${f(base)} V${f(base - 50 * s)} H${f(x + 40 * s)} V${f(base)}Z`, wall, 2) +
     k.p(`M${f(x - 50 * s)} ${f(base - 48 * s)} L${f(x)} ${f(base - 90 * s)} L${f(x + 50 * s)} ${f(base - 48 * s)}Z`, roof, 2) +
+    (k.winter ? `<path data-snowcap="1" d="M${f(x - 54 * s)} ${f(base - 46 * s)} L${f(x)} ${f(base - 94 * s)} L${f(x + 54 * s)} ${f(base - 46 * s)} Q${f(x + 40 * s)} ${f(base - 54 * s)} ${f(x + 30 * s)} ${f(base - 60 * s)} Q${f(x + 16 * s)} ${f(base - 64 * s)} ${f(x)} ${f(base - 74 * s)} Q${f(x - 20 * s)} ${f(base - 62 * s)} ${f(x - 34 * s)} ${f(base - 58 * s)}Z" fill="#fbfdff"/>` : "") +
     `<rect x="${f(x - 12 * s)}" y="${f(base - 38 * s)}" width="${f(24 * s)}" height="${f(20 * s)}" fill="${light}"/><path d="M${f(x)} ${f(base - 38 * s)}v${f(20 * s)}M${f(x - 12 * s)} ${f(base - 28 * s)}h${f(24 * s)}" stroke="${k.c("#5a3b28")}" stroke-width="${f(2 * s)}"/>`
   );
 }
@@ -649,24 +653,26 @@ const POSES: Pose[] = ["wave", "stand", "walk", "cheer", "point"];
  * Пропорции ребёнка по возрасту и росту (rev 16: «пониже» / «повыше» — тонко, герой всё так же в сцене):
  * малыши — крупная голова и короткие ножки. Общие для рисовальщика и кадра «крупно лицо» (render.ts).
  */
-export function childBody(ageIn: number | undefined, build?: string) {
+export function childBody(ageIn: number | undefined, build?: string, bodyIn?: string) {
   const age = Math.min(10, Math.max(2, Number.isFinite(ageIn) ? (ageIn as number) : 6));
   const bk = KID_BUILD_K[kidBuildKind(build)];
+  // rev 17: сложение — ширина плеч, рук и ног (одежда рисуется по этим размерам и следует за фигурой)
+  const wk = KID_BODY_K[kidBodyKind(bodyIn)];
   const footY = 184;
   const legLen = (50 + age * 3) * bk.leg;
   const torso = (58 + age * 1.8) * bk.torso;
-  const R = 47 - age * 0.75;
+  const R = (47 - age * 0.75) * bk.head;
   const hipY = footY - legLen;
   const shY = hipY - torso;
   const hc = shY - R * 0.84;
-  return { age, footY, legLen, torso, R, hipY, shY, hc, sw: (22 + age * 0.9) * bk.width, armW: (12 + age * 0.45) * bk.width, legW: (14 + age * 0.6) * bk.width };
+  return { age, footY, legLen, torso, R, hipY, shY, hc, sw: (22 + age * 0.9) * wk.sw, armW: (12 + age * 0.45) * wk.arm, legW: (14 + age * 0.6) * wk.leg, cheeks: wk.cheeks, belly: wk.belly };
 }
 
 /** Ребёнок 2–10 лет. Точка опоры (0, 190) — ступни; рост ~230 при 6 годах. */
 export const drawChild: DemoHeroDrawer = (o) => {
   const h = o.look;
   const st = o.style;
-  const body0 = childBody(h.age, h.build);
+  const body0 = childBody(h.age, h.build, h.body);
   const age = body0.age;
   const girl = h.gender === "girl";
   const idx = o.index ?? 0;
@@ -697,8 +703,9 @@ export const drawChild: DemoHeroDrawer = (o) => {
   };
 
   // пропорции по возрасту: малыши — крупная голова и короткие ножки
-  const { footY, legLen, torso, R, hipY, shY, hc, sw, armW, legW } = body0;
+  const { footY, legLen, torso, R, hipY, shY, hc, sw, armW, legW, cheeks: chubby, belly } = body0;
   const build = kidBuildKind(h.build);
+  const bodyKind = kidBodyKind(h.body);
 
   // позы: [плечо, локоть, кисть]
   const shL: Pt = [-sw + 3, shY + 9];
@@ -817,7 +824,12 @@ export const drawChild: DemoHeroDrawer = (o) => {
     .join("");
 
   // ── туловище ──
-  const topPath = (hem: number, fill: string) => `<path d="M${f(-sw + 1)} ${f(shY + 4)} Q0 ${f(shY - 4)} ${f(sw - 1)} ${f(shY + 4)} L${f(sw + 3)} ${f(hem)} Q0 ${f(hem + 5)} ${f(-sw - 3)} ${f(hem)}Z" fill="${fill}"${s}/>`;
+  // Плотненький (rev 17) — бока туловища круглые (животик), одежда повторяет фигуру
+  const bx = sw * belly;
+  const topPath = (hem: number, fill: string) =>
+    bx
+      ? `<path d="M${f(-sw + 1)} ${f(shY + 4)} Q0 ${f(shY - 4)} ${f(sw - 1)} ${f(shY + 4)} C${f(sw + 3 + bx)} ${f(shY + (hem - shY) * 0.4)} ${f(sw + 3 + bx)} ${f(hem - (hem - shY) * 0.12)} ${f(sw + 3)} ${f(hem)} Q0 ${f(hem + 7)} ${f(-sw - 3)} ${f(hem)} C${f(-sw - 3 - bx)} ${f(hem - (hem - shY) * 0.12)} ${f(-sw - 3 - bx)} ${f(shY + (hem - shY) * 0.4)} ${f(-sw + 1)} ${f(shY + 4)}Z" fill="${fill}"${s}/>`
+      : `<path d="M${f(-sw + 1)} ${f(shY + 4)} Q0 ${f(shY - 4)} ${f(sw - 1)} ${f(shY + 4)} L${f(sw + 3)} ${f(hem)} Q0 ${f(hem + 5)} ${f(-sw - 3)} ${f(hem)}Z" fill="${fill}"${s}/>`;
   const waist = (color: string) => `<path d="M${f(-sw - 2)} ${f(hipY - 6)} H${f(sw + 2)} L${f(sw + 2)} ${f(hipY + 14)} H${f(-sw - 2)}Z" fill="${color}"${s}/>`;
   const crew = (c: string) => `<path d="M-11 ${f(shY + 1)} Q0 ${f(shY + 12)} 11 ${f(shY + 1)}" stroke="${c}" stroke-width="2.5" fill="none"/>`;
   const hemBand = (hem: number, c: string) => `<path d="M${f(-sw - 2)} ${f(hem - 5)} Q0 ${f(hem)} ${f(sw + 2)} ${f(hem - 5)}" stroke="${c}" stroke-width="${f(torso * 0.1)}" fill="none"/>`;
@@ -927,7 +939,10 @@ export const drawChild: DemoHeroDrawer = (o) => {
 
   // ── голова ──
   const ear = framed ? "" : [-1, 1].map((sd) => `<ellipse cx="${f(sd * R * 0.97)}" cy="${f(hc + R * 0.12)}" rx="${f(R * 0.16)}" ry="${f(R * 0.2)}" fill="${skin}"${sThin}/>`).join("");
-  const headShape = `<path d="M${f(-R)} ${f(hc - R * 0.05)} C${f(-R)} ${f(hc - R * 1.32)} ${f(R)} ${f(hc - R * 1.32)} ${f(R)} ${f(hc - R * 0.05)} C${f(R)} ${f(hc + R * 0.72)} ${f(R * 0.5)} ${f(hc + R * 0.98)} 0 ${f(hc + R * 0.98)} C${f(-R * 0.5)} ${f(hc + R * 0.98)} ${f(-R)} ${f(hc + R * 0.72)} ${f(-R)} ${f(hc - R * 0.05)}Z" fill="${skin}"${s}/>`;
+  // Плотненький (rev 17) — круглое лицо с пухлыми щёчками; тоненький — лицо чуть уже книзу
+  const jw = chubby ? 1.12 : bodyKind === "slim" ? 0.94 : 1;
+  const jy = chubby ? 0.86 : 0.72;
+  const headShape = `<path d="M${f(-R)} ${f(hc - R * 0.05)} C${f(-R)} ${f(hc - R * 1.32)} ${f(R)} ${f(hc - R * 1.32)} ${f(R)} ${f(hc - R * 0.05)} C${f(R * jw)} ${f(hc + R * jy)} ${f(R * 0.5 * jw)} ${f(hc + R * 0.98)} 0 ${f(hc + R * 0.98)} C${f(-R * 0.5 * jw)} ${f(hc + R * 0.98)} ${f(-R * jw)} ${f(hc + R * jy)} ${f(-R)} ${f(hc - R * 0.05)}Z" fill="${skin}"${s}/>`;
 
   // лицо
   const ex = R * 0.37;
@@ -951,6 +966,8 @@ export const drawChild: DemoHeroDrawer = (o) => {
   const brows = [-1, 1].map((sd) => `<path d="M${f(sd * ex - R * 0.1)} ${f(ey - R * 0.24)} Q${f(sd * ex)} ${f(ey - R * 0.3)} ${f(sd * ex + R * 0.1)} ${f(ey - R * 0.24)}" stroke="${hairDark}" stroke-width="${f(R * 0.05)}" fill="none" stroke-linecap="round" opacity=".85"/>`).join("");
   const cheeks = h.blush
     ? [-1, 1].map((sd) => `<ellipse cx="${f(sd * R * 0.6)}" cy="${f(hc + R * 0.42)}" rx="${f(R * 0.2)}" ry="${f(R * 0.13)}" fill="#ef7f8a" opacity=".75" data-blush="1"/>`).join("")
+    : chubby
+    ? [-1, 1].map((sd) => `<ellipse cx="${f(sd * R * 0.62)}" cy="${f(hc + R * 0.46)}" rx="${f(R * 0.22)}" ry="${f(R * 0.16)}" fill="${blush}" opacity=".7" data-cheeks="round"/>`).join("")
     : [-1, 1].map((sd) => `<ellipse cx="${f(sd * R * 0.6)}" cy="${f(hc + R * 0.42)}" rx="${f(R * 0.15)}" ry="${f(R * 0.1)}" fill="${blush}" opacity=".55"/>`).join("");
   const nose = `<path d="M${f(-R * 0.05)} ${f(hc + R * 0.34)} Q0 ${f(hc + R * 0.4)} ${f(R * 0.05)} ${f(hc + R * 0.34)}" stroke="${mix(skin, "#7a3b2a", 0.45)}" stroke-width="${f(R * 0.045)}" fill="none" stroke-linecap="round"/>`;
   const my = hc + R * 0.53;
@@ -1119,10 +1136,21 @@ export const drawChild: DemoHeroDrawer = (o) => {
   if (hat) hat = `<g data-hat="${hatKind}">${hat}</g>`;
 
   const rot = `rotate(${tilt} 0 ${f(shY)})`;
-  const head = `<g transform="${rot}">${ear}${headShape}${cheeks}${dimples}${freckles}${brows}${eyes}${nose}${toothGap || mouth}${front}${hat}${accSvg}${glasses}</g>`;
+  // rev 17, настроение «Зимнее» на улице: шарф и пар изо рта (render.ts ставит winter: true)
+  const scarfCol = mix(trim, "#c8323c", 0.35);
+  const scarf = h.winter
+    ? `<g data-scarf="1"><path d="M${f(-sw * 0.62)} ${f(shY - 2)} Q0 ${f(shY + 10)} ${f(sw * 0.62)} ${f(shY - 2)} L${f(sw * 0.6)} ${f(shY + 8)} Q0 ${f(shY + 20)} ${f(-sw * 0.6)} ${f(shY + 8)}Z" fill="${scarfCol}"${s}/>` +
+      `<path d="M${f(sw * 0.2)} ${f(shY + 10)} l${f(sw * 0.1)} ${f(torso * 0.42)} l${f(sw * 0.24)} ${f(-2)} l${f(-sw * 0.08)} ${f(-torso * 0.42)}Z" fill="${scarfCol}"${s}/>` +
+      [0.18, 0.3].map((k) => `<path d="M${f(sw * 0.24)} ${f(shY + 10 + torso * k)} h${f(sw * 0.24)}" stroke="${lt(scarfCol, 0.55)}" stroke-width="${f(Math.max(1.6, R * 0.05))}"/>`).join("") +
+      `</g>`
+    : "";
+  const breath = h.winter
+    ? `<g data-breath="1" fill="#ffffff" opacity=".8">${[[0.32, 0.04, 0.09], [0.5, -0.04, 0.12], [0.72, -0.14, 0.15]].map(([x, y, rr]) => `<circle cx="${f(R * x + R * 0.12)}" cy="${f(my + R * y)}" r="${f(R * rr)}"/>`).join("")}</g>`
+    : "";
+  const head = `<g transform="${rot}">${ear}${headShape}${cheeks}${dimples}${freckles}${brows}${eyes}${nose}${toothGap || mouth}${front}${hat}${accSvg}${glasses}${breath}</g>`;
 
-  return `<g data-figure="child" data-gender="${girl ? "f" : "m"}" data-haircut="${cut0}" data-outfit="${outfitKind}" data-outfit-color="${shirt}" data-build="${build}"${hatKind ? ` data-hat="${hatKind}"` : ""}${accKind && !(accKind === "band" && hatKind) ? ` data-hair-acc="${accKind}"` : ""}${h.dimples ? ` data-dimples="1"` : ""}${h.toothGap ? ` data-tooth-gap="1"` : ""} transform="translate(${f(o.x)} ${f(o.y)}) scale(${f(o.flip ? -o.scale : o.scale)} ${f(o.scale)})">
+  return `<g data-figure="child" data-gender="${girl ? "f" : "m"}" data-haircut="${cut0}" data-outfit="${outfitKind}" data-outfit-color="${shirt}" data-build="${build}" data-body="${bodyKind}" data-sw="${f(sw)}"${hatKind ? ` data-hat="${hatKind}"` : ""}${accKind && !(accKind === "band" && hatKind) ? ` data-hair-acc="${accKind}"` : ""}${h.dimples ? ` data-dimples="1"` : ""}${h.toothGap ? ` data-tooth-gap="1"` : ""} data-age="${f(age)}" transform="translate(${f(o.x)} ${f(o.y)}) scale(${f(o.flip ? -o.scale : o.scale)} ${f(o.scale)})">
     <ellipse cx="0" cy="${footY + 6}" rx="${f(56 + age)}" ry="10" fill="rgba(0,0,0,.16)"/>
-    ${back ? `<g transform="${rot}">${back}</g>` : ""}${arm(armL)}${legs}${body}${neck}${collar}${braids}${head}${arm(armR)}
+    ${back ? `<g transform="${rot}">${back}</g>` : ""}${arm(armL)}${legs}${body}${neck}${collar}${scarf}${braids}${head}${arm(armR)}
   </g>`;
 };

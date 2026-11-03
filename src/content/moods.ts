@@ -16,6 +16,8 @@ import type { MoodDemo } from "./art/mood";
 export interface MoodEx extends Omit<Mood, "demo" | "audiences"> {
   audiences: AudienceKey[];
   demo: MoodDemo;
+  /** rev 17: скрыто от покупателей везде (код оставлен); сохранённое скрытое настроение → «как задумал художник». */
+  hidden?: boolean;
 }
 
 /** Хвост каждой добавки: настроение меняет только свет и цвет. */
@@ -35,6 +37,7 @@ export const MOODS: MoodEx[] = [
   },
   {
     id: "warm",
+    hidden: true, // rev 17: скрыто от покупателей
     title: "Тёплое",
     oneLine: "Золотой вечерний свет, как в уютный летний вечер",
     audiences: ALL,
@@ -77,6 +80,7 @@ export const MOODS: MoodEx[] = [
   },
   {
     id: "sleepy",
+    hidden: true, // rev 17: скрыто от покупателей
     title: "Сонное",
     oneLine: "Тихий вечер, луна и светлячки — для книги на ночь",
     audiences: ["CHILD", "PET"],
@@ -96,13 +100,14 @@ export const MOODS: MoodEx[] = [
     title: "Праздничное",
     oneLine: "Конфетти, огоньки и ощущение праздника",
     audiences: ALL,
-    promptAdd: `festive celebration atmosphere, warm sparkling party lights, bokeh of string lights, rich red gold and teal accents in the lighting, joyful glow, ${KEEP}`,
-    negativeAdd: "dull, gloomy, empty, muted grey palette, rain",
+    // rev 17: гирлянды и огоньки (не снег — снег у «Зимнего»)
+    promptAdd: `festive celebration atmosphere, colorful garlands and paper bunting, warm sparkling string lights and bokeh, confetti, rich red gold and teal accents in the lighting, joyful glow, ${KEEP}`,
+    negativeAdd: "dull, gloomy, empty, muted grey palette, rain, snowfall added to the scene",
     demo: {
       tint: "#ffd6cc", tintStrength: 0.2, saturation: 1.22, brightness: 1.04, contrast: 1.05,
       light: { top: "#ffcf6e", topOpacity: 0.18, bottom: "#b8325a", bottomOpacity: 0.14 },
       extraDeco: "confetti", decoCount: 46,
-      fx: ["bokeh"], decoColor: "#ffd36e",
+      fx: ["bokeh", "garland"], decoColor: "#ffd36e",
     },
   },
   {
@@ -122,6 +127,7 @@ export const MOODS: MoodEx[] = [
   },
   {
     id: "tender",
+    hidden: true, // rev 17: скрыто от покупателей
     title: "Нежное",
     oneLine: "Пастельные тона и мягкий утренний свет",
     audiences: ALL,
@@ -136,6 +142,7 @@ export const MOODS: MoodEx[] = [
   },
   {
     id: "retro",
+    hidden: true, // rev 17: скрыто от покупателей
     title: "Ретро",
     oneLine: "Тёплая выцветшая плёнка, как старая открытка",
     audiences: ALL,
@@ -151,19 +158,23 @@ export const MOODS: MoodEx[] = [
   {
     id: "wintry",
     title: "Зимнее",
-    oneLine: "Морозная свежесть и падающий снег",
+    oneLine: "Снег на земле и деревьях, снежинки и тёплые окна",
     audiences: ALL,
-    promptAdd: `crisp wintry atmosphere, cool clear light, icy blue and silver tones, gently falling snowflakes, frosty sparkle in the air, ${KEEP}`,
-    negativeAdd: "summer heat, warm orange cast, green summer foliage glow, rain",
+    // rev 17: зима видна сразу — снег на земле, ветках и крышах, снегопад, холодный бело-голубой свет и тёплые окна;
+    // на улице герои в шапках и шарфах, пар изо рта. В помещении — снегопад за окном. Отличается от ночи и от «Праздничного».
+    promptAdd: "snowy winter version of the same scene: fresh white snow covering the ground, snow caps on tree branches, roofs, fences and benches, gently falling snowflakes, cool blue-white winter light with warm glowing windows, outdoor characters dressed warmly in knitted hats, scarves and mittens with a little frosty breath; indoors show snow falling outside the window; keep the scene's own time of day and place; keep the same characters, faces, poses and composition unchanged; keep areas for text calm and readable",
+    negativeAdd: "summer, green summer foliage, flowers in bloom, rain, puddles, bare dry ground, sunburnt warm orange cast, swimwear, holiday garlands as the main feature",
     demo: {
-      tint: "#b4cdff", tintStrength: 0.5, saturation: 0.72, brightness: 1.12, contrast: 0.98,
-      light: { top: "#cfe0ff", topOpacity: 0.45, bottom: "#f4f8ff", bottomOpacity: 0.4 },
-      glow: { color: "#ffffff", x: 0.5, y: 0.0, r: 0.5, opacity: 0.35 },
-      extraDeco: "snow", decoCount: 70,
+      tint: "#c4d8ff", tintStrength: 0.4, saturation: 0.78, brightness: 1.08, contrast: 1.0,
+      light: { top: "#e6efff", topOpacity: 0.32, bottom: "#ffffff", bottomOpacity: 0.12 },
+      glow: { color: "#ffc670", x: 0.1, y: 0.58, r: 0.18, opacity: 0.4 },
+      extraDeco: "snow", decoCount: 110, decoColor: "#ffffff",
+      fx: ["snowfall"],
     },
   },
   {
     id: "romantic",
+    hidden: true, // rev 17: скрыто от покупателей
     title: "Романтичное",
     oneLine: "Розово-золотой закат и мягкие блики",
     audiences: ["ADULT", "TEEN"],
@@ -182,5 +193,15 @@ export const MOODS: MoodEx[] = [
 
 /** Настроения для аудитории (и возраста героя, если известен). Первое — всегда «как задумал художник». */
 export function moodsFor(audience: AudienceKey, age?: number): MoodEx[] {
-  return MOODS.filter((m) => m.audiences.includes(audience) && (m.minAge === undefined || audience !== "TEEN" || (age !== undefined && age >= m.minAge)));
+  return VISIBLE_MOODS.filter((m) => m.audiences.includes(audience) && (m.minAge === undefined || audience !== "TEEN" || (age !== undefined && age >= m.minAge)));
+}
+
+/** rev 17 (решение владельца): покупатель видит «Как задумал художник» и пять настроений — в этом порядке. */
+export const LIVE_MOOD_IDS = ["as-drawn", "adventure", "festive", "cheerful", "wintry", "magic"] as const;
+/** Видимые настроения в порядке LIVE_MOOD_IDS (скрытые — hidden — не показываются нигде). */
+export const VISIBLE_MOODS: MoodEx[] = LIVE_MOOD_IDS.map((id) => MOODS.find((m) => m.id === id)!).filter((m) => m && !m.hidden);
+/** Сохранённое настроение → видимое: скрытое или неизвестное → "" («как задумал художник»). */
+export function liveMoodId(id: string | null | undefined): string {
+  const v = (id ?? "").trim();
+  return v && v !== "as-drawn" && VISIBLE_MOODS.some((m) => m.id === v) ? v : "";
 }

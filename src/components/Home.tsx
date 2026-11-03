@@ -70,7 +70,8 @@ export function Favorites({ stories, minPrice }: { stories: PublicStory[]; minPr
   );
 }
 
-const SHOW_STYLES = ["watercolor-air", "folk-lubok", "kind-classic"];
+// rev 17: только живые детские стили
+const SHOW_STYLES = ["soft-gouache", "golden-animation", "cozy-detail"];
 const SHOW_LOOK = { slug: "imya-i-zvyozdnyj-drakonchik", gender: "girl", age: 5, hair: "русые", hairstyle: "хвостик", extras: [] as string[] };
 
 export function PhotoShowcase() {

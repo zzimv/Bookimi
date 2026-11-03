@@ -14,7 +14,7 @@ import { api, goal } from "@/lib/client";
 import {
   ADULT_AGES, AGE_GROUPS, AUDIENCE_EXTRA_ROLES, bookAgeLabel, kidGroupByKey, kidGroupOf, CLOTHES, dedicationsFor, EXTRA_ROLE_LABELS, FUR, HAIR, HAIR_ADULT, HAIRSTYLE, INTERESTS, occasionChips, SKIN, TEEN_INTERESTS,
   ADULT_HAIRSTYLE_F, ADULT_HAIRSTYLE_M, EYES, extraGender, OUTFIT_COLOR_KEYS, sampleExtras, SMILES, TOYS,
-  heroHairAndClothes, kidLookExtras, KID_HAIR_ACCS, KID_HATS, KID_BUILDS, HAIR_ACC_COLOR_KEYS, HAIR_ACC_COLOR_WORD, KID_HAIRSTYLE_DEFAULT, KID_HAIRSTYLE_KEYS, KID_OUTFIT_KEYS, normalizeKidHairstyle, normalizeKidOutfit,
+  heroHairAndClothes, kidLookExtras, KID_HAIR_ACCS, KID_HATS, KID_BUILDS, KID_BODIES, HAIR_ACC_COLOR_KEYS, HAIR_ACC_COLOR_WORD, KID_HAIRSTYLE_DEFAULT, KID_HAIRSTYLE_KEYS, KID_OUTFIT_KEYS, normalizeKidHairstyle, normalizeKidOutfit,
   type QuizAnswers,
 } from "@/lib/quiz";
 import { fillTags, guessGender, normalizeName } from "@/lib/declension";
@@ -90,7 +90,7 @@ const HERO_SCENES = 3;
 
 /**
  * Готовые герои для выбора картинкой (rev 13): тон кожи, цвет волос и причёска. Рисует тот же рисовальщик, что книгу
- * (/obrazec?p=1), — ребёнок выбранного возраста. Тонкая настройка — в «Подробнее».
+ * (/obrazec?p=1), — ребёнок выбранного возраста. Тонкая настройка — ряды картинок сразу под героями (rev 17, без «Подробнее»).
  */
 // rev 15: у каждого из 6 готовых героев своя причёска — только из набора своего пола (KID_HAIRSTYLES)
 const LOOK_PRESETS: Record<"boy" | "girl", { skin: string; hair: string; hairstyle: string }[]> = {
@@ -135,7 +135,7 @@ const empty = (audience: AudienceKey = "CHILD"): Draft => ({
   audience,
   segment: "",
   hero: { name: "", nickname: "", gender: undefined, ageGroup: undefined, birthDate: "", age: undefined, photoIds: [] },
-  appearance: { hair: "", hairstyle: "", skin: "", glasses: false, freckles: false, beard: false, clothes: "", eyes: "", smile: "", blush: false, outfitColor: "", dimples: false, toothGap: false, hairAcc: "", hairAccColor: "", hat: "", build: "", custom: "" },
+  appearance: { hair: "", hairstyle: "", skin: "", glasses: false, freckles: false, beard: false, clothes: "", eyes: "", smile: "", blush: false, outfitColor: "", dimples: false, toothGap: false, hairAcc: "", hairAccColor: "", hat: "", build: "", body: "", custom: "" },
   adult: { profession: "", relation: "", howMet: "", memories: [] },
   pet: { species: undefined, breed: "", furColor: "", traits: "" },
   interests: [],
@@ -575,7 +575,7 @@ export function QuizWizard({
   const extrasNamed = (from = 0) => a.extras.slice(from).every((e) => (e.role === "custom" ? e.what?.trim() || e.name.trim() : e.name.trim()));
 
   function validate(s: FlowStep): string {
-    if (s === "heroes") return validateScene(0) || validateScene(2);
+    if (s === "heroes") return validateScene(0) || validateScene(1) || validateScene(2);
     if (s === "occasion" && occChosen && a.occasion.key === "svoj" && !a.occasion.custom?.trim()) return "Напишите, какой у вас повод";
     if (s === "book") {
       if (own) {
@@ -595,15 +595,24 @@ export function QuizWizard({
     return "";
   }
 
-  /** Сцены шага «Герои»: 0 — имя, пол, возраст; 1 — внешность (необязательно); 2 — кто ещё в книге. */
+  /** Сцены шага «Герои»: 0 — имя (пол, возраст — не ребёнку); 1 — внешность (ребёнку rev 17: сначала возраст, потом пол
+   *  картинками, дальше — по желанию); 2 — кто ещё в книге. */
+  // rev 17: возраст и пол выбраны картинкой — подсказка «Выберите возраст…» сразу исчезает
+  useEffect(() => {
+    if (step === "heroes" && scene === 1 && error && !validateScene(1)) setError("");
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [a.hero.ageGroup, a.hero.gender, a.hero.birthDate]);
   function validateScene(n: number): string {
+    if (n === 1 && aud === "CHILD") {
+      if (!a.hero.ageGroup && !a.hero.birthDate) return "Выберите возраст — нажмите на картинку";
+      if (!a.hero.gender) return "Кто наш герой: мальчик или девочка? Нажмите на картинку";
+    }
     if (n === 0) {
       if (!a.hero.name?.trim()) return aud === "PET" ? "Как зовут питомца?" : "Как зовут героя?";
       const badName = nameError(a.hero.name, "free") ?? nameError(a.hero.nickname, "free");
       if (badName) return badName;
       if (aud === "PET" && !a.pet.species) return "Кто это: собака или кошка?";
-      if (!a.hero.gender) return aud === "PET" ? "Мальчик или девочка?" : `Выберите: ${GENDER[aud][0].toLowerCase()} или ${GENDER[aud][1].toLowerCase()}`;
-      if (aud === "CHILD" && !a.hero.ageGroup && !a.hero.birthDate) return "Укажите возраст или дату рождения";
+      if (!a.hero.gender && aud !== "CHILD") return aud === "PET" ? "Мальчик или девочка?" : `Выберите: ${GENDER[aud][0].toLowerCase()} или ${GENDER[aud][1].toLowerCase()}`;
       if (aud === "TEEN" && (a.hero.age === undefined || a.hero.age < 11 || a.hero.age > 17)) return "Укажите возраст: от 11 до 17 лет";
     }
     if (n === 2) {
@@ -660,7 +669,7 @@ export function QuizWizard({
       const e = validate(s);
       if (e) {
         go(s);
-        if (s === "heroes") setScene(validateScene(0) ? 0 : 2);
+        if (s === "heroes") setScene(validateScene(0) ? 0 : validateScene(1) ? 1 : 2);
         if (s === "group") setShowIssues(true);
         return setError(e);
       }
@@ -681,7 +690,7 @@ export function QuizWizard({
               adults: a.group.adults.filter((x) => x.name.trim()).map((x) => ({ name: x.name.trim(), role: x.role, gender: x.gender })),
             }
           : undefined,
-        artStyle: style || "watercolor-air",
+        artStyle: style || "soft-gouache",
       };
       const r = await api<{ bookId: string }>("/api/books", { answers, captcha, ...(bulk && story?.group && a.group.members.length ? { bulk: {} } : {}) });
       for (const k of [KEY, ...OLD_KEYS]) localStorage.removeItem(k);
@@ -856,10 +865,10 @@ export function QuizWizard({
     });
   const heroPics = (
     <div className="describe" data-describe="pics">
-      <PicRow name="skin" label="Тон кожи" options={SKIN.map((x) => ({ key: x, label: PIC_LABEL.skin(x), src: heroPic({ skin: x }) }))} value={ap.skin ?? ""} onChange={(v) => look({ skin: v })} />
-      <PicRow name="hair" label="Цвет волос" options={HAIR.map((x) => ({ key: x, label: PIC_LABEL.hair(x), src: heroPic({ hair: x }) }))} value={ap.hair ?? ""} onChange={(v) => look({ hair: v })} />
+      <PicRow name="skin" label={kidSets ? "Кожа" : "Тон кожи"} options={SKIN.map((x) => ({ key: x, label: PIC_LABEL.skin(x), src: heroPic({ skin: x }) }))} value={ap.skin ?? ""} onChange={(v) => look({ skin: v })} />
+      <PicRow name="hair" label={kidSets ? "Волосы" : "Цвет волос"} options={HAIR.map((x) => ({ key: x, label: PIC_LABEL.hair(x), src: heroPic({ hair: x }) }))} value={ap.hair ?? ""} onChange={(v) => look({ hair: v })} />
       <PicRow name="hairstyle" label="Причёска" options={(kidSets ? KID_HAIRSTYLE_KEYS[g] : HAIRSTYLE).map((x) => ({ key: x, label: `Причёска: ${PIC_LABEL.hairstyle(x).toLowerCase()}`, src: heroPic({ hairstyle: x }, "bust") }))} value={kidSets ? hairNow : ap.hairstyle ?? ""} onChange={(v) => look({ hairstyle: v || hairNow })} />
-      <PicRow name="eyes" label="Цвет глаз" options={EYES.map((x) => ({ key: x, label: PIC_LABEL.eyes(x), src: heroPic({ eyes: x }) }))} value={ap.eyes ?? ""} onChange={(v) => look({ eyes: v })} allowEmpty />
+      <PicRow name="eyes" label={kidSets ? "Глаза" : "Цвет глаз"} options={EYES.map((x) => ({ key: x, label: PIC_LABEL.eyes(x), src: heroPic({ eyes: x }) }))} value={ap.eyes ?? ""} onChange={(v) => look({ eyes: v })} allowEmpty />
       <PicToggles
         name="face"
         label="Лицо"
@@ -885,7 +894,7 @@ export function QuizWizard({
       {kidSets && g === "girl" && (
         <PicRow
           name="hairAcc"
-          label="Украшение для волос"
+          label="Украшения"
           options={[{ key: "нет", label: "Без украшения", src: heroPic({ hairAcc: undefined, hairAccColor: undefined, hat: undefined }) }, ...KID_HAIR_ACCS.map((x) => ({ key: x.key, label: x.label, src: heroPic({ hairAcc: x.key, hat: undefined }) }))]}
           value={accNow || "нет"}
           onChange={(v) => look({ hairAcc: v === "нет" ? "" : v })}
@@ -911,13 +920,26 @@ export function QuizWizard({
         />
       )}
       {kidSets && (
-        <PicRow
-          name="build"
-          label="Рост и сложение"
-          options={KID_BUILDS.map((x) => ({ key: x.key, label: `Рост: ${x.label.toLowerCase()}`, src: heroPic({ build: x.key === "обычный" ? undefined : x.key }, false) }))}
-          value={(kidX as { build?: string }).build || "обычный"}
-          onChange={(v) => look({ build: v === "обычный" ? "" : v })}
-        />
+        // rev 17: рост и сложение — два ряда, разница видна сразу (рост ~±13%, сложение — ширина фигуры и щёчки)
+        <div className="pic-group" data-pic-group="body">
+          <span className="label pic-group__title">Рост и сложение</span>
+          <PicRow
+            name="build"
+            label="Рост"
+            caps
+            options={KID_BUILDS.map((x) => ({ key: x.key, label: x.label, src: heroPic({ build: x.key === "обычный" ? undefined : x.key }, false) }))}
+            value={(kidX as { build?: string }).build || "обычный"}
+            onChange={(v) => look({ build: v === "обычный" ? "" : v })}
+          />
+          <PicRow
+            name="body"
+            label="Сложение"
+            caps
+            options={KID_BODIES.map((x) => ({ key: x.key, label: x.label[g], src: heroPic({ body: x.key === "обычный" ? undefined : x.key }, "bust") }))}
+            value={(kidX as { body?: string }).body || "обычный"}
+            onChange={(v) => look({ body: v === "обычный" ? "" : v })}
+          />
+        </div>
       )}
       {aud !== "ADULT" && !kidSets && (
         <>
@@ -984,8 +1006,66 @@ export function QuizWizard({
       </div>
     );
   };
+  // rev 17 (ребёнок): сначала возраст картинками (три фигурки), потом мальчик / девочка — картинками этого возраста.
+  // Пока пол не выбран, на карточке возраста — мальчик и девочка рядом.
+  const ageGenderPicker = (() => {
+    const kidPic = (gender: "boy" | "girl", ageNum: number | undefined, face: boolean | "bust" = false) =>
+      sampleUrl({ portrait: true, face, kind: "child", gender, age: ageNum, slug: previewLook.slug, style, ...(a.hero.gender === gender ? { hair: ap.hair || undefined, skin: ap.skin || undefined, hairstyle: hairNow, clothes: clothesNow, outfit: ap.outfitColor || undefined, eyes: ap.eyes || undefined, ...kidX, build: undefined, body: undefined, hat: undefined } : {}) });
+    const groups = AGE_GROUPS.filter((x) => !lockedKidGroup || x.key === lockedKidGroup.key);
+    const ageChosen = Boolean(kidGroup || a.hero.birthDate);
+    return (
+      <div className="age-gender" data-age-gender>
+        <span className="label pic-group__title" id="pic-age">Сколько лет? <span className="req">*</span></span>
+        <div className="age-grid" role="radiogroup" aria-labelledby="pic-age">
+          {groups.map((x) => {
+            const on = a.hero.ageGroup === x.key;
+            return (
+              <button key={x.key} type="button" role="radio" aria-checked={on} className="age-card" data-age={x.key} aria-label={x.label} onClick={() => hero({ ageGroup: x.key as "2-4" })}>
+                <span className="age-card__pics">
+                  {(a.hero.gender ? [a.hero.gender] : (["boy", "girl"] as const)).map((gg) => (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img key={gg} src={kidPic(gg as "boy" | "girl", x.age)} alt="" width={120} height={120} />
+                  ))}
+                </span>
+                <span className="age-card__cap">{x.label}</span>
+                <span className="char-card__check" aria-hidden="true">✓</span>
+              </button>
+            );
+          })}
+        </div>
+        {lockedKidGroup && <small className="muted" data-age-locked>Текст этой книги написан для детей {lockedKidGroup.label.replace("года", "лет")}.</small>}
+        <details className="more" open={Boolean(a.hero.birthDate)}>
+          <summary>или указать дату рождения</summary>
+          <label className="field" style={{ maxWidth: 260 }}>
+            <span>Дата рождения</span>
+            <input className="input" type="date" name="birth-date" value={a.hero.birthDate ?? ""} onChange={(e) => hero({ birthDate: e.target.value })} />
+            <small>Напомним о дне рождения, если разрешите письма</small>
+          </label>
+        </details>
+        {ageChosen && (
+          <>
+            <span className="label pic-group__title" id="pic-gender">Мальчик или девочка? <span className="req">*</span></span>
+            <div className="gender-grid" role="radiogroup" aria-labelledby="pic-gender">
+              {(["boy", "girl"] as const).map((gg, i) => {
+                const on = a.hero.gender === gg;
+                return (
+                  <button key={gg} type="button" role="radio" aria-checked={on} className="age-card gender-card" data-gender-pic={gg} aria-label={GENDER.CHILD[i]} onClick={() => setGender(gg)}>
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img src={kidPic(gg, heroAgeNum, "bust")} alt="" width={150} height={150} />
+                    <span className="age-card__cap">{GENDER.CHILD[i]}</span>
+                    <span className="char-card__check" aria-hidden="true">✓</span>
+                  </button>
+                );
+              })}
+            </div>
+          </>
+        )}
+      </div>
+    );
+  })();
   const charPicker = (
     <div className="describe" data-describe="pictures">
+      {kidSets && <span className="label pic-group__title">Готовые герои</span>}
       <div className="char-grid" role="radiogroup" aria-label="Внешность героя: выберите картинку">
         {LOOK_PRESETS[g].map((x, i) => {
           const on = a.appearance.hair === x.hair && hairNow === x.hairstyle && a.appearance.skin === x.skin;
@@ -998,10 +1078,9 @@ export function QuizWizard({
           );
         })}
       </div>
-      <details className="more look-more" data-look-more>
-        <summary>{kidSets ? "Подробнее: кожа, волосы, глаза, ямочки, улыбка, одежда, шапка, рост" : "Подробнее: кожа, волосы, глаза, очки, улыбка, одежда"}</summary>
-        {heroPics}
-      </details>
+      {/* rev 17: все ряды сразу, без «Подробнее» */}
+      {kidSets && <p className="pic-scroll-hint small muted" aria-hidden="true">Ряды картинок листаются вбок →</p>}
+      {heroPics}
     </div>
   );
 
@@ -1089,21 +1168,11 @@ export function QuizWizard({
                     </div>
                   )}
                 </div>
-                <span className="label">{aud === "PET" ? "Пол" : "Кто это?"} <span className="req">*</span></span>
-                <Chips name="gender" label="Пол" items={[{ key: "boy", label: GENDER[aud][0] }, { key: "girl", label: GENDER[aud][1] }]} value={(a.hero.gender ?? "") as "boy"} onChange={(v) => setGender((v || undefined) as "boy" | "girl" | undefined)} />
-                {aud === "CHILD" && (
+                {/* Ребёнку (rev 17) возраст и пол выбираются картинками в начале сцены «Внешность» */}
+                {aud !== "CHILD" && (
                   <>
-                    <span className="label">Возраст <span className="req">*</span></span>
-                    <Chips name="age" label="Возраст" items={AGE_GROUPS.filter((g) => !lockedKidGroup || g.key === lockedKidGroup.key).map((g) => ({ key: g.key, label: g.label }))} value={(a.hero.ageGroup ?? "") as "2-4"} onChange={(v) => hero({ ageGroup: (v || undefined) as "2-4" })} />
-                    {lockedKidGroup && <small className="muted" data-age-locked>Текст этой книги написан для детей {lockedKidGroup.label.replace("года", "лет")}.</small>}
-                    <details className="more" open={Boolean(a.hero.birthDate)}>
-                      <summary>или указать дату рождения</summary>
-                      <label className="field" style={{ maxWidth: 260 }}>
-                        <span>Дата рождения</span>
-                        <input className="input" type="date" name="birth-date" value={a.hero.birthDate ?? ""} onChange={(e) => hero({ birthDate: e.target.value })} />
-                        <small>Напомним о дне рождения, если разрешите письма</small>
-                      </label>
-                    </details>
+                    <span className="label">{aud === "PET" ? "Пол" : "Кто это?"} <span className="req">*</span></span>
+                    <Chips name="gender" label="Пол" items={[{ key: "boy", label: GENDER[aud][0] }, { key: "girl", label: GENDER[aud][1] }]} value={(a.hero.gender ?? "") as "boy"} onChange={(v) => setGender((v || undefined) as "boy" | "girl" | undefined)} />
                   </>
                 )}
                 {aud === "TEEN" && (
@@ -1134,10 +1203,11 @@ export function QuizWizard({
               )}
               {scene === 1 && (
                 <>
-              {sceneHead("look", aud === "PET" ? `Как выглядит ${fill("{ГЕРОЙ.им}")}?` : `${a.hero.gender === "girl" ? "Какой" : "Каким"} нарисуем ${fill("{ГЕРОЙ.вин}")}?`, pictures ? "Нажмите на картинку — так герой будет выглядеть на всех страницах. Можно загрузить фото — нарисуем похожим. Лучше всего — фото в анфас, с улыбкой, чтобы были хорошо видны глаза." : photoEnabled ? "Загрузите фото — сразу проверим и обрежем до портрета, а иллюстрации нарисуем по фото в выбранном стиле. Лучше всего — фото в анфас, с улыбкой, чтобы были хорошо видны глаза. Или выберите внешность — без фото." : "Выберите, как выглядит герой, — так он будет нарисован на всех страницах.")}
+              {sceneHead("look", aud === "PET" ? `Как выглядит ${fill("{ГЕРОЙ.им}")}?` : aud === "CHILD" && !a.hero.gender ? `Как нарисуем ${fill("{ГЕРОЙ.вин}")}?` : `${a.hero.gender === "girl" ? "Какой" : "Каким"} нарисуем ${fill("{ГЕРОЙ.вин}")}?`, aud === "CHILD" ? "Сначала возраст, потом мальчик или девочка — и все картинки ниже нарисуются такими. Нажмите на картинку — так герой будет выглядеть на всех страницах. Можно загрузить фото — нарисуем похожим." : pictures ? "Нажмите на картинку — так герой будет выглядеть на всех страницах. Можно загрузить фото — нарисуем похожим. Лучше всего — фото в анфас, с улыбкой, чтобы были хорошо видны глаза." : photoEnabled ? "Загрузите фото — сразу проверим и обрежем до портрета, а иллюстрации нарисуем по фото в выбранном стиле. Лучше всего — фото в анфас, с улыбкой, чтобы были хорошо видны глаза. Или выберите внешность — без фото." : "Выберите, как выглядит герой, — так он будет нарисован на всех страницах.")}
               <div className="hero-card hero-card--look" data-hero="look">
-                {modeTabs("main")}
-                {mode("main") === "photo" && photoEnabled ? (
+                {aud === "CHILD" && ageGenderPicker}
+                {(aud !== "CHILD" || (kidGroup || a.hero.birthDate) && a.hero.gender) && modeTabs("main")}
+                {aud === "CHILD" && !((kidGroup || a.hero.birthDate) && a.hero.gender) ? null : mode("main") === "photo" && photoEnabled ? (
                   <PhotoSlot
                     slot="main"
                     kind={aud === "PET" ? "pet" : "human"}

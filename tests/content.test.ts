@@ -159,7 +159,8 @@ describe("анкета v2", () => {
   it("принимает старые ответы", () => {
     const a = AnswersV2.parse({ hero: { name: "Марк", gender: "boy", ageGroup: "4-5" }, style: "kind-classic", extras: [{ role: "mom", name: "Оля" }] });
     expect(a.audience).toBe("CHILD");
-    expect(a.artStyle).toBe("kind-classic");
+    // rev 17: старый стиль «Добрая классика» → ближайший живой
+    expect(a.artStyle).toBe("golden-animation");
     expect(a.extras[0].role).toBe("mom");
     expect(a.contact.phone).toBe("");
   });

@@ -5,7 +5,7 @@
 //   &p=1 — портрет героя без сцены (выбор внешности картинкой в анкете, rev 13)
 //   rev 14: &f=1 — крупно лицо, &f=2 — по пояс (к p=1 / pr=); &ey=<глаза>&sm=<smile|wide|calm>&bl=1&oc=<цвет одежды>&wm=1 (водяной знак эскиза);
 //   rev 15: &ot=<вид одежды ребёнка> (KID_OUTFITS), &hs — причёска из набора своего пола (KID_HAIRSTYLES);
-//   rev 16: &dm=1 (ямочки) &tg=1 (щербинка) &ha=<бантик|заколка|ободок>&hac=<цвет> (только девочке) &hat=<кепка|шапка с помпоном> &bd=<пониже|обычный|повыше>;
+//   rev 16: &dm=1 (ямочки) &tg=1 (щербинка) &ha=<бантик|заколка|ободок>&hac=<цвет> (только девочке) &hat=<кепка|шапка с помпоном> &bd=<пониже|обычный|повыше>; rev 17: &bo=<тоненький|плотненький> (сложение);
 //   x1..x3 — внешность доп. героев («g:girl;h:седые;gl:1;sp:cat;fur:рыжий;t:робот», src/lib/obrazec.ts):
 //   мама — женщина, бабушка — седая, дедушка — с усами, кошка — кошка. Всё — по белым спискам.
 import { plotBySlug, PLOTS } from "@/content/registry";
@@ -17,7 +17,7 @@ import { EXTRA_ROLES, HERO_KIND_BY_AUDIENCE, type DemoExtra, type DemoLook, type
 import { ADULT_HAIRSTYLE_F, ADULT_HAIRSTYLE_M, EYES, FUR, HAIR_ADULT, HAIRSTYLE, OUTFIT_COLOR_KEYS, SKIN, SMILES, TOYS } from "@/lib/quiz";
 import { OUTFIT_COLORS } from "@/content/art/shared";
 import { decodeSampleExtra } from "@/lib/obrazec";
-import { HAIR_ACC_COLOR_KEYS, KID_BUILDS, KID_HAIR_ACCS, KID_HAIRSTYLE_KEYS, KID_HATS, KID_OUTFIT_KEYS, normalizeKidHairstyle, normalizeKidOutfit } from "@/content/looks";
+import { HAIR_ACC_COLOR_KEYS, KID_BODIES, KID_BUILDS, KID_HAIR_ACCS, KID_HAIRSTYLE_KEYS, KID_HATS, KID_OUTFIT_KEYS, normalizeKidHairstyle, normalizeKidOutfit } from "@/content/looks";
 import { extraDemoLook } from "@/lib/gen/extras";
 
 const STYLES_ALL = [...new Set([...HAIRSTYLE, ...KID_HAIRSTYLE_KEYS.boy, ...KID_HAIRSTYLE_KEYS.girl, ...ADULT_HAIRSTYLE_F, ...ADULT_HAIRSTYLE_M])];
@@ -85,6 +85,8 @@ export function GET(req: Request) {
     ...(pickFrom(q.get("hac"), HAIR_ACC_COLOR_KEYS) ? { hairAccColor: q.get("hac")! } : {}),
     ...(pickFrom(q.get("hat"), KID_HATS.map((x) => x.key)) ? { hat: q.get("hat")! } : {}),
     ...(pickFrom(q.get("bd"), KID_BUILDS.map((x) => x.key)) ? { build: q.get("bd")! } : {}),
+    // rev 17: сложение — тоненький / плотненький
+    ...(pickFrom(q.get("bo"), KID_BODIES.map((x) => x.key)) ? { body: q.get("bo")! } : {}),
   };
   // Если пол выбран, а причёска нет — длинные волосы только у девочек
   if (q.get("g") && !q.get("hs") && kind !== "pet") {

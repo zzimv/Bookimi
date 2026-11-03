@@ -1,11 +1,12 @@
 // «Сервер» демо-стенда в браузере: хранилище (localStorage «bookimi.demo.v1», фото — только в памяти вкладки)
 // и API с теми же адресами и правилами, что src/app/api/** (перехват fetch). Текст — DemoTextProvider сайта,
 // картинки — renderDemoSpread, сумма — quote(), путь заказа — journey(), настройки — DEFAULTS из settings.ts.
+import { liveMoodId } from "../../src/content/moods";
 import { qrSvg } from "./qr";
 import { AnswersV2, appearanceLine, extraGender, heroAge, heroHairAndClothes, type QuizAnswers } from "../../src/lib/quiz";
 import { DemoTextProvider, personalize, plotForAnswers, type StoryText } from "../../src/lib/gen/text";
 import { moodsFor } from "../../src/content/moods";
-import { ART_STYLE_IDS } from "../../src/content/profiles";
+import { ART_STYLE_IDS, DEFAULT_ART_STYLE } from "../../src/content/profiles";
 import { HERO_KIND_BY_AUDIENCE, type DemoExtra, type DemoLook, type HeroKind } from "../../src/content/types";
 import { extraDrawKind } from "../../src/content/art/index";
 import { extraDemoLook } from "../../src/lib/gen/extras";
@@ -978,7 +979,8 @@ async function handle(method: string, path: string, q: URLSearchParams, body: un
     if (plot && plot.audience !== a.audience) return err("Этот сюжет для другой аудитории — выберите сюжет из списка");
     if (plot && a.extras.length < plot.extras.min) return err(plot.extras.note ?? `Для этого сюжета нужно добавить героев: не меньше ${plot.extras.min}`);
     if (plot && a.extras.length > plot.extras.max) a.extras = a.extras.slice(0, plot.extras.max);
-    if (!ART_STYLE_IDS.some((x) => x.id === a.artStyle)) a.artStyle = plot?.artStyles[0] ?? "watercolor-air";
+    // rev 17: только живые стили (скрытые — archived — не принимаются)
+    if (!ART_STYLE_IDS.some((x) => x.id === a.artStyle && x.status !== "archived")) a.artStyle = plot?.artStyles[0] ?? DEFAULT_ART_STYLE;
     if (a.mood && !moodsFor(a.audience, a.hero.age).some((m) => m.id === a.mood)) a.mood = "";
     if (!a.story.slug && !a.story.idea) return err("Выберите сюжет или опишите свою идею");
     if (!plot?.group) a.group = undefined;
@@ -1027,7 +1029,7 @@ async function handle(method: string, path: string, q: URLSearchParams, body: un
         text: book.text,
         rewritesLeft: book.rewritesLeft,
         redrawsLeft: book.redrawsLeft,
-        mood: book.mood,
+        mood: liveMoodId(book.mood),
         moodChanges: { preview: book.moodChangesPreview, full: book.moodChangesFull },
         withPhoto: book.withPhoto,
         paid: book.paidFull,

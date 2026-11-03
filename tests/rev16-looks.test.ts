@@ -34,7 +34,7 @@ describe("rev 16: новые приметы рисуются во всех во�
     // цвет из палитры
     expect(renderDemoCharacter({ kind: "child", look: { gender: "girl", age: 6, hairAcc: "бантик", hairAccColor: "розовая" } })).toContain("#f28fb1");
   });
-  it("головной убор — у обоих полов; рост — меняет пропорции тонко", () => {
+  it("головной убор — у обоих полов; рост — меняет пропорции заметно (rev 17)", () => {
     for (const age of AGES)
       for (const g of ["boy", "girl"])
         for (const h of KID_HATS) expect(renderDemoCharacter({ kind: "child", look: { gender: g, age, hat: h.key } })).toContain(`data-hat="${h.kind}"`);
@@ -42,8 +42,8 @@ describe("rev 16: новые приметы рисуются во всех во�
       const [lo, mid, hi] = KID_BUILDS.map((b) => childBody(age, b.key));
       expect(lo.hc).toBeGreaterThan(mid.hc);
       expect(hi.hc).toBeLessThan(mid.hc);
-      // не больше ~12% роста
-      expect(Math.abs(hi.hc - mid.hc) / (mid.footY - mid.hc)).toBeLessThan(0.12);
+      // rev 17: рост различается заметно (полный рост ~±12–15%, см. rev17-age-body.test.ts)
+      expect(Math.abs(hi.hc - mid.hc) / (mid.footY - mid.hc)).toBeGreaterThan(0.1);
       expect(renderDemoCharacter({ kind: "child", look: { gender: "boy", age, build: "повыше" } })).toContain('data-build="tall"');
     }
   });
@@ -61,11 +61,11 @@ describe("rev 16: новые приметы рисуются во всех во�
   it("мальчику украшение не достаётся даже из ссылки и старых ответов; чужие значения отбрасываются", async () => {
     expect(await svgOf(sampleUrl({ portrait: true, kind: "child", gender: "boy", hairAcc: "бантик" }))).not.toContain("data-hair-acc");
     expect(await svgOf("/obrazec?p=1&k=child&g=girl&ha=корона&hat=цилиндр&bd=великан")).not.toMatch(/data-hair-acc|data-hat=/);
-    expect(kidLookExtras({ hairAcc: "бантик", hat: "кепка", build: "повыше" }, "boy")).toEqual({ dimples: undefined, toothGap: undefined, hairAcc: undefined, hairAccColor: undefined, hat: "кепка", build: "повыше" });
+    expect(kidLookExtras({ hairAcc: "бантик", hat: "кепка", build: "повыше" }, "boy")).toEqual({ dimples: undefined, toothGap: undefined, hairAcc: undefined, hairAccColor: undefined, hat: "кепка", build: "повыше", body: undefined });
   });
   it("старые черновики: без новых полей — по умолчанию; с описанием — читаются", () => {
     const a = AnswersV2.parse({ audience: "CHILD", hero: { name: "Петя", gender: "boy" }, appearance: { custom: "ямочки и кепка" } });
-    expect(a.appearance).toMatchObject({ dimples: false, toothGap: false, hairAcc: "", hairAccColor: "", hat: "", build: "", custom: "ямочки и кепка" });
+    expect(a.appearance).toMatchObject({ dimples: false, toothGap: false, hairAcc: "", hairAccColor: "", hat: "", build: "", body: "", custom: "ямочки и кепка" });
   });
 });
 

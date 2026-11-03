@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { DEFAULT_ART_STYLE } from "@/content/profiles";
 import "@/lib/zod-ru";
 import { db } from "@/lib/db";
 import { AnswersV2 } from "@/lib/quiz";
@@ -48,7 +49,7 @@ export async function POST(req: Request) {
   // Стиль картинок и настроение — только из каталога; иначе — по сюжету / без настроения
   // Пробные стили (status "trial") — только если владелец включил art.showTrialStyles
   const styles = visibleArtStyleIds((await cfg("art")).showTrialStyles);
-  if (!styles.some((x) => x.id === a.artStyle)) a.artStyle = plot?.artStyles[0] ?? "watercolor-air";
+  if (!styles.some((x) => x.id === a.artStyle)) a.artStyle = plot?.artStyles[0] ?? DEFAULT_ART_STYLE;
   if (a.mood && !moodsFor(a.audience, a.hero.age).some((m) => m.id === a.mood)) a.mood = "";
   if (!(await verifyCaptcha(b.captcha))) return err("Подтвердите, что вы не робот", 400);
   const bad = checkInputs([

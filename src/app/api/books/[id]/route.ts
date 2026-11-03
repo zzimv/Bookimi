@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { liveMoodId } from "@/content/moods";
 import "@/lib/zod-ru";
 import { db } from "@/lib/db";
 import { body, err, json, ownBook } from "@/lib/api";
@@ -35,7 +36,8 @@ export async function GET(_: Request, { params }: { params: Promise<{ id: string
     text: book.text as StoryText | null,
     rewritesLeft: book.rewritesLeft,
     redrawsLeft: book.redrawsLeft,
-    mood: book.mood ?? "",
+    // rev 17: скрытое настроение → «как задумал художник»
+    mood: liveMoodId(book.mood),
     moodChanges: { preview: book.moodChangesPreview, full: book.moodChangesFull },
     withPhoto: book.withPhoto,
     paid: book.paidFull,

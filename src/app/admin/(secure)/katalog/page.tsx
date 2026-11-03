@@ -1,4 +1,5 @@
 import { db } from "@/lib/db";
+import { isArchivedArtStyle } from "@/content/art/index";
 import { requireAdmin } from "@/lib/admin";
 import { addonAction, formatAction, storyAction, styleAction } from "../../actions";
 import { ADDON_AUDIENCES, ADDON_AUDIENCE_LABEL } from "@/lib/addons-core";
@@ -98,7 +99,7 @@ export default async function Page({ searchParams }: { searchParams: Promise<{ e
           {hid(s.id)}
           <input className="input" name="title" defaultValue={s.title} style={{ width: 200 }} />
           <input className="input" name="description" defaultValue={s.description} style={{ flex: 1, minWidth: 220 }} />
-          <label className="check"><input type="checkbox" name="isActive" defaultChecked={s.isActive} /> показывать</label>
+          {isArchivedArtStyle(s.key) ? <span className="badge badge--gold" title="rev 17: детям — 5 стилей; этот стиль скрыт от покупателей везде">скрыт</span> : <label className="check"><input type="checkbox" name="isActive" defaultChecked={s.isActive} /> показывать</label>}
           <button className="btn btn--ghost btn--sm">Сохранить</button>
         </form>
       ))}

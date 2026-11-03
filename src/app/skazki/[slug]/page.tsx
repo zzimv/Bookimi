@@ -59,7 +59,8 @@ export default async function Page({ params }: { params: Promise<{ slug: string 
   const minPrice = Math.min(...prices.map((p) => p.priceRub));
   const maxPrice = Math.max(...prices.map((p) => p.priceRub));
   const voice = TEXT_STYLE_IDS.find((t) => t.id === story.textStyle);
-  const styles = story.artStyles.map((id) => ART_STYLE_IDS.find((s) => s.id === id)).filter(Boolean).slice(0, 3) as { id: string; title: string; oneLine: string }[];
+  // rev 17: скрытые стили (archived) покупателю не показываем
+  const styles = story.artStyles.map((id) => ART_STYLE_IDS.find((s) => s.id === id && s.status !== "archived")).filter(Boolean).slice(0, 3) as { id: string; title: string; oneLine: string }[];
   const occasionLabels = story.occasions.filter((o) => o !== "bez").map((o) => OCCASION_KEYS.find((x) => x.key === o)?.label).filter(Boolean).slice(0, 4);
   const seasonFits = season && story.occasions.includes(season.occasion);
   const extrasLine =

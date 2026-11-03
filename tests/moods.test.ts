@@ -57,15 +57,12 @@ describe("настроения: данные", () => {
       expect(m.negativeAdd.length).toBeGreaterThan(5);
     }
   });
-  it("аудитории: романтичное — взрослым и подросткам 14+, сонное — детям и питомцам", () => {
+  it("rev 17: покупателю — «как задумал художник» и 5 настроений; тёплое, сонное, нежное, ретро, романтичное скрыты", () => {
     const ids = (a: Parameters<typeof moodsFor>[0], age?: number) => moodsFor(a, age).map((m) => m.id);
-    expect(ids("CHILD")).not.toContain("romantic");
-    expect(ids("PET")).not.toContain("romantic");
-    expect(ids("ADULT")).toContain("romantic");
-    expect(ids("TEEN", 15)).toContain("romantic");
-    expect(ids("TEEN", 12)).not.toContain("romantic");
-    expect(ids("CHILD")).toContain("sleepy");
-    expect(ids("ADULT")).not.toContain("sleepy");
+    for (const a of ["CHILD", "TEEN", "ADULT", "PET"] as const) {
+      expect(ids(a, 15)).toEqual(["as-drawn", "adventure", "festive", "cheerful", "wintry", "magic"]);
+      for (const h of ["warm", "sleepy", "tender", "retro", "romantic"]) expect(ids(a, 15)).not.toContain(h);
+    }
     for (const a of ["CHILD", "TEEN", "ADULT", "PET"] as const) expect(moodsFor(a)[0].id).toBe(MOODS[0].id);
   });
 });

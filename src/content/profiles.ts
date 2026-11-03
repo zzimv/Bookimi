@@ -201,8 +201,10 @@ export interface ArtStyleId {
   title: string;
   oneLine: string;
   audiences: AudienceKey[];
-  /** trial — пробный стиль: в демо со значком «пробный», на сайте — только при настройке art.showTrialStyles. */
-  status?: "live" | "trial";
+  /** trial — пробный стиль: в демо со значком «пробный», на сайте — только при настройке art.showTrialStyles.
+   *  archived (rev 17) — скрыт от покупателей везде (анкета, страница книги, каталог, витрина, демо); код и промпт
+   *  остаются, в админке — с пометкой «скрыт». Старые id в черновиках и книгах → liveArtStyle(). */
+  status?: "live" | "trial" | "archived";
 }
 
 export const ART_STYLE_IDS: ArtStyleId[] = [
@@ -328,6 +330,7 @@ export const ART_STYLE_IDS: ArtStyleId[] = [
     title: "Рисунок на полях",
     oneLine: "Тонкое перо с разрывами линии и лёгкой штриховкой, рисунок-виньетка без рамки тает в белой бумаге, едва заметная бледная подкраска: вереск, папоротники, старые дубы, тихий добрый юмор.",
     audiences: ["CHILD", "ADULT"],
+    // rev 17: из пробных — в живые (статус задаёт KIDS_LIVE_ART_STYLES ниже)
     status: "trial",
   },
   {
@@ -384,6 +387,7 @@ export const ART_STYLE_IDS: ArtStyleId[] = [
     title: "Классический мультфильм",
     oneLine: "Рисованная полнометражная анимация: плавные линии разной толщины и цветной контур, мягкие округлые формы, богатые плоские цвета с мягкой тенью, светлый золотой акварельный фон почти без деталей, сказочное очарование.",
     audiences: ["CHILD", "TEEN"],
+    // rev 17: из пробных — в живые (статус задаёт KIDS_LIVE_ART_STYLES ниже)
     status: "trial",
   },
   {
@@ -395,6 +399,25 @@ export const ART_STYLE_IDS: ArtStyleId[] = [
   },
 ];
 
+
+/**
+ * rev 17 (решение владельца): детям — только 5 стилей, в этом порядке. Остальные — status "archived"
+ * (скрыты от покупателей везде, код не удалён). pen-vignette и golden-animation — из пробных в живые.
+ */
+export const KIDS_LIVE_ART_STYLES = ["soft-gouache", "cozy-detail", "ink-humor", "pen-vignette", "golden-animation"] as const;
+for (const s of ART_STYLE_IDS) s.status = (KIDS_LIVE_ART_STYLES as readonly string[]).includes(s.id) ? "live" : "archived";
+
+/** Старые id стилей (черновики, книги, ссылки) → ближайший из пяти живых. */
+export const ART_STYLE_LEGACY: Record<string, string> = {
+  "watercolor-air": "soft-gouache",
+  "kind-classic": "golden-animation",
+  "folk-lubok": "pen-vignette",
+  "naive-watercolor": "cozy-detail",
+  "pen-ink-1920s": "pen-vignette",
+  "pet-cartoon": "ink-humor",
+};
+export const DEFAULT_ART_STYLE = "soft-gouache";
+// liveArtStyle() — в src/content/live-style.ts (profiles.ts — только данные: демо-сборка упаковывает его как JSON)
 
 // ---------------------------------------------------------------------------
 // Сегменты

@@ -26,7 +26,7 @@ export interface MoodDemoFx {
   /** Затемнение/высветление краёв. */
   vignette?: { color: string; opacity: number };
   /** Собственные эффекты настроения. */
-  fx?: ("fireflies" | "sunrays" | "bokeh" | "grain")[];
+  fx?: ("fireflies" | "sunrays" | "bokeh" | "grain" | "snowfall" | "garland")[];
   /** Цвет декора extraDeco (сердечки, листья, флажки); по умолчанию tint. */
   decoColor?: string;
   /** Сколько элементов extraDeco. */
@@ -128,6 +128,41 @@ function fxLayer(kind: NonNullable<MoodDemoFx["fx"]>[number], id: string, W: num
     }
     case "grain":
       return `<rect data-fx="grain" width="${W}" height="${H}" filter="url(#${id}-grain)" opacity=".13"/>`;
+    case "snowfall": {
+      // rev 17 «Зимнее»: крупные снежинки-звёздочки поверх мелкого снега
+      let out = "";
+      const k = H / 1024;
+      for (let i = 0; i < 26; i++) {
+        const x = r() * W;
+        const y = r() * H * 0.95;
+        const s = (7 + r() * 9) * k;
+        out += `<g transform="translate(${n3(x)} ${n3(y)}) rotate(${Math.round(r() * 60)})"><path d="M${n3(-s)} 0H${n3(s)}M${n3(-s / 2)} ${n3(-s * 0.866)}L${n3(s / 2)} ${n3(s * 0.866)}M${n3(-s / 2)} ${n3(s * 0.866)}L${n3(s / 2)} ${n3(-s * 0.866)}"/></g>`;
+      }
+      return `<g data-fx="snowfall" stroke="#ffffff" stroke-width="${n3(2.4 * (H / 1024))}" stroke-linecap="round" opacity=".9">${out}</g>`;
+    }
+    case "garland": {
+      // rev 17 «Праздничное»: гирлянда-огоньки вдоль верхнего края (тонко — не мешает тексту)
+      const k = H / 1024;
+      const spans = Math.max(2, Math.round(W / (H * 0.55)));
+      const cols = ["#ff5a5a", "#ffd23f", "#3ec7a5", "#5aa8ff", "#ff8fd1"];
+      let wire = "";
+      let bulbs = "";
+      let n = 0;
+      for (let i = 0; i < spans; i++) {
+        const x0 = (i * W) / spans;
+        const x1 = ((i + 1) * W) / spans;
+        const sag = 34 * k;
+        wire += `M${n3(x0)} ${n3(6 * k)} Q${n3((x0 + x1) / 2)} ${n3(6 * k + sag * 2)} ${n3(x1)} ${n3(6 * k)}`;
+        for (let j = 1; j < 8; j++) {
+          const t = j / 8;
+          const x = x0 + (x1 - x0) * t;
+          const y = 6 * k + 2 * t * (1 - t) * sag * 2;
+          const c = cols[n++ % cols.length];
+          bulbs += `<circle cx="${n3(x)}" cy="${n3(y + 10 * k)}" r="${n3(18 * k)}" fill="${c}" opacity=".28"/><ellipse cx="${n3(x)}" cy="${n3(y + 10 * k)}" rx="${n3(6 * k)}" ry="${n3(9 * k)}" fill="${c}"/>`;
+        }
+      }
+      return `<g data-fx="garland"><path d="${wire}" stroke="#3b3a2a" stroke-width="${n3(2.2 * k)}" fill="none"/>${bulbs}</g>`;
+    }
   }
 }
 

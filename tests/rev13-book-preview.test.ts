@@ -117,12 +117,12 @@ describe("анкета: герой картинкой", () => {
     expect(svg).toContain('viewBox="0 0 360 360"');
     expect(svg).toContain("ch-bg");
   });
-  it("сцены анкеты, 6 картинок на пол, «Подробнее», «Загрузить фото», искорки и «Книга готовится…»", () => {
+  it("сцены анкеты, 6 картинок на пол, все ряды сразу (rev 17), «Загрузить фото», искорки и «Книга готовится…»", () => {
     const src = read("src/components/quiz/QuizWizard.tsx");
     expect(src).toContain("Как зовут нашего героя?");
     expect(src).toContain("Кто отправится в путешествие вместе с ${fill(\"{ГЕРОЙ.тв}\")}?");
     expect(src).toContain("Какой повод мы празднуем?");
-    expect(src).toContain("Подробнее: кожа, волосы, глаза, очки");
+    expect(src).not.toContain("Подробнее: кожа");
     expect(src).toContain(">Загрузить фото<");
     expect(src).toContain("prefers-reduced-motion");
     expect(src).toContain("Книга готовится…");

@@ -7,7 +7,9 @@ import { z } from "zod";
 import "../lib/zod-ru";
 import { zName, zNameOpt } from "../lib/names";
 import { EXTRA_ROLES, GROUP_ADULT_ROLES, GROUP_MAX_LIMIT, HERO_KIND_BY_AUDIENCE, type HeroKind } from "./types";
-import type { AudienceKey } from "./profiles";
+import { DEFAULT_ART_STYLE, type AudienceKey } from "./profiles";
+import { liveArtStyle } from "./live-style";
+import { liveMoodId } from "./moods";
 import { KID_AGE_KEYS, normalizeAgeGroup } from "./ages";
 
 const str = (max: number) => z.string().trim().max(max);
@@ -112,6 +114,9 @@ export const AnswersV2 = z.preprocess(
     if (!raw || typeof raw !== "object") return raw;
     const o = { ...(raw as Record<string, unknown>) };
     if (o.artStyle === undefined && typeof o.style === "string") o.artStyle = o.style;
+    // rev 17: детям — 5 живых стилей; старые id стилей → ближайший живой, скрытые настроения → «как задумал художник»
+    if (typeof o.artStyle === "string" && o.artStyle) o.artStyle = liveArtStyle(o.artStyle);
+    if (typeof o.mood === "string" && o.mood) o.mood = liveMoodId(o.mood);
     // Возраст ребёнка: старые группы анкеты (2-3, 4-5, 6-7, 8-9) → 2-4, 5-7, 8-10
     if (o.hero && typeof o.hero === "object") {
       const h = o.hero as Record<string, unknown>;
@@ -163,6 +168,8 @@ export const AnswersV2 = z.preprocess(
         hairAccColor: str(20).optional().default(""),
         hat: str(30).optional().default(""),
         build: str(20).optional().default(""),
+        /** rev 17 — сложение ребёнка: тоненький | обычный | плотненький (KID_BODIES); пусто — обычное. */
+        body: str(20).optional().default(""),
         /** Своё описание словами: с rev 16 в анкете поля нет; старые черновики читаются (идёт в промпт GPU как раньше). */
         custom: str(300).optional().default(""),
       })
@@ -200,7 +207,7 @@ export const AnswersV2 = z.preprocess(
     /** Группа для сюжетов с plot.group (выпускной в саду, первый класс, выпускной в школе). Необязательна: старые черновики без неё. */
     group: GroupV2.optional(),
     /** id стиля картинок (ART_STYLE_IDS). Старое поле style переносится сюда. */
-    artStyle: str(40).default("watercolor-air"),
+    artStyle: str(40).default(DEFAULT_ART_STYLE),
     /** Старое поле — оставлено для совместимости, не использовать в новом коде. */
     style: str(40).optional(),
     /** id настроения (MOODS); пусто — без настроения / по умолчанию. */

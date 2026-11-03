@@ -238,8 +238,8 @@ export interface ArtStyleDemo {
   overlays?: DemoOverlay[];
 }
 
-/** live — на сайте; trial — пробный: виден в демо (значок «пробный»), на сайте — только при art.showTrialStyles. */
-export type ArtStyleStatus = "live" | "trial";
+/** archived (rev 17) — скрыт от покупателей везде, код оставлен. live — на сайте; trial — пробный: виден в демо (значок «пробный»), на сайте — только при art.showTrialStyles. */
+export type ArtStyleStatus = "live" | "trial" | "archived";
 
 export interface ArtStyle {
   id: string;
@@ -313,6 +313,8 @@ export interface DemoSceneCtx {
   style: ArtStyleDemo;
   /** Детерминированный генератор 0..1. */
   rnd: () => number;
+  /** rev 17: настроение «Зимнее» на улице — снег на деревьях и крышах. */
+  winter?: boolean;
 }
 
 /** Рисует фон разворота (под героями). Возвращает фрагмент SVG. */
@@ -361,6 +363,10 @@ export interface DemoLook {
   hat?: string;
   /** Рост: «пониже» | «повыше» (KID_BUILDS); пусто — как обычно. */
   build?: string;
+  /** rev 17: настроение «Зимнее» на улице — шарф, шапка и пар изо рта (ставит render.ts). */
+  winter?: boolean;
+  /** Сложение (rev 17): «тоненький» | «плотненький» (KID_BODIES); пусто — обычное. */
+  body?: string;
   species?: "dog" | "cat" | string;
   breed?: string;
   furColor?: string; // как в анкете: «рыжий», «чёрный с белым»

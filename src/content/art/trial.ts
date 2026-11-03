@@ -36,7 +36,7 @@ const neg = (extra: string, guard = true) => [TRIAL_NEGATIVE, guard ? HUMAN_FACE
 function meta(id: string) {
   const m = ART_STYLE_IDS.find((s) => s.id === id);
   if (!m) throw new Error(`art/trial: нет ${id} в ART_STYLE_IDS`);
-  return { id, title: m.title, description: m.oneLine, audiences: m.audiences, status: "trial" as const };
+  return { id, title: m.title, description: m.oneLine, audiences: m.audiences, status: m.status ?? "live" };
 }
 
 export const TRIAL_ART_STYLES: ArtStyle[] = [

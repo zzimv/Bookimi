@@ -29,7 +29,7 @@ function arrows(e: KeyboardEvent<HTMLDivElement>) {
 }
 
 /** Ряд картинок, из которых выбирают одну (повторный клик по выбранной — снять выбор, если allowEmpty). */
-export function PicRow({ name, label, options, value, onChange, allowEmpty = false, size = "m" }: {
+export function PicRow({ name, label, options, value, onChange, allowEmpty = false, size = "m", caps = false }: {
   name: string;
   label: string;
   options: PicOption[];
@@ -37,6 +37,8 @@ export function PicRow({ name, label, options, value, onChange, allowEmpty = fal
   onChange: (key: string) => void;
   allowEmpty?: boolean;
   size?: "s" | "m";
+  /** Подпись под картинкой (rev 17: «Пониже», «Плотненький»). */
+  caps?: boolean;
 }) {
   return (
     <div className="pic-row-wrap" data-pic-row={name}>
@@ -59,6 +61,7 @@ export function PicRow({ name, label, options, value, onChange, allowEmpty = fal
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img src={o.src} alt="" width={84} height={84} loading="lazy" decoding="async" />
               <span className="pic__check" aria-hidden="true">✓</span>
+              {caps && <span className="pic__cap" aria-hidden="true">{o.label}</span>}
             </button>
           );
         })}

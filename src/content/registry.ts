@@ -3,7 +3,7 @@
 // ⚠ Содержит системные промпты YandexGPT и планы сюжетов — импортировать только на сервере
 // (и в демо-стенд). Клиентским компонентам — art/index.ts, art/render.ts и проекции из серверных props.
 
-import { AUDIENCES, ART_STYLE_IDS, OCCASIONS, SEGMENTS, TEXT_STYLE_IDS, type AudienceKey } from "./profiles";
+import { AUDIENCES, ART_STYLE_IDS, KIDS_LIVE_ART_STYLES, OCCASIONS, SEGMENTS, TEXT_STYLE_IDS, type AudienceKey } from "./profiles";
 import { TEXT_STYLES } from "./text-styles";
 import { KIDS_PLOTS } from "./plots/kids";
 import { KIDS_MORE_PLOTS } from "./plots/kids-more";
@@ -329,12 +329,17 @@ export function validateContent(opts: { strict?: boolean } = {}): ContentReport 
       if (BANNED_ART_NAMES.test([a.title, a.description, a.prompt, a.negative].join(" "))) errors.push(`${where} — имя художника, студии или франшизы в стиле: только техника`);
       // Пробный стиль: только в art/trial.ts и со status "trial" и в ArtStyle, и в ART_STYLE_IDS
       const idStatus = ART_STYLE_IDS.find((x) => x.id === a.id)?.status ?? "live";
-      if ((a.status ?? "live") !== idStatus) errors.push(`${where} — status ${a.status ?? "live"}, а в ART_STYLE_IDS — ${idStatus}`);
-      if ((owner === "trial") !== (idStatus === "trial")) errors.push(`${where} — пробные стили (status "trial") живут только в art/trial.ts`);
+      if ((a.status === "trial") !== (idStatus === "trial")) errors.push(`${where} — status ${a.status ?? "live"}, а в ART_STYLE_IDS — ${idStatus}`);
+      // Пробные — только в art/trial.ts (из trial.ts стиль может стать живым — rev 17: pen-vignette, golden-animation)
+      if (idStatus === "trial" && owner !== "trial") errors.push(`${where} — пробные стили (status "trial") живут только в art/trial.ts`);
       const p = a.demo.palette;
       if (![p.paper, p.ink, ...p.accents].every((c) => HEX.test(c)) || !p.accents.length) errors.push(`${where} — палитра demo: цвета #rrggbb, accents не пуст`);
     }
   }
+  // rev 17: детям — ровно 5 живых стилей, все описаны и для детей
+  const kidsLive = ART_STYLE_IDS.filter((a) => a.status !== "archived" && a.status !== "trial" && a.audiences.includes("CHILD")).map((a) => a.id);
+  if ([...kidsLive].sort().join() !== [...KIDS_LIVE_ART_STYLES].sort().join()) errors.push(`art: живые детские стили ${kidsLive.join(", ")} ≠ ${KIDS_LIVE_ART_STYLES.join(", ")}`);
+  for (const id of KIDS_LIVE_ART_STYLES) if (!definedArt.has(id)) errors.push(`art: живой стиль ${id} не описан`);
   for (const a of ART_STYLE_IDS) if (BANNED_ART_NAMES.test(`${a.title} ${a.oneLine}`)) errors.push(`profiles: стиль ${a.id} — имя художника, студии или франшизы в описании`);
   for (const a of ART_STYLE_IDS) if (!definedArt.has(a.id)) soft(`art: стиль ${a.id} ещё не описан (art/${ART_STYLE_OWNERS[a.id] ?? "?"}.ts)`);
 
@@ -412,6 +417,7 @@ export function validateContent(opts: { strict?: boolean } = {}): ContentReport 
     for (const a of p.artStyles) {
       if (!artIds.has(a)) errors.push(`${at}: нет стиля картинок ${a} в ART_STYLE_IDS`);
       else if (ART_STYLE_IDS.find((x) => x.id === a)?.status === "trial") errors.push(`${at}: пробный стиль ${a} нельзя рекомендовать в сюжете (на сайте он скрыт)`);
+      else if (p.audience === "CHILD" && ART_STYLE_IDS.find((x) => x.id === a)?.status === "archived") errors.push(`${at}: скрытый стиль ${a} (rev 17: детям — только ${KIDS_LIVE_ART_STYLES.join(", ")})`);
       else if (!definedArt.has(a)) soft(`${at}: стиль картинок ${a} ещё не описан`);
     }
     if (!themeKeys.has(p.theme)) errors.push(`${at}: тема ${p.theme} не из DEMO_THEME_KEYS`);

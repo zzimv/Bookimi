@@ -11,7 +11,7 @@ import { KID_AGE_GROUPS, kidGroupByAge, kidGroupByKey } from "../content/ages";
 
 export { AnswersV2, ContactV2, normalizePhone, extraGender } from "../content/answers";
 import { HAIR_ACC_COLOR_WORD as HAIR_ACC_COLOR_WORD_, KID_HAIR_ACCS as KID_HAIR_ACCS_, kidLookExtras, normalizeKidHairstyle, normalizeKidOutfit } from "../content/looks";
-export { KID_HAIR_ACCS, KID_HATS, KID_BUILDS, HAIR_ACC_COLOR_KEYS, HAIR_ACC_COLOR_WORD, kidLookExtras } from "../content/looks";
+export { KID_HAIR_ACCS, KID_HATS, KID_BUILDS, KID_BODIES, HAIR_ACC_COLOR_KEYS, HAIR_ACC_COLOR_WORD, kidLookExtras } from "../content/looks";
 export { KID_HAIRSTYLES, KID_HAIRSTYLE_KEYS, KID_HAIRSTYLE_DEFAULT, KID_OUTFITS, KID_OUTFIT_KEYS, KID_OUTFIT_DEFAULT, normalizeKidHairstyle, normalizeKidOutfit } from "../content/looks";
 
 /** Ответы анкеты (v2). Старое имя оставлено для совместимости импортов. */
@@ -175,6 +175,8 @@ function kidLookWords(x: ReturnType<typeof kidLookExtras>): string[] {
     x.hat && `в головном уборе: ${x.hat}`,
     x.build === "пониже" && "невысокий для своего возраста",
     x.build === "повыше" && "высокий для своего возраста",
+    x.body === "тоненький" && "тоненький, стройный",
+    x.body === "плотненький" && "плотненький, круглые щёчки",
   ].filter((v): v is string => Boolean(v));
 }
 

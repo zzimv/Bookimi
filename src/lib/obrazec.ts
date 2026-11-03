@@ -37,6 +37,8 @@ export interface SampleOpts {
   hairAccColor?: string;
   hat?: string;
   build?: string;
+  /** rev 17: сложение — «тоненький» | «плотненький» (KID_BODIES). */
+  body?: string;
   /** Водяной знак превью (эскизы страниц до оплаты). */
   wm?: boolean;
   /** Крупно лицо (true) или по пояс ("bust") — к portrait / extraPortrait. */
@@ -122,6 +124,7 @@ export function sampleUrl(o: SampleOpts) {
   put("hac", o.hairAccColor);
   put("hat", o.hat);
   put("bd", o.build);
+  put("bo", o.body);
   if (o.extraLooks) {
     q.set("x", o.extraLooks.map((e) => e.role).join(","));
     o.extraLooks.slice(0, 3).forEach((e, i) => put(`x${i + 1}`, encodeSampleExtra(e)));

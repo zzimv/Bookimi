@@ -9,7 +9,7 @@ import { cfg } from "@/lib/settings";
 import { audienceFromParam, getSoon, SVOYA_IDEYA } from "@/lib/storefront";
 import { SoonCreate } from "@/components/Soon";
 import { moodSwatch } from "@/lib/mood-swatch";
-import { MOODS } from "@/content/moods";
+import { VISIBLE_MOODS } from "@/content/moods";
 import { plotBySlug, sectionPlot } from "@/content/registry";
 import { normalizeName } from "@/lib/declension";
 
@@ -19,6 +19,7 @@ export const dynamic = "force-dynamic";
 /**
  * Стили для анкеты: из админки (включён/выключен, название), аудитории — из профилей.
  * Пробные стили (status "trial") — только при настройке art.showTrialStyles, всегда в конце и со значком.
+ * rev 17: скрытые (archived) не показываются никогда; детям — 5 живых стилей.
  */
 async function quizStyles() {
   const showTrial = (await cfg("art")).showTrialStyles;
@@ -31,10 +32,13 @@ async function quizStyles() {
     const rows = await db.illustrationStyle.findMany({ orderBy: { sortOrder: "asc" }, select: { key: true, title: true, description: true, isActive: true } });
     if (!rows.length) return base;
     const isTrial = new Set(trial.map((t) => t.key));
+    const inDb = new Set(rows.map((r) => r.key));
     return [
       ...rows
         .filter((r) => r.isActive && !isTrial.has(r.key) && visible.some((s) => s.id === r.key))
         .map((r) => ({ key: r.key, title: r.title, description: r.description, audiences: ART_STYLE_IDS.find((s) => s.id === r.key)?.audiences })),
+      // rev 17: живые стили без строки в БД (pen-vignette, golden-animation — бывшие пробные) — из профилей
+      ...visible.filter((s) => s.status !== "trial" && !inDb.has(s.id)).map(toQuiz),
       ...trial,
     ];
   } catch {
@@ -109,7 +113,7 @@ export default async function Page({ searchParams }: { searchParams: Promise<Rec
         ...groupInfo(s.slug),
       }))}
       styles={styles}
-      moods={MOODS.map((m) => ({ id: m.id, title: m.title, oneLine: m.oneLine, audiences: m.audiences, minAge: m.minAge, swatch: moodSwatch(m) }))}
+      moods={VISIBLE_MOODS.map((m) => ({ id: m.id, title: m.title, oneLine: m.oneLine, audiences: m.audiences, minAge: m.minAge, swatch: moodSwatch(m) }))}
       initial={initial}
       locked={Boolean(picked)}
       presetAudience={Boolean(dlya) && !picked}

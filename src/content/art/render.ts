@@ -192,8 +192,9 @@ function resolveStyle(s: DemoRenderOpts["artStyle"]): ArtStyle["demo"] {
 
 function resolveMood(m: DemoRenderOpts["mood"]): Mood | null {
   if (!m) return null;
-  if (typeof m === "string") return MOODS.find((x) => x.id === m) ?? null;
-  return m;
+  // rev 17: скрытые настроения (warm, sleepy, tender, retro, romantic) → «как задумал художник»
+  const found = typeof m === "string" ? MOODS.find((x) => x.id === m) ?? null : m;
+  return found && (found as { hidden?: boolean }).hidden ? null : found;
 }
 
 function standardBackground(ctx: DemoSceneCtx) {
@@ -286,14 +287,39 @@ export function watermark(W: number, H: number) {
 }
 
 /** Иллюстрация разворота (или обложки при spreadIndex = 0). */
+/** rev 17 «Зимнее»: сцена в помещении — снег только за окном (без шапок и сугробов). */
+const INDOOR = /\b(room|bedroom|kitchen|indoors?|inside|classroom|hall|interior|library|museum|corridor|bathroom|attic|shop|store|cafe|theat(er|re)|bed|sofa|desk|table|wardrobe|locker|cupboard|greenhouse|submarine|cabin)\b/i;
+
+/** Сугробы внизу кадра — за фигурами: герои стоят в снегу. */
+function snowGround(W: number, H: number, r: () => number) {
+  const y0 = H * 0.8;
+  let d = `M0 ${(y0 + 10).toFixed(0)}`;
+  const n = Math.round(W / 220);
+  for (let i = 0; i < n; i++) {
+    const x1 = ((i + 0.5) * W) / n;
+    const x2 = ((i + 1) * W) / n;
+    d += ` Q${x1.toFixed(0)} ${(y0 - 26 - r() * 30).toFixed(0)} ${x2.toFixed(0)} ${(y0 + r() * 22).toFixed(0)}`;
+  }
+  d += ` V${H} H0Z`;
+  let shade = "";
+  for (let i = 0; i < n * 2; i++) shade += `<ellipse cx="${(r() * W).toFixed(0)}" cy="${(y0 + 40 + r() * (H - y0 - 60)).toFixed(0)}" rx="${(60 + r() * 90).toFixed(0)}" ry="${(8 + r() * 10).toFixed(0)}" fill="#c9d9ef" opacity=".55"/>`;
+  // Земля от горизонта белеет к сугробам (трава под снегом)
+  const veil = `<linearGradient id="snow-veil" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#f4f8ff" stop-opacity="0"/><stop offset=".35" stop-color="#f4f8ff" stop-opacity=".75"/><stop offset="1" stop-color="#f4f8ff" stop-opacity=".9"/></linearGradient>`;
+  return `<g data-snow-ground="1"><defs>${veil}</defs><rect x="0" y="${(H * 0.6).toFixed(0)}" width="${W}" height="${(H * 0.4).toFixed(0)}" fill="url(#snow-veil)"/><path d="${d}" fill="#f6f9ff" stroke="#d3e1f3" stroke-width="4"/>${shade}</g>`;
+}
+
 export function renderDemoSpread(o: DemoRenderOpts): string {
   const style = resolveStyle(o.artStyle);
+  const moodObj = resolveMood(o.mood);
+  const winterOut = moodObj?.id === "wintry" && !INDOOR.test(o.scene ?? "");
+  // На улице зимой ребёнок — в шапке и шарфе, с паром изо рта (если шапка выбрана — своя)
+  const winterLook = <T extends DemoLook | undefined>(l: T, kind: string): T => (winterOut && l && (kind === "child" || kind === "teen") ? ({ ...l, winter: true, hat: l.hat || "шапка с помпоном" } as T) : l);
   const theme = themeFor(o.plot.theme);
   const idx = o.spreadIndex;
   const W = (o.wide ?? idx > 0) ? 2048 : 1024;
   const H = 1024;
   const r = rnd(idx * 97 + o.plot.theme.length * 13 + o.plot.slug.length * 7 + 7);
-  const ctx: DemoSceneCtx = { W, H, index: idx, theme, style, rnd: r };
+  const ctx: DemoSceneCtx = { W, H, index: idx, theme, style, rnd: r, winter: winterOut };
   const bgTheme = theme.scene ? theme.scene(ctx) : standardBackground(ctx);
   // Обработка фона стилем (пробные стили: размытый живописный фон, контур тушью, выбеленный…) — art/fx.ts
   // Новые фоны (PROP_BACKDROPS) обрабатывают фон вместе с реквизитом сцены — см. ниже; прочие — как раньше
@@ -334,7 +360,7 @@ export function renderDemoSpread(o: DemoRenderOpts): string {
     const feet = heroFeet - (heroKind === "pet" && kind !== "pet" ? 34 : 10);
     const drawKind = kind === "toy" || kind === "custom" ? heroKind : kind;
     // Метка для проверок и мультфильма: какой доп. герой и как нарисован
-    return `<g data-extra="${i + 1}" data-kind="${kind}">${heroDrawer(kind)({ kind: drawKind, look: e.look, x: heroX + dir * dx, y: feet - 190 * scale, scale, style, index: idx + i + 1, flip: !left })}</g>`;
+    return `<g data-extra="${i + 1}" data-kind="${kind}">${heroDrawer(kind)({ kind: drawKind, look: winterLook(e.look, kind), x: heroX + dir * dx, y: feet - 190 * scale, scale, style, index: idx + i + 1, flip: !left })}</g>`;
   });
   // Группа: рядами по сторонам, вне полосы героя и доп. героев
   const zoneLo = dir > 0 ? heroX - heroHw : heroX - edge;
@@ -345,7 +371,7 @@ export function renderDemoSpread(o: DemoRenderOpts): string {
     const k = crowdKinds[c.i];
     return heroDrawer(k)({ kind: k, look: crowdList[c.i].look, x: c.x, y: c.feet - 190 * c.scale, scale: c.scale, style, index: idx + c.i + 3, flip: c.x > heroX });
   });
-  const hero = heroDrawer(heroKind)({ kind: heroKind, look: o.hero, x: heroX, y: H * 0.6, scale: heroScale, style, index: idx, flip: left && heroKind === "pet" });
+  const hero = heroDrawer(heroKind)({ kind: heroKind, look: winterLook(o.hero, heroKind), x: heroX, y: H * 0.6, scale: heroScale, style, index: idx, flip: left && heroKind === "pet" });
   // Персонажи сказки — в свободных полосах кадра, ниже текста, мимо героев и водяного знака
   const castKeys = o.cast ?? castFor(o.plot.slug, idx, o.scene);
   const castSvg = layoutCast(castKeys, { W, H, zoneLo, zoneHi, feet: heroFeet, heroScale, heroX, textBottom: H * (idx === 0 ? 0.3 : 0.38), crowd: crowd.length > 0 })
@@ -364,12 +390,15 @@ export function renderDemoSpread(o: DemoRenderOpts): string {
   }
   const figures = o.layer === "background" ? "" : `<g${fx}>${crowd.join("")}${castSvg}${extras.join("")}${hero}</g>`;
   const scenery = propsInBg ? fxBackdrop(style, `${bg}${props.sky}${props.behind}`, W, H) : `${bg}${props.sky}${props.behind}`;
-  const art = `${scenery}${layers.behind}${figures}${layers.above}${textureOverlay(style, W, H)}`;
+  // rev 17 «Зимнее»: снежные шапки на фоне и реквизите, сугробы под ногами (в помещении — только свет и снегопад)
+  // фон зимой — приглушённая морозная зелень (летняя сочная листва не читается как зима)
+  const scenery2 = winterOut ? `<g filter="url(#winter-bg)" data-winter-bg="1">${scenery}</g>${snowGround(W, H, rnd(idx * 31 + 5))}` : scenery;
+  const art = `${scenery2}${layers.behind}${figures}${layers.above}${textureOverlay(style, W, H)}`;
   let svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${H}" width="${W}" height="${H}">
-  <defs><linearGradient id="sky" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="${theme.sky[0]}"/><stop offset="1" stop-color="${theme.sky[1]}"/></linearGradient>${textureDefs(style)}${extraFx ? fxDefs(style, W, H) : ""}</defs>
+  <defs><linearGradient id="sky" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="${theme.sky[0]}"/><stop offset="1" stop-color="${theme.sky[1]}"/></linearGradient>${textureDefs(style)}${extraFx ? fxDefs(style, W, H) : ""}${winterOut ? `<filter id="winter-bg" color-interpolation-filters="sRGB"><feColorMatrix type="saturate" values=".38"/><feComponentTransfer><feFuncR type="linear" slope=".86" intercept=".1"/><feFuncG type="linear" slope=".88" intercept=".11"/><feFuncB type="linear" slope=".84" intercept=".18"/></feComponentTransfer></filter>` : ""}</defs>
   ${art}
 </svg>`;
-  svg = applyMood(svg, resolveMood(o.mood));
+  svg = applyMood(svg, moodObj);
 
   let over = "";
   if (o.title && idx === 0) {
@@ -399,7 +428,8 @@ export function renderDemoCharacter(o: { kind?: HeroKind | ExtraDrawKind; look: 
   const age = o.look.age ?? 6;
   // Малыши ниже ростом — крупнее в кадре; взрослый — по пояс крупнее не нужен: целиком, чуть мельче;
   // питомец и игрушка — по ширине кадра
-  const scale = kind === "child" ? (age <= 4 ? 1.42 : age <= 7 ? 1.3 : 1.2) : kind === "adult" ? 0.88 : kind === "pet" ? 0.95 : kind === "toy" || kind === "custom" ? 1.2 : 1.05;
+  // rev 17: рост «повыше» заметно выше — ребёнку чуть меньше масштаб, чтобы макушка и шапка не срезались
+  const scale = kind === "child" ? (age <= 4 ? 1.42 : age <= 7 ? 1.3 : 1.2) * 0.92 : kind === "adult" ? 0.88 : kind === "pet" ? 0.95 : kind === "toy" || kind === "custom" ? 1.2 : 1.05;
   const feet = H - 14;
   const bg = o.bg ?? "#f3e4c2";
   const drawAs: HeroKind = kind === "toy" || kind === "custom" ? "child" : kind;

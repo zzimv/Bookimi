@@ -26,8 +26,10 @@ export function themeFor(key: string): DemoTheme {
 
 /** Пробный ли стиль (status "trial" в ART_STYLE_IDS). */
 export const isTrialArtStyle = (id: string) => ART_STYLE_IDS.some((s) => s.id === id && s.status === "trial");
-/** Стили, видимые покупателю: пробные — только при showTrial (настройка art.showTrialStyles; демо — всегда). */
-export const visibleArtStyleIds = (showTrial: boolean) => ART_STYLE_IDS.filter((s) => showTrial || s.status !== "trial");
+/** Скрытый стиль (rev 17, status "archived"): покупателю не показывается нигде. */
+export const isArchivedArtStyle = (id: string) => ART_STYLE_IDS.some((s) => s.id === id && s.status === "archived");
+/** Стили, видимые покупателю: без скрытых (archived); пробные — только при showTrial (art.showTrialStyles; демо — всегда). */
+export const visibleArtStyleIds = (showTrial: boolean) => ART_STYLE_IDS.filter((s) => s.status !== "archived" && (showTrial || s.status !== "trial"));
 
 export function artStyle(id: string): ArtStyle | null {
   return ART_STYLES.find((s) => s.id === id) ?? null;

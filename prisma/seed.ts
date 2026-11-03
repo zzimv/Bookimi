@@ -92,11 +92,12 @@ async function main() {
 
   // Стили картинок: все живые из профилей; промпты — в коде (src/content/art), в БД — название и включение.
   // Пробные (status "trial") в БД не заводим: их видимость — настройка art.showTrialStyles.
+  // rev 17: скрытые (archived) — выключены (код и строка в БД остаются, в админке — «скрыт»)
   for (const [i, st] of ART_STYLE_IDS.filter((x) => x.status !== "trial").entries()) {
     await db.illustrationStyle.upsert({
       where: { key: st.id },
-      update: {},
-      create: { key: st.id, title: st.title, description: st.oneLine, promptSuffix: st.id, sortOrder: i, isActive: true },
+      update: st.status === "archived" ? { isActive: false } : {},
+      create: { key: st.id, title: st.title, description: st.oneLine, promptSuffix: st.id, sortOrder: i, isActive: st.status !== "archived" },
     });
   }
 
