@@ -89,7 +89,7 @@ describe("полка на главной (rev 06)", () => {
     soon.ADULT = false;
     soon.TEEN = false;
     expect(soonAudiences(soon)).toEqual(["PET"]);
-    expect(soonNote("ADULT")).toBe("Скоро — книги для взрослых готовим к запуску. Сейчас можно создать сказку для ребёнка 2–10 лет");
+    expect(soonNote("ADULT")).toBe("Скоро — книги для взрослых готовим к запуску. Сейчас можно создать сказку для ребёнка от 0 до 9 лет");
     expect(soonNote("PET")).not.toMatch(/почт|email/i);
   });
 

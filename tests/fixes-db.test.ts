@@ -101,7 +101,7 @@ d("исправления по отчёту 30.10: БД", async () => {
     return db.session.create({ data: { userId, scope: "staff", tokenHash: createHash("sha256").update(rawStaff).digest("hex"), csrfToken: "t", expiresAt: new Date(Date.now() + 86400_000), ...data } });
   }
   async function book(userId: string | null, data: Record<string, unknown> = {}) {
-    const story = await db.story.findFirstOrThrow({ where: { isActive: true, audience: "CHILD" } });
+    const story = await db.story.findFirstOrThrow({ where: { isActive: true, audience: "CHILD", NOT: { segments: { has: "kids-0-3" } } } });
     return db.book.create({
       data: {
         userId,
@@ -641,7 +641,7 @@ d("исправления по отчёту 30.10: БД", async () => {
     await saveSetting("storefront", { soon: { ...D.storefront.soon, TEEN: false } });
     try {
       const teen2 = await books.POST(
-        new Request("http://localhost/api/books", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ answers: { audience: "TEEN", hero: { name: "Петя", gender: "boy", age: 10 }, story: { idea: "про космос" } } }) }),
+        new Request("http://localhost/api/books", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ answers: { audience: "TEEN", hero: { name: "Петя", gender: "boy", age: 10 }, story: { slug: "stazher-orbity" } } }) }),
       );
       expect(teen2.status).toBe(400);
       expect(((await teen2.json()) as { error: string }).error).toMatch(/от 11 до 17/);

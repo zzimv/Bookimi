@@ -47,7 +47,7 @@ describe("анкета v2 → книга", () => {
     expect(r.raw.spreads).toHaveLength(12);
   });
   it("возраст по аудитории и старые ответы", () => {
-    expect(heroAge(AnswersV2.parse({ hero: { name: "А", gender: "boy", ageGroup: "6-7" } }))).toBe(6); // старое «6–7» → группа 5–7 лет
+    expect(heroAge(AnswersV2.parse({ hero: { name: "А", gender: "boy", ageGroup: "6-7" } }))).toBe(5); // старое «6–7» → группа 4–6 лет (rev 20)
     expect(heroAge(AnswersV2.parse({ audience: "ADULT", hero: { name: "А", gender: "boy" } }))).toBe(35);
   });
 });

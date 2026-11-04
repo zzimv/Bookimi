@@ -1284,7 +1284,7 @@ html.modal-open { overflow: hidden; }
 .age-card__pics { display: flex; }
 .age-card__pics img, .gender-card img { display: block; flex: 1 1 0; min-width: 0; width: 100%; height: auto; aspect-ratio: 1; object-fit: cover; }
 .age-card__pics img + img { margin-left: -14%; }
-.age-card__cap { display: block; padding: 4px 4px 6px; font-weight: 700; font-size: 14px; text-align: center; background: var(--white, #fff); color: var(--ink, #2a2a2a); }
+.age-card__cap { display: block; padding: 4px 4px 6px; font-weight: 700; font-size: clamp(12px, 1.1vw + 6px, 14px); text-align: center; white-space: nowrap; overflow: hidden; text-overflow: clip; min-width: 0; background: var(--white, #fff); color: var(--ink, #2a2a2a); }
 .pic-group { margin-top: 4px; }
 .pic-group .pic-row-wrap { margin-top: 2px; }
 .pic-group .pic-row-wrap > .label { font-weight: 600; font-size: 13px; }
@@ -1483,3 +1483,105 @@ html:has(.flow-nav) { scroll-padding-bottom: calc(92px + env(safe-area-inset-bot
 .checkout-edit { margin: 4px 0 12px; padding: 10px 12px; border-radius: 12px; background: var(--sage); }
 .checkout-edit .link-btn { font-weight: 700; }
 .back-to-checkout { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px 16px; margin-top: 14px; }
+
+/* ───────── rev 20: план страниц по возрасту, палитра книги, крупный текст, переход к оплате ─────────
+   (src/lib/page-plan.ts, src/content/palettes.ts, src/components/book/BookPreview.tsx, PayTransition.tsx) */
+/* Палитра книги под название: цвет названия на обложке, задняя обложка */
+.bk-cover__title { color: var(--bk-title, #143628); }
+.bk-cover--v1 .bk-cover__title { color: var(--bk-title-night, #f3d27a); }
+.bk-cover--v2 .bk-cover__title { color: var(--bk-title, #143628); }
+.bk-cover--v2 .bk-cover__frame { border-color: var(--bk-orn, #c8952f); box-shadow: inset 0 0 0 1.2cqi #fbf6ea, inset 0 0 0 1.5cqi var(--bk-orn, #c8952f); }
+.bk-back { background: radial-gradient(ellipse at 50% 0%, color-mix(in srgb, var(--bk-back, var(--fk-ink)) 82%, #fff), var(--bk-back, var(--fk-ink)) 75%); }
+.bk__plan { margin: 0 0 6px; color: var(--ink-soft); font-weight: 600; }
+
+/* Размер текста сказки по возрасту: 0–3 — очень крупно, 4–6 — крупно и с большим интерлиньяжем, 7–9 — удобно крупно.
+   --tf < 1 — текст длиннее задуманного (слитые развороты до переписывания), чуть мельче, чтобы влез */
+.bk-text { font-size: calc(clamp(11px, 4.3cqi, 21px) * var(--tf, 1)); }
+.bk-text--long { font-size: calc(clamp(10px, 3.7cqi, 18px) * var(--tf, 1)); }
+.bk--t-large .bk-text, .bk--t-large .bk-text--long { font-size: calc(clamp(13px, 5.8cqi, 28px) * var(--tf, 1)); line-height: 1.75; letter-spacing: .01em; }
+.bk--t-comfort .bk-text, .bk--t-comfort .bk-text--long { font-size: calc(clamp(12px, 5cqi, 24px) * var(--tf, 1)); line-height: 1.6; }
+.bk-text--drop .sp-line:first-child::first-letter, .bk-text--drop .sp-cap:first-child + .sp-line::first-letter { font-family: var(--font-fairy); color: var(--fk-accent); font-size: 1.6em; line-height: 1; }
+.bk-text--dark.bk-text--drop .sp-line:first-child::first-letter { color: #f6d98a; }
+
+/* Картонная книжка 0–3: картинка на всю страницу, ОЧЕНЬ крупные буквы на светлой плашке, скруглённые углы картона */
+.bk--board .bk-page { border-radius: 7%; }
+.bk--board .bk__book--spread:not(.bk__book--one) > .bk-page:first-child { border-radius: 7% 2% 2% 7%; }
+.bk--board .bk__book--spread:not(.bk__book--one) > .bk-page:last-child { border-radius: 2% 7% 7% 2%; }
+.bk-art--board { width: 100%; left: 0; object-fit: cover; object-position: 50% 50%; }
+.bk-board-text { position: absolute; z-index: 1; left: 4cqi; right: 4cqi; bottom: 4cqi; padding: 3cqi 5cqi; border-radius: 6cqi; text-align: center; font: 800 calc(clamp(16px, 9.5cqi, 46px) * var(--tf, 1))/1.2 var(--font-head); color: var(--fk-ink); background: rgba(253,250,242,.93); box-shadow: 0 0 0 .8cqi var(--fk-orn), 0 1.5cqi 4cqi rgba(0,0,0,.18); text-wrap: balance; }
+.bk-board-text .sp-sound { font-family: var(--font-fairy); font-weight: 400; color: var(--fk-accent); }
+.bk-sketch--top { top: 2cqi; bottom: auto; }
+.bk-board-pick { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; margin-top: 12px; }
+.bk-board-pick button { display: grid; gap: 2px; padding: 10px 12px; border: 2px solid var(--line); border-radius: 14px; background: var(--surface); color: var(--ink); text-align: left; font: inherit; cursor: pointer; }
+.bk-board-pick button[aria-checked="true"] { border-color: var(--forest); box-shadow: 0 0 0 3px var(--gold-soft); }
+.bk-board-pick small { color: var(--ink-soft); font-size: 12px; line-height: 1.3; }
+
+/* Фото ребёнка в рамке приветствия */
+.bk-welcome__hero--photo img { transform: none; object-position: 50% 35%; }
+
+/* Страницы «Нарисуй…» и «Мои заметки» */
+.bk-act { justify-content: flex-start; padding: 10% 9% 9%; gap: 3cqi; }
+.bk-act__prompt { position: relative; z-index: 1; margin: 2cqi 0 0; font: italic 400 clamp(11px, 5cqi, 24px)/1.3 var(--font-book); color: var(--fk-ink); text-wrap: balance; }
+.bk-act__frame { position: relative; z-index: 1; flex: 1; width: 100%; border: max(1.5px, .5cqi) dashed color-mix(in srgb, var(--fk-orn) 85%, #fff); border-radius: 5cqi; display: flex; align-items: flex-end; justify-content: flex-end; padding: 3cqi; color: color-mix(in srgb, var(--fk-orn) 70%, #fff); font-size: clamp(14px, 7cqi, 34px); }
+.bk-act__lines { position: relative; z-index: 1; flex: 1; width: 100%; display: flex; flex-direction: column; justify-content: space-evenly; }
+.bk-act__lines i { display: block; height: max(1px, .25cqi); background: color-mix(in srgb, var(--fk-orn) 55%, transparent); }
+
+/* Липкая полоса «Оформить книгу» и праздничная карточка в конце */
+.bk-cta { position: sticky; bottom: max(8px, env(safe-area-inset-bottom)); z-index: 5; display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-top: 14px; padding: 10px 12px 10px 16px; border-radius: 18px; background: var(--surface); box-shadow: 0 10px 30px -12px rgba(20,54,40,.45), 0 0 0 1px var(--line); }
+.bk-cta__text { font-size: var(--fs-sm); font-weight: 600; color: var(--ink-soft); min-width: 0; }
+.bk-cta .btn { flex: none; white-space: nowrap; }
+.bk-cta--end { box-shadow: 0 10px 30px -12px rgba(200,149,47,.6), 0 0 0 2px var(--gold); }
+.bk-cta--end .bk-cta__text { color: var(--ink); }
+.bk-end { position: relative; margin-top: 14px; padding: 18px 16px; border-radius: 18px; text-align: center; background: radial-gradient(ellipse at 50% 0%, var(--gold-soft), transparent 70%), var(--surface); box-shadow: 0 0 0 2px var(--gold); overflow: hidden; animation: bk-pop .35s ease both; }
+.bk-end__title { margin: 0; font: 800 var(--fs-lg)/1.2 var(--font-head); color: var(--ink); }
+.bk-end__sub { margin: 6px 0 12px; color: var(--ink-soft); }
+.bk-end__stars i { position: absolute; width: 10px; height: 10px; background: var(--gold); clip-path: polygon(50% 0, 62% 38%, 100% 50%, 62% 62%, 50% 100%, 38% 62%, 0 50%, 38% 38%); animation: bk-twinkle 1.6s ease-in-out infinite; }
+.bk-end__stars i:nth-child(1) { left: 8%; top: 22%; }
+.bk-end__stars i:nth-child(2) { left: 20%; bottom: 18%; animation-delay: .3s; width: 7px; height: 7px; }
+.bk-end__stars i:nth-child(3) { right: 10%; top: 18%; animation-delay: .6s; }
+.bk-end__stars i:nth-child(4) { right: 22%; bottom: 20%; animation-delay: .9s; width: 7px; height: 7px; }
+.bk-end__stars i:nth-child(5) { left: 50%; top: 6%; animation-delay: 1.2s; width: 6px; height: 6px; }
+@keyframes bk-twinkle { 0%, 100% { transform: scale(.6); opacity: .4; } 50% { transform: scale(1.15); opacity: 1; } }
+@media (max-width: 480px) {
+  .bk-cta { flex-direction: column; align-items: stretch; text-align: center; padding: 10px; }
+  .bk-board-pick { grid-template-columns: minmax(0, 1fr); }
+}
+
+/* «Моя книга» в шапке и «Вернуться к книге» */
+.my-book { display: inline-flex; align-items: center; gap: 6px; min-height: 40px; padding: 0 14px; border-radius: var(--r-pill); background: var(--gold-soft); color: var(--forest-deep); font: 700 var(--fs-sm) var(--font-body); text-decoration: none; white-space: nowrap; }
+.my-book:hover { background: var(--gold); color: #fff; }
+.my-book svg { flex: none; }
+.back-to-book { margin-bottom: 12px; }
+
+/* Весёлый переход к оплате: книга закрывается, лента с бантом, звёзды */
+.paytr { position: fixed; inset: 0; z-index: 1000; display: grid; place-items: center; padding: 16px; background: rgba(20, 30, 40, .55); backdrop-filter: blur(3px); animation: paytr-in .2s ease both; }
+.paytr__card { width: min(360px, 100%); padding: 22px 18px 18px; border-radius: 24px; background: var(--surface); text-align: center; box-shadow: 0 30px 60px -20px rgba(0,0,0,.5); }
+.paytr__art { width: 200px; max-width: 70%; height: auto; display: block; margin: 0 auto 6px; overflow: visible; }
+.paytr__cover { fill: var(--forest); }
+.paytr__inner { fill: #fdfaf2; }
+.paytr__flap { fill: color-mix(in srgb, var(--forest) 80%, #000); transform-origin: 100px 76px; animation: paytr-close .55s .1s cubic-bezier(.5,0,.3,1) both; }
+.paytr__ribbon { fill: #c8323c; opacity: 0; transform-origin: 100px 76px; animation: paytr-ribbon .4s .6s ease-out both; }
+.paytr__ribbon circle { fill: #e05a62; }
+.paytr__stars path { fill: var(--gold); opacity: 0; transform-box: fill-box; transform-origin: center; animation: paytr-star .9s ease-out both; }
+.paytr__line { margin: 6px 0 0; font: 800 var(--fs-md)/1.3 var(--font-head); color: var(--ink); min-height: 2.6em; }
+@keyframes paytr-in { from { opacity: 0; } to { opacity: 1; } }
+@keyframes paytr-close { from { transform: scaleX(-1); } to { transform: scaleX(1); } }
+@keyframes paytr-ribbon { from { opacity: 0; transform: scale(.4) rotate(-20deg); } to { opacity: 1; transform: none; } }
+@keyframes paytr-star { 0% { opacity: 0; transform: scale(.2) rotate(0); } 50% { opacity: 1; transform: scale(1.25) rotate(40deg); } 100% { opacity: .85; transform: scale(1) rotate(70deg); } }
+@media (prefers-reduced-motion: reduce) {
+  .paytr, .paytr__flap, .paytr__ribbon, .paytr__stars path, .bk-end, .bk-end__stars i { animation: none !important; }
+  .paytr__ribbon, .paytr__stars path { opacity: 1; }
+}
+
+/* Анкета: «Добавить фото ребёнка в книгу?» и фото в живом макете */
+.photo-intro { margin-top: 18px; }
+.photo-intro__q { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
+.photo-intro__note { margin: 8px 0 0; }
+.mock-photo { display: flex; align-items: center; gap: 10px; margin-top: 10px; padding: 8px 10px; border-radius: 14px; background: var(--surface); box-shadow: 0 0 0 1px var(--line); }
+.mock-photo__frame { flex: none; width: 54px; height: 64px; border: 4px solid #fff; border-radius: 6px; box-shadow: 0 4px 10px -4px rgba(0,0,0,.35); transform: rotate(-3deg); overflow: hidden; background: #fff; }
+.mock-photo__frame img { width: 100%; height: 100%; object-fit: cover; display: block; }
+
+/* Возраст 0–3: малыш на карточке возраста */
+/* 0–3: без увеличения — иначе картинки шире карточки (check:responsive) */
+@media (max-width: 1100px) { .header__right .my-book { padding: 0 10px; } }
+@media (max-width: 760px) { .header__right .my-book .my-book__label { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); } .header__right .my-book { min-width: 40px; justify-content: center; padding: 0; } }

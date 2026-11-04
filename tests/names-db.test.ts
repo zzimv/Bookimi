@@ -47,7 +47,7 @@ d("имена: БД", async () => {
     }
   }
   async function book(userId: string, name = "маша") {
-    const story = await db.story.findFirstOrThrow({ where: { isActive: true, audience: "CHILD" } });
+    const story = await db.story.findFirstOrThrow({ where: { isActive: true, audience: "CHILD", NOT: { segments: { has: "kids-0-3" } } } });
     return db.book.create({
       data: { userId, storyId: story.id, styleKey: "watercolor-air", params: { audience: "CHILD", hero: { name, gender: "girl", ageGroup: "4-5" } }, status: "FULL_READY", paidFull: true, text: { title: "Сказка", spreads: [] } },
     });

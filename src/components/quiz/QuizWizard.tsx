@@ -25,7 +25,7 @@ import { titleForCatalog, titleTemplate } from "@/content/title";
 import { sampleUrl } from "@/lib/obrazec";
 import type { AudienceKey } from "@/content/profiles";
 import { Captcha } from "@/components/Captcha";
-import { sectionOrder, sectionsOf, FITS_TITLE } from "@/content/sections";
+import { CUSTOM_STORY_ENABLED, sectionOrder, sectionsOf, FITS_TITLE } from "@/content/sections";
 import { flowSteps, FLOW_STEP_LABEL, stepProgress, type FlowStep } from "@/lib/flow";
 import { rosterIssues } from "@/lib/roster";
 import { DEFAULT_BULK_TIERS, type BulkTier } from "@/lib/bulk";
@@ -82,6 +82,8 @@ type Draft = Omit<QuizAnswers, "hero" | "extras" | "group" | "layout"> & {
   hero: Partial<QuizAnswers["hero"]>;
   extras: DraftExtra[];
   group: { members: DraftMember[]; adults: DraftAdult[] };
+  /** rev 20: фото «в книгу» с первого шага — на страницу «Фото» и в рамку приветствия (id одного из hero.photoIds). */
+  layout?: { photoId?: string };
 };
 type Mode = "photo" | "describe";
 
@@ -283,6 +285,7 @@ export function QuizWizard({
   const [making, setMaking] = useState(false);
   const [occChosen, setOccChosen] = useState(presetOccasion || locked);
   const [own, setOwn] = useState(false);
+  const [photoAsk, setPhotoAsk] = useState<"yes" | "no" | "">("");
   const [modes, setModes] = useState<Record<string, Mode>>({});
   const [bulk, setBulk] = useState(false);
   const [showAll, setShowAll] = useState(false);
@@ -323,7 +326,8 @@ export function QuizWizard({
       if (saved?.stepKey && (!fromLink || saved.fromLink === linkKey(initial))) {
         if (FLOW_KEYS.includes(saved.stepKey)) setStepKey(saved.stepKey);
         if (!fromLink) setOccChosen(Boolean(saved.occChosen));
-        setOwn(Boolean(saved.own));
+        // rev 20: «Своя история» выключена — старый черновик с ней открывается на выборе книги
+        setOwn(CUSTOM_STORY_ENABLED && Boolean(saved.own));
         setModes(saved.modes ?? {});
         setBulk(Boolean(saved.bulk));
         if (typeof saved.scene === "number") setScene(Math.max(0, Math.min(HERO_SCENES - 1, saved.scene)));
@@ -344,6 +348,7 @@ export function QuizWizard({
           setA((cur) => ({
             ...cur,
             hero: { ...cur.hero, photoIds: (cur.hero.photoIds ?? []).filter((x) => alive.has(x)) },
+            layout: cur.layout?.photoId && !alive.has(cur.layout.photoId) ? {} : cur.layout,
             extras: cur.extras.map((e) => (e.photoId && !alive.has(e.photoId) ? { ...e, photoId: undefined } : e)),
             group: { ...cur.group, members: cur.group.members.map((m) => (m.photoId && !alive.has(m.photoId) ? { ...m, photoId: undefined, photo: false } : m)) },
           }));
@@ -487,7 +492,7 @@ export function QuizWizard({
 
   const age = typeof a.hero.age === "number" ? a.hero.age : undefined;
   const heroAgeNum = aud === "CHILD" ? AGE_GROUPS.find((g) => g.key === a.hero.ageGroup)?.age : age;
-  // Дети: книга написана для одной группы (2–4, 5–7, 8–10) — выбрана группа, предлагаем только её книги
+  // Дети: книга написана для одной группы (0–3, 4–6, 7–9) — выбрана группа, предлагаем только её книги
   const kidGroup = aud === "CHILD" ? kidGroupByKey(a.hero.ageGroup) : undefined;
   const lockedKidGroup = locked && aud === "CHILD" && story ? kidGroupOf(story.segments) : undefined;
   useEffect(() => {
@@ -581,7 +586,7 @@ export function QuizWizard({
       if (own) {
         if ((a.story.idea ?? "").trim().length < 5) return "Опишите идею своей истории в 1–2 предложениях";
         if (!a.story.ideaChoice) return "Нажмите «Предложить варианты» и выберите один";
-      } else if (!story) return "Выберите книгу из списка — или «Своя история»";
+      } else if (!story) return CUSTOM_STORY_ENABLED ? "Выберите книгу из списка — или «Своя история»" : "Выберите книгу из списка";
     }
     if (s === "group" && story?.group) {
       if (rosterIssues(a.group.members, { heroName: a.hero.name, max: story.group.max - 1 }).length) return "Проверьте список: отмечено красным";
@@ -768,6 +773,42 @@ export function QuizWizard({
         </div>
       )}
     </div>
+  );
+
+  // rev 20: «Добавить фото ребёнка в книгу?» — в самом начале (сцена «Имя»), с согласием; фото сразу видно в макете,
+  // потом — в превью на странице «Фото» и в рамке приветствия. По нему же нарисуем героя похожим.
+  const bookPhoto = a.layout?.photoId ? views[a.layout.photoId] ?? null : null;
+  const photoIntroOn = photoAsk === "yes" || Boolean(a.layout?.photoId);
+  const photoIntro = (
+    <section className="panel photo-intro" data-photo-intro aria-labelledby="photo-intro-h">
+      <span className="label" id="photo-intro-h">{aud === "CHILD" ? "Добавить фото ребёнка в книгу?" : "Добавить фото героя в книгу?"}</span>
+      <p className="small muted" style={{ margin: "4px 0 0" }}>
+        Фото встанет как есть, без перерисовки: в рамку на первой странице и на страницу «Фото». По нему же нарисуем героя похожим. Можно и позже — прямо в книге.
+      </p>
+      <div className="photo-intro__q chips" role="radiogroup" aria-labelledby="photo-intro-h">
+        <button type="button" role="radio" className="chip" aria-checked={photoIntroOn} aria-pressed={photoIntroOn} data-photo-ask="yes" onClick={() => setPhotoAsk("yes")}>Да, добавить фото</button>
+        <button type="button" role="radio" className="chip" aria-checked={!photoIntroOn && photoAsk === "no"} aria-pressed={!photoIntroOn && photoAsk === "no"} data-photo-ask="no" onClick={() => { setPhotoAsk("no"); setA((cur) => ({ ...cur, layout: {} })); }}>Без фото</button>
+      </div>
+      {photoIntroOn && (
+        <div style={{ marginTop: 10 }}>
+          <PhotoSlot
+            slot="main"
+            kind="human"
+            adult={aud === "ADULT"}
+            audience={aud}
+            ids={a.hero.photoIds ?? []}
+            max={3}
+            views={views}
+            consent={consent}
+            onConsent={setConsent}
+            onAdd={(v) => { addView(v); setA((cur) => ({ ...cur, hero: { ...cur.hero, photoIds: [...(cur.hero.photoIds ?? []), v.id].slice(0, 3) }, layout: { photoId: cur.layout?.photoId ?? v.id } })); setModes((m) => ({ ...m, main: "photo" })); }}
+            onUpdate={addView}
+            onRemove={(id) => setA((cur) => ({ ...cur, hero: { ...cur.hero, photoIds: (cur.hero.photoIds ?? []).filter((x) => x !== id) }, layout: cur.layout?.photoId === id ? {} : cur.layout }))}
+          />
+          {bookPhoto && <p className="small ok photo-intro__note" data-photo-in-book-note>✓ Фото будет в книге. Его видно в макете справа{withPreview ? "" : ""} и в превью.</p>}
+        </div>
+      )}
+    </section>
   );
 
   const modeTabs = (k: string, photoOk = true) =>
@@ -1020,7 +1061,7 @@ export function QuizWizard({
           {groups.map((x) => {
             const on = a.hero.ageGroup === x.key;
             return (
-              <button key={x.key} type="button" role="radio" aria-checked={on} className="age-card" data-age={x.key} aria-label={x.label} onClick={() => hero({ ageGroup: x.key as "2-4" })}>
+              <button key={x.key} type="button" role="radio" aria-checked={on} className="age-card" data-age={x.key} aria-label={x.label} onClick={() => hero({ ageGroup: x.key as "0-3" })}>
                 <span className="age-card__pics">
                   {(a.hero.gender ? [a.hero.gender] : (["boy", "girl"] as const)).map((gg) => (
                     // eslint-disable-next-line @next/next/no-img-element
@@ -1142,7 +1183,7 @@ export function QuizWizard({
                     {KIND_CARDS.filter((k) => !soon.includes(k.key)).length > 1 ? (
                       <Chips name="kind" label="Кто герой" items={KIND_CARDS.filter((k) => !soon.includes(k.key)).map((k) => ({ key: k.key, label: k.label }))} value={aud} onChange={(v) => v && chooseAudience(v as AudienceKey)} />
                     ) : (
-                      <p className="small muted" data-kind-only={aud}>Ребёнок 2–10 лет. Книги для подростков, взрослых и питомцев — скоро.</p>
+                      <p className="small muted" data-kind-only={aud}>Ребёнок 0–9 лет. Книги для подростков, взрослых и питомцев — скоро.</p>
                     )}
                     {soon.length > 0 && KIND_CARDS.filter((k) => !soon.includes(k.key)).length > 1 && <p className="small muted">Скоро: {KIND_CARDS.filter((k) => soon.includes(k.key)).map((k) => k.label.toLowerCase()).join(", ")}.</p>}
                   </>
@@ -1199,6 +1240,7 @@ export function QuizWizard({
                   </label>
                 )}
               </fieldset>
+              {photoEnabled && aud !== "PET" && photoIntro}
                 </>
               )}
               {scene === 1 && (
@@ -1220,7 +1262,7 @@ export function QuizWizard({
                     onConsent={setConsent}
                     onAdd={(v) => { addView(v); setA((cur) => ({ ...cur, hero: { ...cur.hero, photoIds: [...(cur.hero.photoIds ?? []), v.id].slice(0, 3) } })); }}
                     onUpdate={addView}
-                    onRemove={(id) => hero({ photoIds: (a.hero.photoIds ?? []).filter((x) => x !== id) })}
+                    onRemove={(id) => setA((cur) => ({ ...cur, hero: { ...cur.hero, photoIds: (cur.hero.photoIds ?? []).filter((x) => x !== id) }, layout: cur.layout?.photoId === id ? {} : cur.layout }))}
                     suggest={suggestChip}
                   />
                 ) : aud === "PET" ? (
@@ -1354,7 +1396,7 @@ export function QuizWizard({
               </p>
               <div className="choice-cards choice-cards--books" data-sections={sectionOrder(sections).join(",")}>
                 {sectionOrder(sections).map((part) => {
-                  if (part === "custom") return ownCard;
+                  if (part === "custom") return CUSTOM_STORY_ENABLED ? ownCard : null;
                   if (part === "core") return sections.core.map((s) => bookCard(s, "к вашему поводу"));
                   if (part === "fits")
                     return sections.fits.length ? (
@@ -1578,6 +1620,16 @@ export function QuizWizard({
             <p className="small muted">
               {named ? <><b>Это книга {fill("{ГЕРОЙ.род}")}.</b> </> : null}Обложка меняется от ваших ответов. {(a.hero.photoIds?.length ?? 0) > 0 ? "По вашему фото нарисуем героя похожим — на шаге превью." : aud === "PET" ? "По фото питомца нарисуем ещё точнее." : "По фото нарисуем героя ещё точнее."}
             </p>
+            {/* rev 20: фото «в книгу» с первого шага видно в макете сразу */}
+            {bookPhoto && (
+              <div className="mock-photo" data-mock-photo>
+                <span className="mock-photo__frame">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img src={bookPhoto.url} alt="Фото в книге" />
+                </span>
+                <span className="small">Это фото будет в книге: в рамке на первой странице{aud === "CHILD" ? " и на странице «Фото»" : ""}.</span>
+              </div>
+            )}
           </aside>
         )}
       </div>

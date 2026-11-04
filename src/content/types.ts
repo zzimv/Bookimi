@@ -6,6 +6,7 @@
 // Чистые типы и константы без импортов из lib/ — модуль безопасен для клиента и демо-бандла.
 
 import type { AudienceKey } from "./profiles";
+import type { PlotPalette } from "./palettes";
 
 export type { AudienceKey };
 
@@ -159,8 +160,17 @@ export interface Plot {
   extras: PlotExtras;
   /** Обложка: EN, без имён. */
   coverScene: string;
-  /** Ровно 12 разворотов. */
+  /**
+   * Развороты сказки. rev 20: число — по плану страниц группы (src/lib/page-plan.ts): 0–3 — 8 страниц картонной книги,
+   * 4–6 — 11 разворотов, 7–9 — 16; подростки, взрослые, питомцы — ровно 12. Пока текст не переписан под объём группы,
+   * раскладка подгоняет его сама (админка: «текст ещё не под новый объём»).
+   */
   spreads: PlotSpread[];
+  /**
+   * rev 20: палитра книги под настроение названия (src/content/palettes.ts) — имя готовой («newyear», «birthday»,
+   * «dragon», «detective», «sea»…) или свои цвета поверх base. Нет — по теме сюжета.
+   */
+  palette?: PlotPalette;
   occasionHooks?: OccasionHooks;
   /** Увлечения из анкеты, которые сюжет особенно подхватывает (для подбора). */
   interests?: string[];

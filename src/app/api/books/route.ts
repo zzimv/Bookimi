@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { CUSTOM_STORY_ENABLED } from "@/content/sections";
 import { DEFAULT_ART_STYLE } from "@/content/profiles";
 import "@/lib/zod-ru";
 import { db } from "@/lib/db";
@@ -69,7 +70,11 @@ export async function POST(req: Request) {
     ...(a.group?.adults ?? []).map((m) => m.name),
   ]);
   if (bad) return err("Пожалуйста, уберите из анкеты недопустимые слова или ссылки");
+  // rev 20: «Своя история» убрана из пути покупателя (CUSTOM_STORY_ENABLED) — только книги каталога
+  if (!a.story.slug && !CUSTOM_STORY_ENABLED) return err("Выберите книгу из каталога", 400);
   if (!a.story.slug && !a.story.idea) return err("Выберите сюжет или опишите свою идею");
+  // rev 20: фото «в книгу» с первого шага — только своё фото героя (иначе — без фото на странице)
+  if (a.layout.photoId && !(a.hero.photoIds ?? []).includes(a.layout.photoId)) a.layout = { ...a.layout, photoId: undefined };
   // Подростковые книги — для 11–17 лет (как обещано в анкете)
   if (a.audience === "TEEN" && (a.hero.age === undefined || a.hero.age < 11 || a.hero.age > 17)) return err("Укажите возраст: от 11 до 17 лет");
 

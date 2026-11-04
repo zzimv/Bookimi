@@ -30,7 +30,7 @@ export default async function Page({ params }: { params: Promise<{ slug: string 
   const age = getAgePage(slug);
   if (!age) notFound();
   const [stories, minPrice, soon] = await Promise.all([getStories({ audience: "CHILD", segment: age.segment }), getMinPrice(), getSoon()]);
-  // Ровно книги этой группы: текст каждой детской книги написан для одной группы (2–4, 5–7 или 8–10 лет)
+  // Ровно книги этой группы: текст каждой детской книги написан для одной группы (0–3, 4–6 или 7–9 лет)
   const list = catalogStories(stories);
 
   return (

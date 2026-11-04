@@ -23,7 +23,7 @@ const Input = z.discriminatedUnion("action", [
   z.object({ action: z.literal("consent"), pd: z.literal(true), photo: z.boolean() }),
   // pd: true — согласие на ПДн, если его ещё нет (старые аккаунты); marketing — только для совместимости, новая форма спрашивает на входе
   z.object({ action: z.literal("preview"), withPhoto: z.boolean(), marketing: z.boolean().optional(), pd: z.boolean().optional() }),
-  z.object({ action: z.literal("redraw"), index: z.number().int().min(0).max(12) }),
+  z.object({ action: z.literal("redraw"), index: z.number().int().min(0).max(24) }),
   z.object({ action: z.literal("retry") }),
   // Смена настроения всех иллюстраций; "" — «как задумал художник»
   z.object({ action: z.literal("mood"), mood: z.string().trim().max(40) }),

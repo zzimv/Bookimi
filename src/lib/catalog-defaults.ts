@@ -1,6 +1,6 @@
 import { OCCASIONS as OCCASION_KEYS, type AudienceKey } from "../content/profiles";
 
-const AGE_BY_AUDIENCE: Record<AudienceKey, [number, number]> = { CHILD: [2, 10], TEEN: [11, 17], ADULT: [18, 99], PET: [0, 25] };
+const AGE_BY_AUDIENCE: Record<AudienceKey, [number, number]> = { CHILD: [0, 9], TEEN: [11, 17], ADULT: [18, 99], PET: [0, 25] };
 
 /** Возраст сюжета: из сюжета (дети, подростки) или по аудитории. */
 export function plotAges(p: { audience: AudienceKey; ageMin?: number; ageMax?: number }): [number, number] {
@@ -178,12 +178,17 @@ export const OCCASIONS: OccasionDefault[] = OCCASION_KEYS.filter((o) => o.key !=
 );
 
 
-/** Страницы возраста — ровно группы детских книг (2–4, 5–7, 8–10; src/content/ages.ts). aliases — старые адреса. */
+/**
+ * Страницы возраста — ровно группы детских книг (rev 20: 0–3, 4–6, 7–9; src/content/ages.ts). aliases — старые адреса:
+ * они отвечают 301 на новый (next.config.ts redirects, AGE_REDIRECTS).
+ */
 export const AGE_PAGES = [
-  { slug: "2-4-goda", title: "Книги для детей 2–4 лет", label: "2–4 года", segment: "kids-2-4", min: 2, max: 4, aliases: [] as string[] },
-  { slug: "5-7-let", title: "Книги для детей 5–7 лет", label: "5–7 лет", segment: "kids-5-7", min: 5, max: 7, aliases: [] as string[] },
-  { slug: "8-10-let", title: "Книги для детей 8–10 лет", label: "8–10 лет", segment: "kids-8-10", min: 8, max: 10, aliases: ["8-9-let"] },
+  { slug: "0-3-goda", title: "Книги для детей 0–3 лет", label: "0–3 года", segment: "kids-0-3", min: 0, max: 3, aliases: ["2-4-goda", "2-3-goda"] as string[] },
+  { slug: "4-6-let", title: "Книги для детей 4–6 лет", label: "4–6 лет", segment: "kids-4-6", min: 4, max: 6, aliases: ["5-7-let", "4-5-let", "6-7-let"] as string[] },
+  { slug: "7-9-let", title: "Книги для детей 7–9 лет", label: "7–9 лет", segment: "kids-7-9", min: 7, max: 9, aliases: ["8-10-let", "8-9-let"] as string[] },
 ];
+/** Старые адреса /vozrast/* → новые (301). */
+export const AGE_REDIRECTS: { from: string; to: string }[] = AGE_PAGES.flatMap((a) => a.aliases.map((x) => ({ from: `/vozrast/${x}`, to: `/vozrast/${a.slug}` })));
 
 export const FORMATS = [
   { key: "pdf", kind: "PDF", title: "PDF (все форматы файла)", w: null, h: null, cover: "NONE", price: 990, isDefault: false },
@@ -193,7 +198,15 @@ export const FORMATS = [
   { key: "std-hard", kind: "PRINT", title: "Стандарт 21×21 см, твёрдая обложка", w: 210, h: 210, cover: "HARD", price: 3990, isDefault: true },
   { key: "album-hard", kind: "PRINT", title: "Альбом 28×21 см, твёрдая обложка", w: 280, h: 210, cover: "HARD", price: 4490, isDefault: false },
   { key: "big-hard", kind: "PRINT", title: "Большой 30×30 см, твёрдая обложка", w: 300, h: 300, cover: "HARD", price: 5490, isDefault: false },
+  // rev 20: картонные книги для 0–3 (src/lib/page-plan.ts: board-9 / board-12). Цены — ЗАГЛУШКИ, уточнить у типографии
+  // (BOARD_PRICE_TBD; в админке — пометка «уточнить у типографии»), редактируются в админке «Каталог → Форматы».
+  { key: "board9-hard", kind: "PRINT", title: "Картонная 20×20 см, 9 страниц, двойной картон", w: 200, h: 200, cover: "HARD", price: 2990, isDefault: false },
+  { key: "board12-hard", kind: "PRINT", title: "Картонная 20×20 см, 12 страниц, плотный картон", w: 200, h: 200, cover: "HARD", price: 3490, isDefault: false },
 ] as const;
+/** Форматы с ценой-заглушкой: в админке — «уточнить у типографии» (ASSUMPTIONS.md). */
+export const BOARD_PRICE_TBD = ["board9-hard", "board12-hard"] as const;
+/** Страниц блока формата: картонные — 9 / 12; остальные — по плану книги (src/lib/page-plan.ts, 28 / 30 / 40). */
+export const FORMAT_PAGES: Record<string, number> = { "board9-hard": 9, "board12-hard": 12 };
 
 /**
  * Допы. audiences — для каких книг (пусто — для всех), supplier — кто делает физический доп: «print» — типография по

@@ -25,7 +25,7 @@ export function SoonCreate({ audience }: { audience: AudienceKey }) {
       <div className="wrap" style={{ maxWidth: 720 }}>
         <SoonBanner audience={audience} />
         <h1>Книги {WHO[audience]} — скоро</h1>
-        <p className="lead">Мы готовим их к запуску. А пока можно создать сказку, где главный герой — ваш ребёнок 2–10 лет.</p>
+        <p className="lead">Мы готовим их к запуску. А пока можно создать сказку, где главный герой — ваш ребёнок от 0 до 9 лет.</p>
         <p style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
           <Link href="/sozdat?dlya=CHILD" className="btn btn--primary">Создать сказку для ребёнка</Link>
           <Link href="/skazki" className="btn btn--ghost">Все сказки</Link>

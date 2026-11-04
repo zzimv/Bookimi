@@ -310,7 +310,7 @@ async function run(browser, vp, chromiumExe) {
   await page.click("button[data-next]");
   await wait(500);
   await check("q-age", { more: () => page.evaluate(coverCheck, { phone: Boolean(vp.phone), wide: vp.width >= 900 }) });
-  await page.click('[data-age="5-7"]');
+  await page.click('[data-age="4-6"]');
   await wait(300);
   await check("q-gender", { scrollTo: "[data-age-gender] .gender-grid, .gender-grid" });
   await page.click('[data-gender-pic="girl"]');

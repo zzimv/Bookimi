@@ -3,7 +3,7 @@
 import { describe, expect, it } from "vitest";
 import sharp from "sharp";
 import { PLOTS, plotBySlug, plotSections, sectionPlot } from "@/content/registry";
-import { sectionOrder, sectionsOf } from "@/content/sections";
+import { CUSTOM_STORY_ENABLED, sectionOrder, sectionsOf } from "@/content/sections";
 import { AUDIENCES, type AudienceKey } from "@/content/profiles";
 import { AnswersV2 } from "@/content/answers";
 import { flowSteps, stepProgress } from "@/lib/flow";
@@ -46,12 +46,14 @@ describe("шаги пути по случаям", () => {
 });
 
 describe("разделы повода: порядок показа", () => {
-  it("«Без повода» и «Свой повод» — «Своя история» первой", () => {
+  it("«Без повода» и «Свой повод» — все книги; «Своя история» убрана (rev 20, CUSTOM_STORY_ENABLED)", () => {
     for (const aud of AUD)
       for (const key of ["bez", "svoj"]) {
         const s = plotSections(key, aud);
         expect(s.customFirst, `${aud} ${key}`).toBe(true);
-        expect(sectionOrder(s)[0]).toBe("custom");
+        expect(s.custom).toBe(false);
+        expect(sectionOrder(s)).not.toContain("custom");
+        expect(sectionOrder({ customFirst: true, custom: true })[0]).toBe(CUSTOM_STORY_ENABLED ? "custom" : "core");
         expect(s.others.length).toBeGreaterThan(0);
       }
   });
@@ -67,7 +69,7 @@ describe("разделы повода: порядок показа", () => {
     expect(s.others).toEqual([]);
     expect(s.hiddenCount).toBeGreaterThan(0);
     expect(s.customFirst).toBe(false);
-    expect(sectionOrder(s)).toEqual(["core", "custom", "fits", "others"]);
+    expect(sectionOrder(s)).toEqual(["core", "fits", "others"]); // rev 20: без «Своей истории»
   });
   it("анкета в браузере (sectionsOf по проекции) показывает то же, что сайт (plotSections)", () => {
     for (const aud of AUD)
@@ -156,7 +158,7 @@ describe("книга для каждого в группе", () => {
     });
     expect(groupChildren(a).map((c) => c.name)).toEqual(["Маша", "Петя", "Аня", "Саша"]);
     const c = bulkCopyAnswers(a, 3, "Для {ГЕРОЙ.род}");
-    expect(c.hero).toMatchObject({ name: "Саша", gender: "girl", ageGroup: "5-7" }); // старое «6-7» → 5–7 лет
+    expect(c.hero).toMatchObject({ name: "Саша", gender: "girl", ageGroup: "4-6" }); // старое «6-7» → 4–6 лет (rev 20)
     expect(c.group!.members.map((m) => m.name)).toEqual(["Маша", "Петя", "Аня"]);
     expect(c.group!.members[0].description).toContain("рыжие");
     expect(c.group!.adults[0].name).toBe("Мария Ивановна");

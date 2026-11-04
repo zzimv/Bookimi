@@ -7,6 +7,7 @@ import { SoonBadge } from "./Soon";
 import { getNearestHoliday } from "@/lib/holidays";
 import { daysLeftText, fmtDay } from "@/lib/holidays-core";
 import { ThemeToggle } from "./ThemeToggle";
+import { MyBookLink } from "./MyBookLink";
 import { BurgerCloser } from "./BurgerCloser";
 
 export async function PromoBar() {
@@ -49,6 +50,7 @@ export async function Header() {
           <Link href="/blog">Блог</Link>
         </nav>
         <div className="header__right">
+          <MyBookLink />
           <Link href="/kabinet" className="header__cab" aria-label="Личный кабинет">
             <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><circle cx="12" cy="8" r="4" fill="none" stroke="currentColor" strokeWidth="2" /><path d="M4 21c1.5-4 4.5-6 8-6s6.5 2 8 6" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" /></svg>
             <span>Кабинет</span>
@@ -121,9 +123,9 @@ export async function Footer() {
             <li><Link href="/povody">Все поводы</Link></li>
             <li><Link href="/prazdniki">Ближайшие праздники</Link></li>
             <li><Link href="/povod/novyj-god">На Новый год</Link></li>
-            <li><Link href="/vozrast/2-4-goda">Для детей 2–4 лет</Link></li>
-            <li><Link href="/vozrast/5-7-let">Для детей 5–7 лет</Link></li>
-            <li><Link href="/vozrast/8-10-let">Для детей 8–10 лет</Link></li>
+            <li><Link href="/vozrast/0-3-goda">Для детей 0–3 лет</Link></li>
+            <li><Link href="/vozrast/4-6-let">Для детей 4–6 лет</Link></li>
+            <li><Link href="/vozrast/7-9-let">Для детей 7–9 лет</Link></li>
             <li><Link href="/blog">Блог</Link></li>
             <li><Link href="/kabinet">Личный кабинет</Link></li>
             <li><Link href="/kontakty">Контакты</Link></li>

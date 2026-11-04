@@ -10,7 +10,7 @@ import { EXTRA_ROLES, GROUP_ADULT_ROLES, GROUP_MAX_LIMIT, HERO_KIND_BY_AUDIENCE,
 import { DEFAULT_ART_STYLE, type AudienceKey } from "./profiles";
 import { liveArtStyle } from "./live-style";
 import { liveMoodId } from "./moods";
-import { KID_AGE_KEYS, normalizeAgeGroup } from "./ages";
+import { KID_AGE_KEYS, normalizeAgeGroup, normalizeSegment } from "./ages";
 
 const str = (max: number) => z.string().trim().max(max);
 /** Имя: всегда с заглавной буквы («маша» → «Маша»), склоняется отдельно в declension.ts. Нормализация — src/lib/names.ts. */
@@ -117,7 +117,8 @@ export const AnswersV2 = z.preprocess(
     // rev 17: детям — 5 живых стилей; старые id стилей → ближайший живой, скрытые настроения → «как задумал художник»
     if (typeof o.artStyle === "string" && o.artStyle) o.artStyle = liveArtStyle(o.artStyle);
     if (typeof o.mood === "string" && o.mood) o.mood = liveMoodId(o.mood);
-    // Возраст ребёнка: старые группы анкеты (2-3, 4-5, 6-7, 8-9) → 2-4, 5-7, 8-10
+    // Возраст ребёнка: старые группы анкеты (2-3, 4-5, 6-7, 8-9) и rev 11–19 (2-4, 5-7, 8-10) → 0-3, 4-6, 7-9
+    if (typeof o.segment === "string") o.segment = normalizeSegment(o.segment);
     if (o.hero && typeof o.hero === "object") {
       const h = o.hero as Record<string, unknown>;
       if (h.ageGroup !== undefined && h.ageGroup !== null && h.ageGroup !== "") o.hero = { ...h, ageGroup: normalizeAgeGroup(h.ageGroup) ?? h.ageGroup };
@@ -135,7 +136,7 @@ export const AnswersV2 = z.preprocess(
       name: zName(30, "Укажите имя", "free"),
       nickname: nameOpt(30),
       gender: Gender,
-      /** Возрастная группа ребёнка: 2–4, 5–7, 8–10 (старые 2-3/4-5/6-7/8-9 переводятся в preprocess). */
+      /** Возрастная группа ребёнка: 0–3, 4–6, 7–9 (старые 2-3/4-5/6-7/8-9 и 2-4/5-7/8-10 переводятся в preprocess). */
       ageGroup: z.enum(KID_AGE_KEYS).optional(),
       birthDate: str(10).optional().default(""),
       /** Возраст числом (подростки, взрослые, питомцы). */
@@ -224,6 +225,8 @@ export const AnswersV2 = z.preprocess(
         coverVariant: z.preprocess((v) => (v === undefined || v === null || v === "" ? 0 : Number(v)), z.number().int().min(0).max(2)).default(0),
         author: str(60).optional().default(""),
         photoId: z.string().uuid().optional(),
+        /** rev 20: картонная книга 0–3 — 9 или 12 страниц (src/lib/page-plan.ts). */
+        board: z.preprocess((v) => (v === undefined || v === null || v === "" ? undefined : Number(v)), z.union([z.literal(9), z.literal(12)]).optional()),
       })
       .default({}),
     /** Контакт: в анкете может быть пустым, ContactV2 проверяется на шаге входа/оформления. */

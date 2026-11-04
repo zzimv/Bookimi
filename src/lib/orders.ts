@@ -48,6 +48,23 @@ export async function catalogForPricing(audience?: string): Promise<{ formats: C
   };
 }
 
+/**
+ * rev 20: форматы печати — по плану страниц книги: картонная книга 0–3 — только картонные форматы (board9/board12),
+ * остальные — только обычные. Формат не своей группы сервер не продаёт (quote: «формат не найден»).
+ */
+export async function bookPlanById(bookId: string) {
+  const { bookPlanFor } = await import("./book-plan");
+  const book = await db.book.findUnique({ where: { id: bookId }, select: { params: true, storyId: true, text: true } });
+  const story = book ? await db.story.findUnique({ where: { id: book.storyId }, select: { slug: true } }) : null;
+  const n = (book?.text as { spreads?: unknown[] } | null)?.spreads?.length;
+  return bookPlanFor(book?.params, story?.slug, n);
+}
+async function planFormats<T extends { key: string }>(bookId: string, formats: T[]): Promise<T[]> {
+  const { formatFitsGroup } = await import("./page-plan");
+  const { plan } = await bookPlanById(bookId);
+  return formats.filter((f) => formatFitsGroup(f.key, plan));
+}
+
 export async function findPromo(code: string, userId?: string) {
   if (!code) return null;
   const p = await db.promoCode.findUnique({ where: { code: code.trim().toUpperCase() } });
@@ -138,7 +155,7 @@ export interface CheckoutInput {
 
 /** Сумма заказа «для каждого»: скидка за количество (bulk.tiers) не суммируется с промокодом и скидкой новичка. */
 async function priceBulk(userId: string, input: CheckoutInput) {
-  const { formats } = await catalogForPricing();
+  const formats = await planFormats(input.bookId, (await catalogForPricing()).formats);
   const [ship, bulkCfg] = await Promise.all([cfg("shipping"), cfg("bulk")]);
   const book = await db.book.findUnique({ where: { id: input.bookId } });
   const { AnswersV2 } = await import("./quiz");
@@ -184,7 +201,8 @@ export async function priceCheckout(userId: string, input: CheckoutInput) {
   if (input.bulk) return priceBulk(userId, input);
   // Каталог целиком, аудитория — в quote: доп чужой аудитории получает понятную ошибку «не для этой книги»
   const audience = await bookAudience(input.bookId);
-  const { formats, addons } = await catalogForPricing();
+  const { formats: all, addons } = await catalogForPricing();
+  const formats = await planFormats(input.bookId, all);
   const ship = await cfg("shipping");
   let shippingRub = 0;
   let shipInfo: Awaited<ReturnType<typeof shipQuote>> | null = null;

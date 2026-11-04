@@ -14,6 +14,8 @@ import { SOON_SHORT } from "@/lib/shelf";
 import { cfg } from "@/lib/settings";
 import { SoonBanner } from "@/components/Soon";
 import { EXTRA_ROLE_LABELS } from "@/lib/quiz";
+import { kidGroupOf } from "@/content/ages";
+import { pagePlan, planIdFor } from "@/lib/page-plan";
 import { ART_STYLE_IDS, OCCASIONS as OCCASION_KEYS, TEXT_STYLE_IDS } from "@/content/profiles";
 
 export const revalidate = 300;
@@ -185,7 +187,7 @@ export default async function Page({ params }: { params: Promise<{ slug: string 
             )}
             <div>
               <dt>Книга</dt>
-              <dd>24 страницы, 12 иллюстрированных разворотов, посвящение от вас на первой странице</dd>
+              <dd>{bookVolume(story.audience, story.segments)}</dd>
             </div>
           </dl>
         </div>
@@ -216,4 +218,14 @@ export default async function Page({ params }: { params: Promise<{ slug: string 
       <StickyCta href={create} label="Создать книгу" soon={isSoon} />
     </>
   );
+}
+
+/** Объём книги по плану страниц группы (rev 20, src/lib/page-plan.ts). */
+function bookVolume(audience: string, segments: string[]) {
+  const g = audience === "CHILD" ? kidGroupOf(segments)?.key : undefined;
+  if (g === "0-3") return "Картонная книжка для малышей: 9 страниц (двойной картон) или 12 страниц (плотный картон) — большие картинки и очень крупные буквы";
+  const plan = pagePlan(planIdFor({ audience, group: g }));
+  if (plan.id === "kids-4-6") return `${plan.innerPages} страниц: ${plan.story} иллюстрированных разворотов, 4 страницы, где ребёнок рисует сам, посвящение от вас`;
+  if (plan.id === "kids-7-9") return `${plan.innerPages} страниц: ${plan.story} иллюстрированных разворотов, страницы для заметок и рисунков, посвящение от вас`;
+  return `${plan.innerPages} страниц, ${plan.story} иллюстрированных разворотов, посвящение от вас на первой странице`;
 }

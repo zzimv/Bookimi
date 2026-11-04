@@ -1,6 +1,6 @@
 import { FormatKind, CoverType, AddonKind } from "@prisma/client";
 import { createPrisma } from "../src/lib/prisma-client";
-import { ADDONS, FORMATS, OCCASIONS, plotAges } from "../src/lib/catalog-defaults";
+import { ADDONS, FORMAT_PAGES, FORMATS, OCCASIONS, plotAges } from "../src/lib/catalog-defaults";
 import { PLOTS } from "../src/content/registry";
 import { ART_STYLE_IDS } from "../src/content/profiles";
 
@@ -115,6 +115,7 @@ async function main() {
         priceRub: f.price,
         isDefault: f.isDefault,
         sortOrder: i,
+        ...(FORMAT_PAGES[f.key] ? { pages: FORMAT_PAGES[f.key] } : {}),
       },
     });
   }

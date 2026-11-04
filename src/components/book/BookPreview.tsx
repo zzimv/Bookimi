@@ -1,14 +1,20 @@
 "use client";
 // Превью книги = настоящая книга, которую листают и правят на месте (rev 13): обложка в трёх оформлениях,
-// «Приветствие» с именем и автором, «Фото и посвящение», 12 разворотов с текстом прямо на картинке (слева и справа),
-// финал и задняя обложка. Под страницами — кнопки правок: имя, обложка, фото, посвящение, автор.
+// «Приветствие» с именем и автором, «Фото и посвящение», сказка по плану страниц группы (rev 20, src/lib/page-plan.ts:
+// картонная книжка 0–3, 30 страниц со страницами «Нарисуй…» 4–6, 40 страниц с заметками 7–9) с текстом прямо на картинке,
+// финал и задняя обложка. Цвета — палитра книги под название (src/content/palettes.ts), размер букв — по группе.
+// rev 20: внизу — липкая полоса «Оформить книгу», в конце книги — праздничная карточка, переход к оплате — весёлый. Под страницами — кнопки правок: имя, обложка, фото, посвящение, автор.
 // Вёрстка общая с PDF — src/lib/book-layout.ts. Превью до оплаты — картинки с одним мягким знаком «букими» на страницу;
 // ещё не нарисованные страницы — эскизы демо-рисовальщиком с подписью «эскиз» (rev 14), пустых страниц нет. Работает и в демо-стенде (мини-рантайм: click/input/change/keydown).
 import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
+import { useRouter } from "next/navigation";
+import { pagePlan, pairPages, planPages, slotText, textFit, type PagePlan } from "@/lib/page-plan";
+import type { BookPalette } from "@/content/palettes";
+import { usePayTransition } from "./PayTransition";
 import { SpreadText } from "@/components/SpreadText";
 import { api } from "@/lib/client";
 import {
-  AUTHOR_MAX, authorLine, backLines, bookSpreads, COVER_VARIANTS, fairyPalette, finalLines, pageLabel, singlePages, splitSpread, welcomeLines,
+  AUTHOR_MAX, authorLine, backLines, COVER_VARIANTS, fairyPalette, finalLines, pageLabel, singlePages, splitSpread, welcomeLines,
   type BookLayout, type BookPageRef, type FairyLine,
 } from "@/lib/book-layout";
 import { ConsentGate, type ConsentState } from "@/components/quiz/PhotoSlot";
@@ -27,7 +33,7 @@ export interface BookPreviewProps {
   coverUrl: string | null;
   /** Обложка — эскиз (ещё не нарисована): подпись «эскиз». */
   coverSketch?: boolean;
-  /** 12 разворотов: текст и картинка (sketch — эскиз демо-рисовальщиком до генерации, rev 14; нет картинки — подложка). */
+  /** Развороты сюжета (rev 20: столько, сколько в тексте; раскладка — по плану): текст и картинка (sketch — эскиз демо-рисовальщиком до генерации, rev 14; нет картинки — подложка). */
   spreads: { index: number; text: string; url: string | null; sketch?: boolean }[];
   dedication: string;
   layout: BookLayout;
@@ -43,6 +49,12 @@ export interface BookPreviewProps {
   onChanged: () => Promise<void> | void;
   /** Цена «Другой обложки» (rev 19; «Классика» бесплатно). 0 или нет — без цены. */
   coverPriceRub?: number;
+  /** rev 20: план страниц книги (PlanId, src/lib/page-plan.ts); нет — classic. */
+  plan?: string;
+  /** rev 20: палитра книги под название (src/content/palettes.ts). */
+  palette?: BookPalette;
+  /** rev 20: куда ведёт «Оформить книгу» (липкая полоса и карточка в конце); нет — без кнопки. */
+  checkoutHref?: string | null;
 }
 
 /** rev 19: после оплаты правок нет — только эта строка со ссылкой на поддержку (и в кабинете). */
@@ -54,11 +66,12 @@ export function PaidNote() {
   );
 }
 
-/** Обложка в выбранном оформлении — та же вёрстка, что в PDF (coverInner). */
-export function BookCoverView({ variant, art, title, small }: { variant: number; art: string | null; title: string; small?: boolean }) {
+/** Обложка в выбранном оформлении — та же вёрстка, что в PDF (coverInner). Цвет названия — палитра книги (rev 20). */
+export function BookCoverView({ variant, art, title, small, palette }: { variant: number; art: string | null; title: string; small?: boolean; palette?: BookPalette }) {
   const v = variant === 1 || variant === 2 ? variant : 0;
+  const style = palette ? ({ "--bk-title": palette.cover, "--bk-title-night": palette.coverNight, "--bk-orn": palette.orn } as CSSProperties) : undefined;
   return (
-    <div className={`bk-cover bk-cover--v${v}${small ? " bk-cover--small" : ""}`} data-cover-variant={v}>
+    <div className={`bk-cover bk-cover--v${v}${small ? " bk-cover--small" : ""}`} data-cover-variant={v} data-palette={palette?.name} style={style}>
       {v === 1 && <span className="bk-cover__stars" aria-hidden="true" />}
       {v === 2 && <span className="bk-cover__frame" aria-hidden="true" />}
       <div className="bk-cover__art">
@@ -177,8 +190,12 @@ export function BookPreview(p: BookPreviewProps) {
   useEffect(() => setDedDraft(p.dedication), [p.dedication]);
   useEffect(() => setAuthorDraft(p.layout.author), [p.layout.author]);
 
-  const spreadsView = useMemo(() => bookSpreads(count), [count]);
-  const singles = useMemo(() => singlePages(count), [count]);
+  // rev 20: страницы — по плану группы; лишние развороты сливаются по два (самые короткие), недостающие — «Нарисуй…»
+  const plan: PagePlan = pagePlan(p.plan);
+  const lensKey = p.spreads.map((s) => s.text.length).join(",");
+  const pages = useMemo(() => planPages(plan, count, (i) => (p.spreads[i - 1]?.text ?? "").length), [plan.id, count, lensKey]); // eslint-disable-line react-hooks/exhaustive-deps
+  const spreadsView = useMemo(() => pairPages(pages), [pages]);
+  const singles = useMemo(() => singlePages(pages), [pages]);
   const frames: BookPageRef[][] = view === "spread" ? spreadsView : singles.map((x) => [x]);
   const at = Math.min(pos, frames.length - 1);
   const frame = frames[at];
@@ -186,12 +203,34 @@ export function BookPreview(p: BookPreviewProps) {
   const photo = p.photos.find((x) => x.id === p.layout.photoId) ?? null;
   const coverArt = p.coverUrl;
   const v = COVER_VARIANTS[p.layout.coverVariant] ?? COVER_VARIANTS[0];
-  const pal = fairyPalette(p.layout.coverVariant);
+  const fp = fairyPalette(p.layout.coverVariant);
+  const pal = p.palette ?? { ink: fp.ink, accent: fp.accent, orn: fp.orn, paper: "#fdfaf2", back: fp.ink, cover: "#143628", coverNight: "#f3d27a", name: "classic", title: "" };
   const coverPrice = Math.max(0, p.coverPriceRub ?? 0);
-  const palette = { "--fk-ink": pal.ink, "--fk-accent": pal.accent, "--fk-orn": pal.orn } as CSSProperties;
+  const palette = {
+    "--fk-ink": pal.ink,
+    "--fk-accent": pal.accent,
+    "--fk-orn": pal.orn,
+    "--bk-paper": pal.paper,
+    "--bk-back": pal.back,
+    "--bk-title": pal.cover,
+    "--bk-title-night": pal.coverNight,
+  } as CSSProperties;
+  // rev 20: дошли до конца — праздничная карточка и «Оформить книгу» крупно
+  const [reachedEnd, setReachedEnd] = useState(false);
+  const atEnd = at >= frames.length - 1;
+  useEffect(() => {
+    if (atEnd) setReachedEnd(true);
+  }, [atEnd]);
+  const router = useRouter();
+  const pay = usePayTransition();
+  function toCheckout() {
+    const href = p.checkoutHref;
+    if (!href) return;
+    pay.run(["Упаковываем волшебство…", "Закрываем книгу и перевязываем лентой…", "Ещё чуть-чуть — и книга полетит в типографию"], async () => null, () => router.push(href)).catch(() => {});
+  }
 
   function showPhoto() {
-    goTo("photo");
+    goTo(plan.front.includes("photo") ? "photo" : "welcome");
     // Книга — в поле зрения (панель правок под ней могла увести страницу вниз)
     stage.current?.scrollIntoView({ block: "nearest", behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth" });
     setFlash(true);
@@ -217,7 +256,7 @@ export function BookPreview(p: BookPreviewProps) {
     setPanel(panel === what ? null : what);
     if (what === "cover") goTo("cover");
     if (what === "name" || what === "author") goTo("welcome");
-    if (what === "photo") goTo("photo");
+    if (what === "photo") goTo(plan.front.includes("photo") ? "photo" : "welcome");
     if (what === "dedication") goTo("dedication");
   }
 
@@ -263,18 +302,30 @@ export function BookPreview(p: BookPreviewProps) {
   const tools: { key: Panel; label: string; on: BookPageRef["kind"][] }[] = [
     { key: "name", label: "Изменить имя", on: ["welcome", "story", "final"] },
     { key: "cover", label: "Сменить обложку", on: ["cover", "back"] },
-    ...(p.photoEnabled ? [{ key: "photo" as const, label: photo ? "Сменить фото" : "Добавить фото", on: ["photo"] as BookPageRef["kind"][] }] : []),
-    { key: "dedication", label: p.dedication ? "Изменить посвящение" : "Написать посвящение", on: ["dedication"] },
+    ...(p.photoEnabled ? [{ key: "photo" as const, label: photo ? "Сменить фото" : "Добавить фото", on: (plan.front.includes("photo") ? ["photo"] : ["welcome"]) as BookPageRef["kind"][] }] : []),
+    // rev 20: в картонной книжке на 9 страниц посвящения нет — кнопки тоже
+    ...(plan.front.includes("dedication") ? [{ key: "dedication" as const, label: p.dedication ? "Изменить посвящение" : "Написать посвящение", on: ["dedication"] as BookPageRef["kind"][] }] : []),
     { key: "author", label: p.layout.author ? "Изменить автора" : "Вписать автора", on: ["welcome", "endpaper"] },
   ];
+  /** rev 20: картонная книжка 0–3 — выбор 9 или 12 страниц прямо в превью (книга сразу перелистывается по-новому). */
+  const boardPick = plan.board && !p.paid ? (
+    <div className="bk-board-pick" role="radiogroup" aria-label="Картонная книжка: сколько страниц" data-board-pick>
+      {([9, 12] as const).map((n) => (
+        <button key={n} type="button" role="radio" aria-checked={plan.board?.pages === n} data-board={n} disabled={busy} onClick={() => plan.board?.pages !== n && save({ board: n }, n === 9 ? "Книжка на 9 страниц, двойной картон" : "Книжка на 12 страниц, плотный картон").then(() => setPos(0))}>
+          <b>{n} страниц</b>
+          <small>{n === 9 ? "двойной картон · приветствие и 8 страниц сказки" : "плотный картон · с фото, посвящением и финалом"}</small>
+        </button>
+      ))}
+    </div>
+  ) : null;
 
   const pageView = (ref: BookPageRef) => {
-    const k = `${ref.kind}-${ref.spread ?? ""}-${ref.side ?? ""}`;
+    const k = `${ref.kind}-${ref.spread ?? ""}-${ref.side ?? ""}-${ref.n ?? ""}`;
     switch (ref.kind) {
       case "cover":
         return (
           <div className="bk-page bk-page--cover" key={k} data-wm={wm || undefined} data-page="cover">
-            <BookCoverView variant={p.layout.coverVariant} art={coverArt} title={p.title} />
+            <BookCoverView variant={p.layout.coverVariant} art={coverArt} title={p.title} palette={p.palette} />
             {p.coverSketch && <span className="bk-sketch" data-sketch>эскиз</span>}
           </div>
         );
@@ -287,8 +338,12 @@ export function BookPreview(p: BookPreviewProps) {
             <p className="bk-welcome__title">{p.title}</p>
             <FairyText lines={welcomeLines(p.heroName)} className="bk-welcome__text" />
             <FairyDivider className="fk-div--sm" />
-            <div className="bk-welcome__hero">
-              {coverArt ? (
+            {/* rev 20: фото ребёнка (добавлено в начале анкеты или здесь) — в рамке на первой странице */}
+            <div className={`bk-welcome__hero${photo ? " bk-welcome__hero--photo" : ""}${flash && !plan.front.includes("photo") ? " bk-photo--flash" : ""}`} data-welcome-photo={photo ? "1" : undefined}>
+              {photo ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={photo.url} alt="Фото в книге" data-photo-in-book />
+              ) : coverArt ? (
                 // eslint-disable-next-line @next/next/no-img-element
                 <img src={coverArt} alt="" />
               ) : (
@@ -339,13 +394,35 @@ export function BookPreview(p: BookPreviewProps) {
           </div>
         );
       case "story": {
-        const s = p.spreads[(ref.spread ?? 1) - 1];
-        const parts = splitSpread(s?.text);
+        // rev 20: единица плана — один или несколько разворотов сюжета (слитые до переписывания текста)
+        const src = ref.src ?? [ref.spread ?? 1];
+        const s = p.spreads[(src[0] ?? 1) - 1];
+        const text = slotText(src, (n) => p.spreads[n - 1]?.text);
+        if (ref.side === "page") {
+          // Картонная книжка 0–3: картинка целиком, очень крупный короткий текст на светлой плашке внизу
+          return (
+            <div className="bk-page bk-page--story bk-page--board" key={k} data-wm={wm || undefined} data-page="story" data-spread={ref.spread} data-side="page" data-src={src.join(",")}>
+              {s?.url ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img className="bk-art bk-art--board" src={s.url} alt={`Иллюстрация страницы ${ref.spread}`} loading="lazy" decoding="async" data-sketch-art={s.sketch ? "1" : undefined} />
+              ) : (
+                <div className="bk-art bk-art--ph bk-art--board"><span className="bk-art__note">{p.pendingNote}</span></div>
+              )}
+              {s?.sketch && <span className="bk-sketch bk-sketch--top" data-sketch>эскиз</span>}
+              {text && (
+                <div className="bk-board-text" style={{ "--tf": String(textFit(plan.textScale, text.length)) } as CSSProperties}>
+                  <SpreadText text={text} />
+                </div>
+              )}
+            </div>
+          );
+        }
+        const parts = splitSpread(text);
         const i = ref.side === "left" ? 0 : 1;
         const part = parts[i];
         const tone: Tone = (s?.url && tones[s.url]?.[i]) || "light";
         return (
-          <div className={`bk-page bk-page--story bk-page--${ref.side}`} key={k} data-wm={wm || undefined} data-page="story" data-spread={ref.spread} data-side={ref.side} data-tone={tone}>
+          <div className={`bk-page bk-page--story bk-page--${ref.side}`} key={k} data-wm={wm || undefined} data-page="story" data-spread={ref.spread} data-side={ref.side} data-tone={tone} data-src={src.join(",")}>
             {s?.url ? (
               // eslint-disable-next-line @next/next/no-img-element
               <img className={`bk-art bk-art--${ref.side}`} src={s.url} alt={i === 0 ? `Иллюстрация разворота ${ref.spread}` : ""} loading="lazy" decoding="async" data-sketch-art={s.sketch ? "1" : undefined} />
@@ -356,9 +433,35 @@ export function BookPreview(p: BookPreviewProps) {
             )}
             {s?.sketch && i === 1 && <span className="bk-sketch" data-sketch>эскиз</span>}
             {part && (
-              <div className={`bk-text bk-text--${tone}${part.length > 200 ? " bk-text--long" : ""}`}>
+              <div className={`bk-text bk-text--${tone}${part.length > 200 ? " bk-text--long" : ""}${i === 0 ? " bk-text--drop" : ""}`} style={{ "--tf": String(textFit(plan.textScale, part.length * 2)) } as CSSProperties}>
                 <SpreadText text={part} />
               </div>
+            )}
+          </div>
+        );
+      }
+      case "activity": {
+        // rev 20: страницы, где ребёнок рисует сам или пишет заметки (4–6, 7–9); у малышей — страница-картинка
+        const a = ref.activity;
+        if (a?.kind === "art")
+          return (
+            <div className="bk-page bk-page--story bk-page--board" key={k} data-wm={wm || undefined} data-page="activity" data-activity="art">
+              {coverArt ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img className="bk-art bk-art--board" src={coverArt} alt="" />
+              ) : (
+                <span className="bk-ph" aria-hidden="true" />
+              )}
+            </div>
+          );
+        return (
+          <div className={`bk-page bk-page--paper bk-act bk-act--${a?.kind}`} key={k} data-wm={wm || undefined} data-page="activity" data-activity={a?.kind}>
+            <span className="bk-orn" aria-hidden="true"><i /><i /></span>
+            <p className="bk-act__prompt">{a?.prompt}</p>
+            {a?.kind === "notes" ? (
+              <span className="bk-act__lines" aria-hidden="true">{Array.from({ length: 9 }, (_, j) => <i key={j} />)}</span>
+            ) : (
+              <span className="bk-act__frame" aria-hidden="true"><svg viewBox="0 0 24 24" width="1em" height="1em"><path d="M3 21l3.8-1 11-11-2.8-2.8-11 11L3 21zM16.4 4.8l2.8 2.8 1.4-1.4a1 1 0 000-1.4l-1.4-1.4a1 1 0 00-1.4 0l-1.4 1.4z" fill="currentColor" /></svg></span>
             )}
           </div>
         );
@@ -382,10 +485,11 @@ export function BookPreview(p: BookPreviewProps) {
   };
 
   const here = frame.find((x) => x.kind !== "endpaper") ?? frame[0];
-  const label = frame.length === 2 && here.kind === "story" ? `Разворот ${here.spread}` : pageLabel(here);
+  const label = frame.length === 2 && here.kind === "story" && here.side !== "page" ? `Разворот ${here.spread}` : pageLabel(here);
 
   return (
-    <section className="bk" data-book-preview data-paid={p.paid ? "1" : "0"} aria-label={p.paid ? "Ваша книга" : "Ваша книга: листайте и правьте"} style={palette}>
+    <section className={`bk bk--t-${plan.textScale}${plan.board ? " bk--board" : ""}`} data-book-preview data-plan={plan.id} data-palette={pal.name} data-paid={p.paid ? "1" : "0"} aria-label={p.paid ? "Ваша книга" : "Ваша книга: листайте и правьте"} style={palette}>
+      <p className="bk__plan small" data-plan-title>{plan.title}</p>
       <div className="bk__bar">
         <span className="bk__where" aria-live="polite" data-where>{label} · {at + 1} из {frames.length}</span>
         <div className="bk__views" role="group" aria-label="Как показывать книгу">
@@ -410,6 +514,17 @@ export function BookPreview(p: BookPreviewProps) {
         <button type="button" className="bk__nav bk__nav--next" aria-label="Следующая страница" data-turn="next" disabled={at >= frames.length - 1} onClick={() => setPos(Math.min(frames.length - 1, at + 1))}>›</button>
       </div>
       <div className="bk__track" aria-hidden="true"><i style={{ width: `${Math.round(((at + 1) / frames.length) * 100)}%` }} /></div>
+
+      {/* rev 20: дочитали до конца — праздничная карточка с главной кнопкой */}
+      {atEnd && !p.paid && p.checkoutHref && (
+        <div className="bk-end" data-preview-end>
+          <span className="bk-end__stars" aria-hidden="true"><i /><i /><i /><i /><i /></span>
+          <p className="bk-end__title">Вот и сказке конец — а книге только начало!</p>
+          <p className="small bk-end__sub">Всё на месте? Оформим — и {plan.board ? "картонная книжка" : "книга"} отправится в типографию.</p>
+          <button type="button" className="btn btn--primary bk-end__btn" onClick={toCheckout} data-preview-checkout="end">Оформить книгу</button>
+        </div>
+      )}
+      {boardPick}
 
       {p.paid ? (
         <PaidNote />
@@ -461,7 +576,7 @@ export function BookPreview(p: BookPreviewProps) {
                     disabled={busy}
                     onClick={() => p.layout.coverVariant !== c.id && save({ coverVariant: c.id }, `Обложка: «${c.title}»`)}
                   >
-                    <BookCoverView variant={c.id} art={coverArt} title={p.title} small />
+                    <BookCoverView variant={c.id} art={coverArt} title={p.title} small palette={p.palette} />
                     <b>{c.title}</b>
                     {coverPrice > 0 && <span className="bk-variant__price" data-cover-price>{c.id === 0 ? "бесплатно" : `+${coverPrice} ₽`}</span>}
                     <small>{c.hint}</small>
@@ -537,6 +652,13 @@ export function BookPreview(p: BookPreviewProps) {
           {saved && !error && <p className="ok small" role="status" data-saved>✓ {saved}</p>}
         </div>
       )}
+      {!p.paid && p.checkoutHref && (
+        <div className={`bk-cta${reachedEnd ? " bk-cta--end" : ""}`} data-preview-cta>
+          <span className="bk-cta__text">{reachedEnd ? "Книга готова к печати!" : "Листайте до конца — а оформить можно в любой момент"}</span>
+          <button type="button" className={`btn ${reachedEnd ? "btn--gold" : "btn--primary"} btn--sm`} onClick={toCheckout} data-preview-checkout="bar">Оформить книгу →</button>
+        </div>
+      )}
+      {pay.overlay}
       <p className="small muted bk__hint">Обложка: «{v.title}»{coverPrice > 0 && p.layout.coverVariant !== 0 && !p.paid ? ` (+${coverPrice} ₽)` : ""}. Листайте стрелками или кнопками ‹ ›.{p.paid ? "" : " Правки сразу видны в книге и попадут в PDF и печать."}</p>
     </section>
   );

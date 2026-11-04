@@ -78,7 +78,7 @@ export function occasionIsLive(key: string, soonList: readonly AudienceKey[]): b
 const FOR: Record<AudienceKey, string> = { CHILD: "для детей", TEEN: "для подростков", ADULT: "для взрослых", PET: "о питомцах" };
 
 /** Плашка на странице аудитории и в каталоге. */
-export const soonNote = (audience: AudienceKey) => `Скоро — книги ${FOR[audience]} готовим к запуску. Сейчас можно создать сказку для ребёнка 2–10 лет`;
+export const soonNote = (audience: AudienceKey) => `Скоро — книги ${FOR[audience]} готовим к запуску. Сейчас можно создать сказку для ребёнка от 0 до 9 лет`;
 /** Ответ анкеты и /api/books, если аудитория «скоро». */
 export const soonCreateError = (audience: AudienceKey) => `Скоро: книги ${FOR[audience]} готовим к запуску. Пока можно создать сказку для ребёнка.`;
 /** Подпись под выключенной кнопкой «Создать». */

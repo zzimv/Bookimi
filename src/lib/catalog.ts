@@ -194,7 +194,7 @@ export async function getOccasion(slug: string) {
   return (await getOccasions()).find((o) => o.slug === slug) ?? null;
 }
 
-/** Страница возраста; старый адрес /vozrast/8-9-let — та же страница 8–10 лет (canonical — новый). */
+/** Страница возраста; старые адреса (2-4-goda, 8-10-let…) отвечают 301 (next.config.ts), здесь — на всякий случай та же страница. */
 export function getAgePage(slug: string) {
   return AGE_PAGES.find((a) => a.slug === slug || (a.aliases as readonly string[]).includes(slug)) ?? null;
 }

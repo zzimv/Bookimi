@@ -34,6 +34,9 @@ import { cartoonScript, type Cue } from "../../src/lib/gen/cartoon-script";
 import { plainSpread } from "../../src/lib/spread-markup";
 import { checkFirstName, FIRST_NAME_ERROR } from "../../src/lib/first-name";
 import { layoutOf } from "../../src/lib/book-layout";
+import { bookPlanFor } from "../../src/lib/book-plan";
+import { formatFitsGroup } from "../../src/lib/page-plan";
+import { CUSTOM_STORY_ENABLED } from "../../src/content/sections";
 import { applyLayoutEdit, editLocked, LayoutEdit, NAME_AFTER_PAY } from "../../src/lib/book-edit";
 import { fullNameError, normalizeName } from "../../src/lib/names";
 import { applyBonus, bonusBalance, reviewBonusAllowed, reviewCredit, type BonusEntryLike } from "../../src/lib/bonuses";
@@ -693,10 +696,17 @@ interface CheckoutInput {
 export function paidAddonKeys(bookId: string) {
   return [...new Set(S.orders.filter((o) => o.bookId === bookId && o.paidAt && !["REFUNDED", "CANCELLED"].includes(o.status)).flatMap((o) => o.items).filter((i) => i.kind === "addon").map((i) => i.refKey))];
 }
+/** rev 20: план страниц и палитра книги демо (как bookPlanById в src/lib/orders.ts). */
+export function demoBookPlan(book: { params: unknown; text?: { spreads: unknown[] } | null }) {
+  const slug = (book.params as { story?: { slug?: string } }).story?.slug;
+  return bookPlanFor(book.params, slug, book.text?.spreads.length);
+}
 function priceCheckout(input: CheckoutInput) {
   const book = bookById(input.bookId);
   const audience = book ? bookAudience(book) : undefined;
-  const { formats, addons } = catalogForPricing(audience);
+  const { formats: all, addons } = catalogForPricing(audience);
+  // rev 20: картонные форматы — только картонной книжке 0–3, обычные — остальным (как planFormats на сервере)
+  const formats = book ? all.filter((f) => formatFitsGroup(f.key, demoBookPlan(book).plan)) : all;
   const books = input.whoPrints === "bookimi" ? 1 + (input.addons.includes("second-copy") ? 1 : 0) : 0;
   const ship = input.whoPrints === "bookimi" && input.shipping ? shipQuote(input.shipping.method, input.shipping.address) : null;
   const promo = findPromo(input.promo);
@@ -844,8 +854,8 @@ export function bulkState(parent: DBook) {
   };
 }
 function priceBulk(input: CheckoutInput) {
-  const { formats } = catalogForPricing();
   const parent = bookById(input.bookId)!;
+  const formats = catalogForPricing().formats.filter((f) => formatFitsGroup(f.key, demoBookPlan(parent).plan));
   const heroes = groupChildren(AnswersV2.parse(parent.params)).map((c) => c.name);
   const ship = input.whoPrints === "bookimi" && input.shipping ? shipQuote(input.shipping.method, input.shipping.address) : null;
   const promo = findPromo(input.promo);
@@ -926,6 +936,7 @@ async function handle(method: string, path: string, q: URLSearchParams, body: un
   }
 
   if (path === "/api/ideas" && method === "POST") {
+    if (!CUSTOM_STORY_ENABLED) return err("Выберите книгу из каталога", 404);
     const a = AnswersV2.safeParse((b0 as { answers?: unknown })?.answers);
     if (!a.success) return err("Заполните анкету");
     if (soonAudiences(DEFAULTS.storefront.soon).includes(a.data.audience)) return err(soonCreateError(a.data.audience), 403);
@@ -989,7 +1000,10 @@ async function handle(method: string, path: string, q: URLSearchParams, body: un
     // rev 17: только живые стили (скрытые — archived — не принимаются)
     if (!ART_STYLE_IDS.some((x) => x.id === a.artStyle && x.status !== "archived")) a.artStyle = plot?.artStyles[0] ?? DEFAULT_ART_STYLE;
     if (a.mood && !moodsFor(a.audience, a.hero.age).some((m) => m.id === a.mood)) a.mood = "";
+    // rev 20: «Своя история» выключена — только книги каталога (как /api/books)
+    if (!a.story.slug && !CUSTOM_STORY_ENABLED) return err("Выберите книгу из каталога", 400);
     if (!a.story.slug && !a.story.idea) return err("Выберите сюжет или опишите свою идею");
+    if (a.layout.photoId && !(a.hero.photoIds ?? []).includes(a.layout.photoId)) a.layout = { ...a.layout, photoId: undefined };
     if (!plot?.group) a.group = undefined;
     else if (a.group) a.group = { members: a.group.members.slice(0, groupMembersMax(plot)), adults: a.group.adults.slice(0, plot.group.includeAdults?.max ?? 0) };
     const limits = DEFAULTS.limits;
@@ -1048,6 +1062,9 @@ async function handle(method: string, path: string, q: URLSearchParams, body: un
         dedication: dedicationText(AnswersV2.parse(book.params)),
         layout: layoutOf(book.params),
         coverPriceRub: DEFAULTS.bookOptions.coverPriceRub,
+        // rev 20: план страниц группы и палитра книги
+        plan: demoBookPlan(book).plan.id,
+        palette: demoBookPlan(book).palette,
       });
     }
     if (seg.length === 3 && method === "PATCH") {

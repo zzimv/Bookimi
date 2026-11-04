@@ -24,7 +24,7 @@ import { PLOTS } from "../content/registry";
 
 /** Возрастная маркировка по аудитории (как на обложке PDF, src/lib/pdf.ts → bookWording; ASSUMPTIONS п. 41). */
 export const AGE_RATING: Record<string, string> = { CHILD: "0+", TEEN: "6+", ADULT: "12+", PET: "0+" };
-const AUD_AGES: Record<string, string> = { CHILD: "2-10", TEEN: "11-17", ADULT: "18+", PET: "любой" };
+const AUD_AGES: Record<string, string> = { CHILD: "0-9", TEEN: "11-17", ADULT: "18+", PET: "любой" };
 
 export async function catalogData() {
   const [stories, allOccasions, prices, shipping, limits, holidays, cartoon, bulk, flags, soon] = await Promise.all([
@@ -85,7 +85,7 @@ export async function catalogData() {
     })),
     howItWorks: [
       "Герои: кто главный герой (ребёнок, подросток, взрослый, питомец), имя и фото — после отдельного согласия — или описание словами; можно добавить других героев",
-      "Повод и сюжет: из каталога или «своя история» по вашей идее; для детского сада и класса — список группы",
+      "Повод и книга из каталога (для детей 0–3, 4–6 и 7–9 лет); для детского сада и класса — список группы",
       "Бесплатно: текст книги за минуту, его можно поправить",
       "Вход по коду на почту и бесплатное превью: обложка и 2 разворота за 2–5 минут",
       "Покупка PDF или печатной книги; по желанию — аудиокнига, раскраска, мультфильм по книге",

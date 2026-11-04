@@ -13,6 +13,7 @@ import { layoutOf } from "@/lib/book-layout";
 import { editLocked } from "@/lib/book-edit";
 import { dedicationText } from "@/lib/gen/text";
 import { cfg } from "@/lib/settings";
+import { bookPlanFor } from "@/lib/book-plan";
 
 export const dynamic = "force-dynamic";
 
@@ -30,6 +31,10 @@ export async function GET(_: Request, { params }: { params: Promise<{ id: string
   const full = book.paidFull && book.status === "FULL_READY";
   const consent = await consentState({ userId: own.user?.id, anonId: await anonId() });
   const a = AnswersV2.safeParse(book.params);
+  // rev 20: план страниц группы (картонная 0–3, 30 страниц 4–6, 40 страниц 7–9) и палитра книги под название
+  const story = await db.story.findUnique({ where: { id: book.storyId }, select: { slug: true } });
+  const txt = book.text as StoryText | null;
+  const plan = bookPlanFor(book.params, story?.slug, txt?.spreads.length);
   return json({
     id: book.id,
     status: book.status,
@@ -59,10 +64,13 @@ export async function GET(_: Request, { params }: { params: Promise<{ id: string
     layout: layoutOf(book.params),
     // rev 19: цена «Другой обложки» — подпись «+100 ₽» в выборе обложки (сумму считает сервер при оформлении)
     coverPriceRub: (await cfg("bookOptions")).coverPriceRub,
+    plan: plan.plan.id,
+    palette: plan.palette,
   });
 }
 
-const Edit = z.object({ spreads: z.array(z.object({ index: z.number().int().min(1).max(12), text: z.string().trim().min(1).max(600) })).max(12) });
+// rev 20: разворотов в тексте — по плану группы (до 24)
+const Edit = z.object({ spreads: z.array(z.object({ index: z.number().int().min(1).max(24), text: z.string().trim().min(1).max(600) })).max(24) });
 
 // Ручная правка текста — бесплатно, без ограничений (до печати).
 export async function PATCH(req: Request, { params }: { params: Promise<{ id: string }> }) {

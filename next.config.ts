@@ -1,5 +1,6 @@
 import type { NextConfig } from "next";
 import { adminCsp } from "./src/lib/admin-host";
+import { AGE_REDIRECTS } from "./src/lib/catalog-defaults";
 
 const isProd = process.env.NODE_ENV === "production";
 
@@ -42,6 +43,10 @@ const config: NextConfig = {
   // Типы проверяются отдельным шагом CI (npm run typecheck). SKIP_TYPECHECK=1 — только
   // для окружений без движков Prisma, где клиент сгенерирован как заглушка.
   typescript: { ignoreBuildErrors: process.env.SKIP_TYPECHECK === "1" },
+  // rev 20: возрастные группы 0–3 / 4–6 / 7–9 — старые адреса /vozrast/* навсегда переехали (301)
+  async redirects() {
+    return AGE_REDIRECTS.map((r) => ({ source: r.from, destination: r.to, statusCode: 301 as const }));
+  },
   async headers() {
     // Админка и вход (на admin-хосте открыты только они): строгая CSP без Метрики и сторонних скриптов
     const adminHeaders = securityHeaders.map((h) => (h.key === "Content-Security-Policy" ? { ...h, value: adminCsp(isProd) } : h));

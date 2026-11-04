@@ -14,7 +14,7 @@ d("доставка: заказ и адресная книга", async () => {
 
   async function setup() {
     const u = await db.user.create({ data: { email: `ship-${tag}-${Math.random()}@test.local`, referralCode: `S${randomUUID().slice(0, 10)}`.toUpperCase(), deviceHashes: [] } });
-    const story = await db.story.findFirstOrThrow({ where: { isActive: true } });
+    const story = await db.story.findFirstOrThrow({ where: { isActive: true, NOT: { segments: { has: "kids-0-3" } } } });
     const b = await db.book.create({ data: { userId: u.id, storyId: story.id, styleKey: "watercolor-air", params: {}, status: "PREVIEW_READY", text: { title: "Т", spreads: [] } } });
     const fmt = await db.productFormat.findFirstOrThrow({ where: { kind: "PRINT", isActive: true } });
     return { u, b, fmt };

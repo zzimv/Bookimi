@@ -10,6 +10,7 @@ import { CityInput } from "./CityInput";
 import { PvzPicker } from "./PvzPicker";
 import { AddonCards } from "./AddonCards";
 import { FlowLegal } from "@/components/FlowLegal";
+import { PAY_LINES, PAY_LINES_PDF, usePayTransition } from "./PayTransition";
 
 export interface Fmt { key: string; kind: "PDF" | "PRINT"; title: string; priceRub: number; widthMm: number | null; heightMm: number | null; cover: string; pages: number }
 export interface Add { key: string; kind: string; title: string; description: string; priceRub: number | null; percentOff: number | null; requiresPrint: boolean }
@@ -63,6 +64,9 @@ const MADE_FOR: Record<string, string> = {
 };
 
 const SIZES = [
+  // rev 20: картонные книги для 0–3 — два варианта (план страниц board-9 / board-12)
+  { id: "board9", label: "Картонная: 9 страниц, двойной картон" },
+  { id: "board12", label: "Картонная: 12 страниц, плотный картон" },
   { id: "mini", label: "Мини 15×15 см" },
   { id: "std", label: "Стандарт 21×21 см" },
   { id: "album", label: "Альбом 28×21 см" },
@@ -83,8 +87,13 @@ interface CheckoutKeep {
   useBonus: boolean;
 }
 
+/** План страниц книги (rev 20, src/lib/page-plan.ts): страниц блока и вариант картонной книги. */
+export interface CheckoutPlan { id: string; title: string; innerPages: number; board?: 9 | 12 }
+
 export function Checkout(props: {
   bookId: string;
+  /** rev 20: план страниц книги — подпись «30 страниц», картонные варианты 0–3. */
+  plan?: CheckoutPlan;
   coverUrl: string | null;
   initialWho: "self" | "bookimi";
   formats: Fmt[];
@@ -118,7 +127,9 @@ export function Checkout(props: {
   const router = useRouter();
   const ed = props.edit ?? null;
   const [who, setWho] = useState<"self" | "bookimi">(ed ? "bookimi" : props.printEnabled ? props.initialWho : "self");
-  const defaultFmt = props.formats.find((f) => f.key === (ed?.formatKey ?? "std-hard")) ?? props.formats.find((f) => f.kind === "PRINT");
+  const boardKey = props.plan?.board ? `board${props.plan.board}-hard` : null;
+  const defaultFmt = props.formats.find((f) => f.key === (ed?.formatKey ?? boardKey ?? "std-hard")) ?? props.formats.find((f) => f.kind === "PRINT");
+  const pay = usePayTransition();
   const [size, setSize] = useState(defaultFmt?.key.split("-")[0] ?? "std");
   const [cover, setCover] = useState<"soft" | "hard">(defaultFmt?.key.endsWith("soft") ? "soft" : "hard");
   const [addons, setAddons] = useState<string[]>(ed?.addons ?? []);
@@ -249,12 +260,18 @@ export function Checkout(props: {
         router.push(`/zakaz/${ed.orderId}`);
         return;
       }
-      const r = await api<{ orderId: string }>("/api/checkout", payload);
-      goal("choose_print", { who });
-      try {
-        sessionStorage.removeItem(keepKey);
-      } catch {}
-      router.push(`/zakaz/${r.orderId}`);
+      // rev 20: весёлый переход к оплате — книга закрывается, лента, звёзды, «Упаковываем волшебство…»
+      await pay.run(
+        who === "bookimi" ? PAY_LINES : PAY_LINES_PDF,
+        () => api<{ orderId: string }>("/api/checkout", payload),
+        (r) => {
+          goal("choose_print", { who });
+          try {
+            sessionStorage.removeItem(keepKey);
+          } catch {}
+          router.push(`/zakaz/${r.orderId}`);
+        },
+      );
     } catch (e) {
       setError((e as Error).message);
       setBusy(false);
@@ -325,6 +342,11 @@ export function Checkout(props: {
             )}
           </section>
         )}
+        {!ed && (
+          <button type="button" className="btn btn--ghost btn--sm back-to-book" onClick={editBook} data-back-to-book>
+            ← Вернуться к книге
+          </button>
+        )}
         {ed ? (
           <>
             <h1 style={{ fontSize: "var(--fs-xl)" }}>Изменить заказ {ed.publicCode}</h1>
@@ -368,14 +390,19 @@ export function Checkout(props: {
                 const h = (f.heightMm ?? 210) / 3;
                 const min = Math.min(...props.formats.filter((x) => x.key.startsWith(s.id + "-")).map((x) => x.priceRub));
                 return (
-                  <button key={s.id} className="format" aria-pressed={size === s.id} onClick={() => { setSize(s.id); if (!props.formats.some((x) => x.key === `${s.id}-${cover}`)) setCover("hard"); }}>
+                  <button key={s.id} className={`format${s.id.startsWith("board") ? " format--board" : ""}`} data-size={s.id} aria-pressed={size === s.id} onClick={() => { setSize(s.id); if (!props.formats.some((x) => x.key === `${s.id}-${cover}`)) setCover("hard"); if (s.id.startsWith("board")) api(`/api/books/${props.bookId}/action`, { action: "layout", board: s.id === "board9" ? 9 : 12 }).catch(() => {}); }}>
                     <div className="mock"><div style={{ width: w, height: h, backgroundImage: props.coverUrl ? `url(${props.coverUrl})` : undefined, backgroundColor: "var(--sage)" }} /></div>
                     <b>{s.label}</b>
-                    <span className="small muted">{f.pages} страницы · от {rub(min)}</span>
+                    <span className="small muted">{pagesLabel(s.id.startsWith("board") ? f.pages : props.plan?.innerPages ?? f.pages)} · от {rub(min)}</span>
                   </button>
                 );
               })}
             </div>
+            {size.startsWith("board") ? (
+              <p className="small muted" style={{ marginTop: 12 }} data-board-note>
+                Толстые картонные страницы со скруглёнными углами — малыш листает сам. {size === "board9" ? "Двойной картон: самая прочная книжка." : "Плотный картон: больше страниц — с фото и посвящением."}
+              </p>
+            ) : (<>
             <span className="label" style={{ display: "block", marginTop: 16 }}>Обложка</span>
             <div className="chips">
               {(["soft", "hard"] as const).map((c) => (
@@ -385,6 +412,7 @@ export function Checkout(props: {
                 </button>
               ))}
             </div>
+            </>)}
           </>
         )}
 
@@ -528,6 +556,14 @@ export function Checkout(props: {
         </p>
       </aside>
       <FlowLegal />
+      {pay.overlay}
     </div>
   );
+}
+
+/** «30 страниц», «9 страниц», «24 страницы». */
+function pagesLabel(n: number) {
+  const m = n % 100;
+  const w = m % 10 === 1 && m !== 11 ? "страница" : m % 10 >= 2 && m % 10 <= 4 && (m < 12 || m > 14) ? "страницы" : "страниц";
+  return `${n} ${w}`;
 }

@@ -37,7 +37,7 @@ describe("страницы книги", () => {
     expect(sp[0].map((x) => x.kind)).toEqual(["cover"]);
     expect(sp[1].map((x) => x.kind)).toEqual(["endpaper", "welcome"]);
     expect(sp[2].map((x) => x.kind)).toEqual(["photo", "dedication"]);
-    expect(sp[3]).toEqual([{ kind: "story", spread: 1, side: "left" }, { kind: "story", spread: 1, side: "right" }]);
+    expect(sp[3]).toEqual([{ kind: "story", spread: 1, side: "left", src: [1] }, { kind: "story", spread: 1, side: "right", src: [1] }]);
     expect(sp.at(-1)!.map((x) => x.kind)).toEqual(["final", "back"]);
     expect(singlePages(12).some((x) => x.kind === "endpaper")).toBe(false);
   });
@@ -96,7 +96,7 @@ describe("PDF в новой вёрстке", () => {
     expect(html).toContain("Создано в");
     expect(html).toContain(`data:image/jpeg;base64,${Buffer.from("p").toString("base64")}`);
     expect(html).toContain("Эта книга создана специально для героя по имени Марк.");
-    expect(html).toContain('<div class="text"');
+    expect(html).toContain('<div class="text drop"'); // rev 20: буквица акцентом на левой странице
     expect(html).toContain('<div class="text dark"');
     expect(html).toContain('<span class="sp-line">Раз.</span>');
     expect(html).toContain('<span class="sp-line">Два.</span>');

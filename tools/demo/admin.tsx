@@ -1,6 +1,9 @@
 // Админка демо-стенда. На сайте она открывается по отдельному адресу со входом по коду и 2FA, данные — из базы;
 // здесь — те же разделы и графики (src/components/charts) по хранилищу демо. До сегодняшнего дня графики
 // дополнены примерными данными, чтобы было на что смотреть; сегодня — ваши действия в этом окне.
+import { BOARD_PRICE_TBD } from "../../src/lib/catalog-defaults";
+import { plotPlan, plotPalette } from "../../src/content/registry";
+import { PLAN_FIT_NOTE, planFit } from "../../src/lib/page-plan";
 import Link from "next/link";
 import { useState } from "react";
 import { SideNav } from "../../src/components/SideNav";
@@ -535,7 +538,7 @@ export function AdminCatalog() {
         <div className="grid3 price-grid">
           {items.map((i) => (
             <label key={i.key} className="field">
-              <span>{i.title}</span>
+              <span>{i.title}{(BOARD_PRICE_TBD as readonly string[]).includes(i.key) && <> <span className="badge badge--gold" data-price-tbd>уточнить у типографии</span></>}</span>
               <input className="input" type="number" min="0" name={`price-${i.key}`} value={p[i.key]} onChange={(e: Event) => setP({ ...p, [i.key]: (e.target as HTMLInputElement).value })} />
             </label>
           ))}
@@ -544,12 +547,16 @@ export function AdminCatalog() {
         {msg && <p className="ok small">{msg}</p>}
       </form>
       <h2 style={{ fontSize: "var(--fs-lg)", marginTop: 24 }}>Сюжеты</h2>
+      <p className="muted small">rev 20: у каждой группы свой план страниц — 0–3: картонная книжка (8 страниц сказки), 4–6: 30 страниц (11 разворотов и 4 страницы «Нарисуй…»), 7–9: 40 страниц (16 разворотов, заметки и рисунки). Книги со старым объёмом раскладываются с подгонкой — пометка «{PLAN_FIT_NOTE}».</p>
       <p className="muted small">Книги аудиторий «скоро» (Настройки → Витрина) покупатель не видит нигде; здесь они остаются с отметкой.</p>
       <ul className="panel" data-demo="admin-plots" style={{ listStyle: "none", display: "grid", gap: 6 }}>
         {PLOTS.map((pl) => (
           <li key={pl.slug} data-plot={pl.slug} data-soon={DEFAULTS.storefront.soon[pl.audience] ? "1" : undefined}>
             {titleForCatalog(pl.title, pl.audience)} <span className="muted small">· {AUDIENCE_RU[pl.audience]} · {bookAgeLabel({ audience: pl.audience, ageMin: pl.ageMin ?? 0, ageMax: pl.ageMax ?? 0, segments: pl.segments })}</span>
             {DEFAULTS.storefront.soon[pl.audience] && <> <span className="soon-badge">скоро</span></>}
+            {/* rev 20: объём текста под план страниц группы и палитра книги */}
+            {pl.audience === "CHILD" && planFit(plotPlan(pl), pl.spreads.length) !== "ok" && <> <span className="badge badge--gold" data-plan-fit title={`План «${plotPlan(pl).title}»: нужно ${plotPlan(pl).story}, в тексте ${pl.spreads.length}`}>{PLAN_FIT_NOTE}</span></>}
+            {" "}<span className="badge" data-palette={plotPalette(pl).name}><i style={{ display: "inline-block", width: 10, height: 10, borderRadius: 5, background: plotPalette(pl).cover, marginRight: 4, verticalAlign: "-1px" }} />{plotPalette(pl).title}</span>
           </li>
         ))}
       </ul>

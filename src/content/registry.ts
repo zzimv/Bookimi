@@ -20,7 +20,9 @@ import { PET_ART_STYLES, PET_THEMES } from "./art/pets";
 import { TRIAL_ART_STYLES } from "./art/trial";
 import { ART_STYLES, artStyle, heroDrawer, themeFor, themesByKey } from "./art/index";
 import { GENERIC_HOOKS, occasionText } from "./occasions";
-import { kidGroupBySegment } from "./ages";
+import { kidGroupBySegment, kidGroupOf, normalizeSegment } from "./ages";
+import { PALETTES, paletteFor } from "./palettes";
+import { PLAN_FIT_NOTE, pagePlan, planFit, planIdFor, type PagePlan } from "../lib/page-plan";
 import { titleTemplate } from "./title";
 import { relevanceOf, sectionsOf, type Relevance, type SectionPlot, type Sections } from "./sections";
 import {
@@ -64,7 +66,7 @@ export function getPlots(f: PlotFilter = {}): Plot[] {
   return PLOTS.filter(
     (p) =>
       (!f.audience || p.audience === f.audience) &&
-      (!f.segment || p.segments.includes(f.segment)) &&
+      (!f.segment || p.segments.includes(normalizeSegment(f.segment))) &&
       (!f.occasion || p.occasions.includes(f.occasion)) &&
       (!f.heroKind || p.heroKind === f.heroKind) &&
       (!f.textStyle || p.textStyle === f.textStyle) &&
@@ -112,7 +114,7 @@ export function plotSections(occasionKey: string, audience?: AudienceKey, opts: 
   const byslug = new Map(pool.map((p) => [p.slug, p]));
   const s = sectionsOf(pool.map(sectionPlot), occasionKey ?? "");
   const back = (xs: SectionPlot[]) => xs.map((x) => byslug.get(x.slug)!);
-  return { occasion: s.occasion, strong: s.strong, customFirst: s.customFirst, custom: true, fitsTitle: s.fitsTitle, core: back(s.core), fits: back(s.fits), others: back(s.others), hiddenCount: s.hiddenCount };
+  return { occasion: s.occasion, strong: s.strong, customFirst: s.customFirst, custom: s.custom, fitsTitle: s.fitsTitle, core: back(s.core), fits: back(s.fits), others: back(s.others), hiddenCount: s.hiddenCount };
 }
 
 /**
@@ -161,9 +163,9 @@ export function slotMentions(plot: Plot, members: number, adults = 0): number[][
 }
 
 const GROUP_NOUN: Record<string, [string, string]> = {
-  "kids-2-4": ["toddlers", "kindergarten teacher"],
-  "kids-5-7": ["kindergarten children", "kindergarten teacher"],
-  "kids-8-10": ["schoolchildren", "teacher"],
+  "kids-0-3": ["toddlers", "kindergarten teacher"],
+  "kids-4-6": ["kindergarten children", "kindergarten teacher"],
+  "kids-7-9": ["schoolchildren", "teacher"],
   "teens-11-13": ["teenage classmates", "teacher"],
   "teens-14-17": ["teenage classmates", "teacher"],
 };
@@ -197,16 +199,35 @@ export function hooksFor(plot: Plot, occasionKey: string, custom?: string): Occa
   return own[occasionKey] ?? own.default ?? GENERIC_HOOKS[occasionKey] ?? null;
 }
 
+/**
+ * План страниц книги по сюжету (rev 20): детская книга — по группе её текста; 0–3 — картонная, board — 9 или 12
+ * страниц (выбор покупателя, layout.board). Остальные аудитории — classic.
+ */
+export function plotPlan(p: Pick<Plot, "audience" | "segments">, board?: unknown): PagePlan {
+  return pagePlan(planIdFor({ audience: p.audience, group: kidGroupOf(p.segments)?.key, board }));
+}
+/** Сюжеты, чей текст ещё не под объём плана группы (админка: «текст ещё не под новый объём»). */
+export function plotPlanFit(): { slug: string; plan: PagePlan; have: number; note: string }[] {
+  return PLOTS.filter((p) => p.audience === "CHILD")
+    .map((p) => ({ slug: p.slug, plan: plotPlan(p), have: p.spreads.length }))
+    .filter((x) => planFit(x.plan, x.have) !== "ok")
+    .map((x) => ({ ...x, note: `${PLAN_FIT_NOTE}: ${x.have} из ${x.plan.story}` }));
+}
+/** Палитра книги по сюжету (rev 20, src/content/palettes.ts). */
+export const plotPalette = (p?: Pick<Plot, "palette" | "theme"> | null) => paletteFor(p);
+
 /** Развороты сюжета с вплетённым поводом (для демо-текста и как план для YandexGPT). Метки не заполняет. */
 export function applyOccasion(plot: Plot, occasionKey: string, custom?: string): PlotSpread[] {
   const spreads = plot.spreads.map((s) => ({ ...s }));
   const h = hooksFor(plot, occasionKey, custom);
-  if (!h || spreads.length < 12) return spreads;
+  // rev 20: разворотов столько, сколько в плане группы — крючок закрытия идёт в последний
+  if (!h || spreads.length < 2) return spreads;
+  const last = spreads.length - 1;
   const sep = textStyle(plot.textStyle)?.verse ? "\n" : " ";
   if (h.opening) spreads[0].text = `${h.opening}${sep}${spreads[0].text}`;
-  if (h.closing) spreads[11].text = `${spreads[11].text}${sep}${h.closing}`;
+  if (h.closing) spreads[last].text = `${spreads[last].text}${sep}${h.closing}`;
   if (h.openingScene) spreads[0].scene = `${spreads[0].scene}, ${h.openingScene}`;
-  if (h.closingScene) spreads[11].scene = `${spreads[11].scene}, ${h.closingScene}`;
+  if (h.closingScene) spreads[last].scene = `${spreads[last].scene}, ${h.closingScene}`;
   return spreads;
 }
 
@@ -397,11 +418,11 @@ export function validateContent(opts: { strict?: boolean } = {}): ContentReport 
     if (p.audience === "CHILD" || p.audience === "TEEN") {
       if (p.ageMin === undefined || p.ageMax === undefined || p.ageMin > p.ageMax) errors.push(`${at}: нужны ageMin ≤ ageMax`);
     }
-    // Детская книга — ровно одна возрастная группа (2–4, 5–7 или 8–10): текст фиксирован и написан для неё
+    // Детская книга — ровно одна возрастная группа (0–3, 4–6 или 7–9): текст фиксирован и написан для неё
     if (p.audience === "CHILD") {
       const kids = p.segments.filter((s) => s.startsWith("kids-"));
       const g = kids.length === 1 && p.segments.length === 1 ? kidGroupBySegment(kids[0]) : undefined;
-      if (!g) errors.push(`${at}: у детской книги ровно один сегмент kids-2-4 / kids-5-7 / kids-8-10 (сейчас: ${p.segments.join(", ") || "нет"})`);
+      if (!g) errors.push(`${at}: у детской книги ровно один сегмент kids-0-3 / kids-4-6 / kids-7-9 (сейчас: ${p.segments.join(", ") || "нет"})`);
       else if (p.ageMin !== g.min || p.ageMax !== g.max) errors.push(`${at}: возраст ${p.ageMin}–${p.ageMax}, а у группы ${g.segment} — ${g.min}–${g.max}`);
     }
     if (!p.occasions.length) errors.push(`${at}: нет поводов`);
@@ -430,7 +451,14 @@ export function validateContent(opts: { strict?: boolean } = {}): ContentReport 
 
     if (!p.coverScene || CYR.test(p.coverScene) || /[{}]/.test(p.coverScene)) errors.push(`${at}: coverScene — на английском, без меток`);
     for (const k of p.coreOccasions ?? []) if (!p.occasions.includes(k)) errors.push(`${at}: coreOccasions ${k} нет в occasions`);
-    if (p.spreads.length !== 12) errors.push(`${at}: ${p.spreads.length} разворотов, нужно ровно 12`);
+    // rev 20: объём — по плану страниц группы (src/lib/page-plan.ts). Детские книги со старым объёмом (12) раскладываются
+    // с подгонкой — это не ошибка, а пометка «текст ещё не под новый объём» в админке; остальные аудитории — ровно 12.
+    if (p.audience === "CHILD") {
+      const plan = plotPlan(p);
+      if (p.spreads.length < 4 || p.spreads.length > 24) errors.push(`${at}: ${p.spreads.length} разворотов — нужно от 4 до 24 (план «${plan.title}»: ${plan.story})`);
+      // объём не под план — не ошибка и не предупреждение проверки: пометка в админке (plotPlanFit), раскладка подгоняет
+    } else if (p.spreads.length !== 12) errors.push(`${at}: ${p.spreads.length} разворотов, нужно ровно 12`);
+    if (typeof p.palette === "string" && !PALETTES[p.palette]) errors.push(`${at}: нет палитры ${p.palette} (src/content/palettes.ts)`);
     const verse = !!textStyle(p.textStyle)?.verse;
     const texts: [string, string][] = [["title", titleTemplate(p.title)]];
     p.spreads.forEach((s, i) => {

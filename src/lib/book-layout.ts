@@ -1,9 +1,10 @@
 // Вёрстка книги, общая для экрана (src/components/book/BookPreview.tsx) и PDF (src/lib/pdf.ts), rev 13.
 // Книга листается как настоящая: обложка (3 варианта оформления) → «Приветствие» (имя, автор) →
-// «Фото и посвящение» → 12 разворотов, текст прямо на картинке (левая и правая страница) → финал и задняя обложка.
+// «Фото и посвящение» → сказка по плану страниц группы (rev 20, src/lib/page-plan.ts), текст прямо на картинке → финал.
 // Настройки вёрстки хранятся в ответах анкеты книги: params.layout (src/content/answers.ts) — без миграции БД.
 // Без React и Node API: работает на сервере, в браузере и в демо-стенде.
 import { normalizeName } from "./declension";
+import { activityLabel, boardVariant, PAGE_PLANS, pairPages, planPages, type BookPageRef, type PagePlan } from "./page-plan";
 
 export const AUTHOR_MAX = 60;
 
@@ -14,6 +15,8 @@ export interface BookLayout {
   author: string;
   /** Фото на странице «Фото и посвящение» (id фото книги); нет — иллюстрация. */
   photoId?: string;
+  /** rev 20: картонная книга 0–3 — 9 или 12 страниц (выбирает покупатель; влияет на план страниц и формат печати). */
+  board?: 9 | 12;
 }
 
 export const DEFAULT_LAYOUT: BookLayout = { coverVariant: 0, author: "" };
@@ -32,6 +35,7 @@ export function layoutOf(params: unknown): BookLayout {
     coverVariant: v === 1 || v === 2 ? v : 0,
     author: typeof l.author === "string" ? l.author.trim().slice(0, AUTHOR_MAX) : "",
     ...(typeof l.photoId === "string" && l.photoId ? { photoId: l.photoId } : {}),
+    ...(l.board !== undefined && l.board !== null ? { board: boardVariant(l.board) } : {}),
   };
 }
 
@@ -147,33 +151,24 @@ export function splitSpread(text: string | null | undefined): [string, string] {
   return [raw, ""];
 }
 
-/** Страницы книги по порядку (для подписей и счётчика): обложка, приветствие, фото, посвящение, 24 страницы, финал, задняя обложка. */
-export type BookPageKind = "cover" | "endpaper" | "welcome" | "photo" | "dedication" | "story" | "final" | "back";
-export interface BookPageRef {
-  kind: BookPageKind;
-  /** Номер разворота сказки (1..12) для story. */
-  spread?: number;
-  side?: "left" | "right";
-}
+/**
+ * Страницы книги по порядку — по плану страниц (rev 20, src/lib/page-plan.ts). Без плана — прежний «classic»:
+ * обложка, форзац, приветствие, фото, посвящение, развороты (по две страницы), финал, задняя обложка.
+ */
+export type { BookPageKind, BookPageRef } from "./page-plan";
 
-export function bookPages(spreads: number): BookPageRef[] {
-  const out: BookPageRef[] = [{ kind: "cover" }, { kind: "endpaper" }, { kind: "welcome" }, { kind: "photo" }, { kind: "dedication" }];
-  for (let i = 1; i <= spreads; i++) out.push({ kind: "story", spread: i, side: "left" }, { kind: "story", spread: i, side: "right" });
-  out.push({ kind: "final" }, { kind: "back" });
-  return out;
+export function bookPages(spreads: number, plan: PagePlan = PAGE_PLANS.classic): BookPageRef[] {
+  return planPages(plan, spreads);
 }
 
 /** Развороты для показа «Разворотом»: обложка одна, дальше парами (форзац + приветствие, фото + посвящение, …). */
-export function bookSpreads(spreads: number): BookPageRef[][] {
-  const pages = bookPages(spreads);
-  const out: BookPageRef[][] = [[pages[0]]];
-  for (let i = 1; i < pages.length; i += 2) out.push(pages.slice(i, i + 2));
-  return out;
+export function bookSpreads(spreads: number | BookPageRef[], plan?: PagePlan): BookPageRef[][] {
+  return pairPages(typeof spreads === "number" ? bookPages(spreads, plan) : spreads);
 }
 
 /** Показ «Одна страница»: без пустого форзаца. */
-export function singlePages(spreads: number): BookPageRef[] {
-  return bookPages(spreads).filter((p) => p.kind !== "endpaper");
+export function singlePages(spreads: number | BookPageRef[], plan?: PagePlan): BookPageRef[] {
+  return (typeof spreads === "number" ? bookPages(spreads, plan) : spreads).filter((p) => p.kind !== "endpaper");
 }
 
 export function pageLabel(p: BookPageRef): string {
@@ -189,7 +184,9 @@ export function pageLabel(p: BookPageRef): string {
     case "dedication":
       return "Посвящение";
     case "story":
-      return `Разворот ${p.spread}, ${p.side === "left" ? "левая" : "правая"} страница`;
+      return p.side === "page" ? `Страница сказки ${p.spread}` : `Разворот ${p.spread}, ${p.side === "left" ? "левая" : "правая"} страница`;
+    case "activity":
+      return activityLabel(p.activity);
     case "final":
       return "Последняя страница";
     case "back":

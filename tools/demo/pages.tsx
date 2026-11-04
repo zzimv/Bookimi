@@ -23,7 +23,10 @@ import { ruDate } from "../../src/lib/pricing";
 import { METHOD_TITLES } from "../../src/lib/shipping";
 import { declineName, normalizeName } from "../../src/lib/declension";
 import { canAcceptPayments, DEFAULTS } from "../../src/lib/settings";
-import { FORMATS } from "../../src/lib/catalog-defaults";
+import { FORMAT_PAGES, FORMATS } from "../../src/lib/catalog-defaults";
+import { demoBookPlan } from "./api";
+import { formatFitsGroup } from "../../src/lib/page-plan";
+import { layoutOf } from "../../src/lib/book-layout";
 import { bonusInfo, bookAudience, bookById, bulkState, cartoonOf, catalogForPricing, demoPrefill, heroAccOf, journeyOf, markPaid, orderById, ordersAwaitingReview, pageUrl, pdfPaidFor, reviewOf, S, SHIP_METHODS } from "./api";
 import { DemoFullBook } from "./fullbook";
 import { canChangeOrder, CHANGE_LOCKED_TEXT, SUPPORT_HREF } from "../../src/lib/order-change";
@@ -85,16 +88,19 @@ export async function KupitPage({ id, who, pechat, bulk, izmenit, chto }: { id: 
   const ei = eo?.input;
   if (!["PREVIEW_READY", "FULL_QUEUED", "FULL_READY"].includes(b.status)) throw new RedirectError(`/kniga/${id}`);
   const { formats, addons } = catalogForPricing(bookAudience(b));
-  const full = FORMATS.filter((f) => formats.some((x) => x.key === f.key));
+  // rev 20: форматы — по плану страниц книги (картонная 0–3 / 30 / 40 страниц)
+  const { plan } = demoBookPlan(b);
+  const full = FORMATS.filter((f) => formats.some((x) => x.key === f.key) && formatFitsGroup(f.key, plan));
   const addonInfo: Record<string, string> = {};
   const bs = b.parentId ? null : bulkState(b);
   return (
     <div className="wrap" style={{ padding: "24px var(--gutter) 80px" }}>
       <Checkout
         bookId={id}
+        plan={{ id: plan.id, title: plan.title, innerPages: plan.innerPages, ...(plan.board ? { board: layoutOf(b.params).board ?? 12 } : {}) }}
         coverUrl={b.pages.includes(0) ? pageUrl(b, 0) : null}
         initialWho={who === "bookimi" || pechat ? "bookimi" : "self"}
-        formats={full.map((f) => ({ key: f.key, kind: f.kind, title: f.title, priceRub: f.price, widthMm: f.w, heightMm: f.h, cover: f.cover, pages: 24 }))}
+        formats={full.map((f) => ({ key: f.key, kind: f.kind, title: f.title, priceRub: f.price, widthMm: f.w, heightMm: f.h, cover: f.cover, pages: FORMAT_PAGES[f.key] ?? plan.innerPages }))}
         addons={addons.map((a) => ({ key: a.key, kind: a.kind, title: a.title, description: addonInfo[a.key] ?? a.description ?? "", priceRub: a.priceRub, percentOff: a.percentOff, requiresPrint: a.requiresPrint }))}
         methods={SHIP_METHODS.map((m) => ({ key: m, title: METHOD_TITLES[m] }))}
         pickupAddress={null}
@@ -428,6 +434,8 @@ export async function KabinetHome() {
                     </Link>
                   )}
                   {b.paidFull && <Link className="btn btn--ghost btn--sm" href={`/kniga/${b.id}/kupit?pechat=1`}>В печать</Link>}
+                  {/* rev 20: из кабинета — сразу полистать книгу (как src/app/kabinet/page.tsx) */}
+                  {(b.paidFull || b.status === "PREVIEW_READY") && <Link className="btn btn--ghost btn--sm" href={`/kniga/${b.id}`} data-open-preview>Открыть превью</Link>}
                 </div>
               </article>
             );

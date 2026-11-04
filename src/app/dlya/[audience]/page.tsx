@@ -57,7 +57,7 @@ export default async function Page({ params }: { params: Promise<{ audience: str
           {isSoon && (
             <p style={{ display: "flex", gap: 12, flexWrap: "wrap" }} data-soon-actions>
               <button type="button" className="btn btn--primary" disabled aria-describedby="aud-soon">Создать книгу</button>
-              <Link href="/dlya/detyam" className="btn btn--ghost">Сказки для детей 2–10 лет</Link>
+              <Link href="/dlya/detyam" className="btn btn--ghost">Сказки для детей 0–9 лет</Link>
             </p>
           )}
           {isSoon && <p className="small muted" id="aud-soon">{SOON_SHORT}</p>}

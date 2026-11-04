@@ -20,6 +20,8 @@ import type { ExtraV2T } from "../../content/answers";
 import { guessGender, normalizeName } from "../declension";
 import { getFile, putFile, deleteFile } from "../storage";
 import { MIN_SOURCE_DPI, preparePrint, renderPdf, type BookPageData } from "../pdf";
+import { bookPlanFor } from "../book-plan";
+import { pagePlan } from "../page-plan";
 import { ttsProvider } from "./tts";
 import { spentTodayRub } from "../limits";
 import { bookIsStaff, spendLimitReached } from "../staff";
@@ -313,7 +315,12 @@ export async function bookPdfData(bookId: string, orderCode?: string): Promise<B
   const layout = layoutOf(book.params);
   const photoRow = layout.photoId ? await db.photo.findFirst({ where: { id: layout.photoId, deletedAt: null, hero: { bookId } } }) : null;
   const photo = photoRow ? await getFile("photos", photoRow.storageKey).then((data) => ({ data, contentType: "image/jpeg" })).catch(() => null) : null;
+  // rev 20: план страниц группы и палитра книги — та же раскладка, что в превью
+  const story = await db.story.findUnique({ where: { id: book.storyId }, select: { slug: true } });
+  const { plan, palette } = bookPlanFor(book.params, story?.slug, text.spreads.length);
   return {
+    plan: plan.id,
+    palette,
     coverVariant: layout.coverVariant,
     author: layout.author,
     photo,
@@ -355,10 +362,14 @@ export async function renderPrintFiles(bookId: string, order: { publicCode: stri
   if (!fmtItem) return false;
   const f = await db.productFormat.findUnique({ where: { key: fmtItem.refKey } });
   if (!f?.widthMm || !f.heightMm) return false;
-  const d = data ?? (await bookPdfData(bookId, order.publicCode));
+  const d0 = data ?? (await bookPdfData(bookId, order.publicCode));
+  // rev 20: картонная книга печатается в том варианте, который заказан (формат board9-* / board12-*)
+  const d = f.key.startsWith("board9") ? { ...d0, plan: "board-9" } : f.key.startsWith("board12") ? { ...d0, plan: "board-12" } : d0;
   // 300 dpi на обрезной формат + вылеты; исходник ниже 250 dpi — предупреждение владельцу и в карточке заказа
   const blockKind = { kind: "print" as const, wMm: f.widthMm, hMm: f.heightMm };
-  const coverKind = { kind: "cover" as const, wMm: f.widthMm, hMm: f.heightMm, hard: f.cover === "HARD", pages: 26 };
+  // rev 20: корешок — по числу страниц блока плана (картонная 9/12, 30, 40); картон — толще бумаги (board)
+  const plan = pagePlan(d.plan);
+  const coverKind = { kind: "cover" as const, wMm: f.widthMm, hMm: f.heightMm, hard: f.cover === "HARD", pages: plan.innerPages, board: Boolean(plan.board) };
   const block = await preparePrint(d, blockKind);
   const cover = await preparePrint(d, coverKind);
   await saveFile(bookId, "print-block", await renderPdf(block.data, blockKind), "pdf", "application/pdf");

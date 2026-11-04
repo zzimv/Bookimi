@@ -169,6 +169,9 @@ export default async function Page() {
                       </Link>
                     )}
                     {b.paidFull && <Link className="btn btn--ghost btn--sm" href={`/kniga/${b.id}/kupit?pechat=1`}>В печать</Link>}
+                    {/* rev 20: из кабинета — сразу полистать книгу */}
+                    {!b.paidFull && b.status === "PREVIEW_READY" && <Link className="btn btn--ghost btn--sm" href={`/kniga/${b.id}`} data-open-preview>Открыть превью</Link>}
+                    {b.paidFull && <Link className="btn btn--ghost btn--sm" href={`/kniga/${b.id}`} data-open-preview>Открыть превью</Link>}
                   </div>
                 </article>
               );

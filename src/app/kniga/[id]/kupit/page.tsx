@@ -4,7 +4,9 @@ import { Checkout } from "@/components/book/Checkout";
 import { ownBook } from "@/lib/api";
 import { db } from "@/lib/db";
 import { cfg, canAcceptPayments } from "@/lib/settings";
-import { catalogForPricing, checkoutAllowed, pdfPaidFor } from "@/lib/orders";
+import { bookPlanById, catalogForPricing, checkoutAllowed, pdfPaidFor } from "@/lib/orders";
+import { formatFitsGroup } from "@/lib/page-plan";
+import { layoutOf } from "@/lib/book-layout";
 import { availableMethods, METHOD_TITLES } from "@/lib/shipping";
 import { signedUrl } from "@/lib/storage";
 import { parseAddressBook, pickPrefill } from "@/lib/delivery";
@@ -38,7 +40,9 @@ export default async function Page({ params, searchParams }: { params: Promise<{
     db.printHouse.findFirst({ where: { isActive: true } }),
     canAcceptPayments(),
   ]);
-  const full = await db.productFormat.findMany({ where: { key: { in: formats.map((f) => f.key) } }, orderBy: { sortOrder: "asc" } });
+  // rev 20: форматы — по плану страниц книги (картонная 0–3 — только картонные; остальные — обычные, 30 / 40 страниц)
+  const { plan } = await bookPlanById(id);
+  const full = (await db.productFormat.findMany({ where: { key: { in: formats.map((f) => f.key) } }, orderBy: { sortOrder: "asc" } })).filter((f) => formatFitsGroup(f.key, plan));
   const addonRows = await db.addon.findMany({ where: { key: { in: addons.map((a) => a.key) } }, orderBy: { sortOrder: "asc" } });
   const methods = await availableMethods(ph?.pickupAddress);
   const cover = await db.bookPage.findUnique({ where: { bookId_index: { bookId: id, index: 0 } } });
@@ -75,6 +79,7 @@ export default async function Page({ params, searchParams }: { params: Promise<{
       )}
       <Checkout
         bookId={id}
+        plan={{ id: plan.id, title: plan.title, innerPages: plan.innerPages, ...(plan.board ? { board: layoutOf(own.book.params).board ?? 12 } : {}) }}
         coverUrl={coverUrl}
         initialWho={sp.who === "bookimi" || sp.pechat ? "bookimi" : "self"}
         formats={full.map((f) => ({ key: f.key, kind: f.kind, title: f.title, priceRub: f.priceRub, widthMm: f.widthMm, heightMm: f.heightMm, cover: f.cover, pages: f.pages }))}

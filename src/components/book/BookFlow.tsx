@@ -8,6 +8,9 @@ import { FlowLegal } from "@/components/FlowLegal";
 import { MagicLoader } from "@/components/MagicLoader";
 import { BookPreview } from "./BookPreview";
 import { DEFAULT_LAYOUT, type BookLayout } from "@/lib/book-layout";
+import { pagePlan } from "@/lib/page-plan";
+import type { BookPalette } from "@/content/palettes";
+import { rememberBook } from "@/lib/my-book";
 
 interface BookState {
   id: string;
@@ -31,6 +34,9 @@ interface BookState {
   layout?: BookLayout;
   /** Цена «Другой обложки» (rev 19). */
   coverPriceRub?: number;
+  /** rev 20: план страниц (src/lib/page-plan.ts) и палитра книги (src/content/palettes.ts). */
+  plan?: string;
+  palette?: BookPalette;
 }
 
 type Audience = "CHILD" | "TEEN" | "ADULT" | "PET";
@@ -105,6 +111,10 @@ export function BookFlow({
   useEffect(() => {
     load();
   }, [load]);
+  // rev 20: книга есть — в шапке появляется «Моя книга» (вернуться к превью с любой страницы)
+  useEffect(() => {
+    if (b?.text) rememberBook(bookId, b.text.title);
+  }, [bookId, b?.text?.title]); // eslint-disable-line react-hooks/exhaustive-deps
   // Пока идёт генерация — опрашиваем статус
   useEffect(() => {
     if (!b || !["TEXT_QUEUED", "PREVIEW_QUEUED", "FULL_QUEUED", "DRAFT"].includes(b.status)) return;
@@ -205,6 +215,9 @@ export function BookFlow({
         audience={audience}
         onChanged={load}
         coverPriceRub={b.coverPriceRub}
+        plan={b.plan}
+        palette={b.palette}
+        checkoutHref={b.status === "PREVIEW_READY" && !b.paid ? `/kniga/${b.id}/kupit?who=${fromCheckout ?? (printEnabled ? "bookimi" : "self")}` : null}
       />
     ) : null;
 
@@ -372,7 +385,9 @@ export function BookFlow({
                 {printEnabled && (
                   <Link className="big-choice" href={`/kniga/${b.id}/kupit?who=bookimi`} onClick={() => goal("choose_print", { who: "bookimi" })}>
                     <strong>Напечатает БУКИМИ</strong>
-                    Книга 24 страницы в мягкой или твёрдой обложке, от 2 490 ₽. PDF — в подарок. Доставка по России.
+                    {pagePlan(b.plan).board
+                      ? `Картонная книжка ${pagePlan(b.plan).board!.pages} страниц со скруглёнными углами. PDF — в подарок. Доставка по России.`
+                      : `Книга ${pagePlan(b.plan).innerPages} страниц в мягкой или твёрдой обложке, от 2 490 ₽. PDF — в подарок. Доставка по России.`}
                   </Link>
                 )}
               </div>

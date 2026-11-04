@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { CUSTOM_STORY_ENABLED } from "@/content/sections";
 import "@/lib/zod-ru";
 import { AnswersV2 } from "@/lib/quiz";
 import { body, deviceKey, err, json, throttle } from "@/lib/api";
@@ -10,6 +11,8 @@ import { soonAudiences, soonCreateError } from "@/lib/shelf";
 
 // «Своя идея»: 1–2 предложения → 3 варианта сюжета на выбор.
 export async function POST(req: Request) {
+  // rev 20: «Своя история» выключена (CUSTOM_STORY_ENABLED) — идей не предлагаем
+  if (!CUSTOM_STORY_ENABLED) return err("Выберите книгу из каталога", 404);
   const t = await throttle("ideas", 5, 60_000);
   if (t) return t;
   const b = await body(req, z.object({ idea: z.string().trim().min(5).max(300), answers: z.unknown() }));

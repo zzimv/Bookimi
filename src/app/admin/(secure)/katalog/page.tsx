@@ -5,6 +5,10 @@ import { addonAction, formatAction, storyAction, styleAction } from "../../actio
 import { ADDON_AUDIENCES, ADDON_AUDIENCE_LABEL } from "@/lib/addons-core";
 import { getSoonAudiences } from "@/lib/catalog";
 import type { AudienceKey } from "@/content/profiles";
+import { BOARD_PRICE_TBD } from "@/lib/catalog-defaults";
+import { plotBySlug, plotPlan, plotPalette } from "@/content/registry";
+import { PLAN_FIT_NOTE, planFit } from "@/lib/page-plan";
+import { bookAgeLabel } from "@/content/ages";
 
 export default async function Page({ searchParams }: { searchParams: Promise<{ error?: string }> }) {
   await requireAdmin("catalog");
@@ -36,6 +40,7 @@ export default async function Page({ searchParams }: { searchParams: Promise<{ e
                     <input className="input" name="title" defaultValue={f.title} style={{ flex: 1, minWidth: 220 }} />
                     <input className="input" name="priceRub" type="number" min={0} defaultValue={f.priceRub} style={{ width: 110 }} />
                     <label className="check"><input type="checkbox" name="isActive" defaultChecked={f.isActive} /> вкл.</label>
+                    {(BOARD_PRICE_TBD as readonly string[]).includes(f.key) && <span className="badge badge--gold" data-price-tbd title="Картонная книга 0–3 (rev 20): цена — заглушка">уточнить у типографии</span>}
                     <button className="btn btn--ghost btn--sm">Сохранить</button>
                   </form>
                 </td>
@@ -105,9 +110,18 @@ export default async function Page({ searchParams }: { searchParams: Promise<{ e
       ))}
 
       <h2 style={{ fontSize: "var(--fs-lg)", marginTop: 24 }}>Сюжеты</h2>
-      {stories.map((s) => (
-        <details key={s.id} className="panel edit">
-          <summary>{s.sortOrder + 1}. {s.title} {!s.isActive && <span className="badge badge--gold">скрыт</span>}{soon.includes(s.audience as AudienceKey) && <> <span className="soon-badge" title="Аудитория «скоро» (Настройки → Витрина): покупатель книгу не видит">скоро</span></>}</summary>
+      <p className="small muted">
+        rev 20: у каждой возрастной группы свой план страниц — 0–3: картонная книга (8 страниц сказки), 4–6: 30 страниц (11 разворотов
+        и 4 страницы «Нарисуй…»), 7–9: 40 страниц (16 разворотов, заметки и рисунки). Книги со старым объёмом раскладываются с
+        подгонкой — пометка «{PLAN_FIT_NOTE}».
+      </p>
+      {stories.map((s) => {
+        const plot = plotBySlug(s.slug);
+        const plan = plot ? plotPlan(plot) : null;
+        const fit = plot && plan ? planFit(plan, plot.spreads.length) : "ok";
+        return (
+        <details key={s.id} className="panel edit" data-story={s.slug}>
+          <summary>{s.sortOrder + 1}. {s.title} {plot?.audience === "CHILD" && <span className="badge">{bookAgeLabel({ audience: plot.audience, ageMin: plot.ageMin ?? 0, ageMax: plot.ageMax ?? 0, segments: plot.segments })}</span>}{plan && fit !== "ok" && <> <span className="badge badge--gold" data-plan-fit={fit} title={`План «${plan.title}»: нужно ${plan.story}, в тексте ${plot!.spreads.length}`}>{PLAN_FIT_NOTE}</span></>}{plot && <> <span className="badge" data-palette={plotPalette(plot).name} title="Палитра книги (src/content/palettes.ts)"><i style={{ display: "inline-block", width: 10, height: 10, borderRadius: 5, background: plotPalette(plot).cover, marginRight: 4, verticalAlign: "-1px" }} />{plotPalette(plot).title}</span></>} {!s.isActive && <span className="badge badge--gold">скрыт</span>}{soon.includes(s.audience as AudienceKey) && <> <span className="soon-badge" title="Аудитория «скоро» (Настройки → Витрина): покупатель книгу не видит">скоро</span></>}</summary>
           <form action={storyAction} style={{ marginTop: 12 }}>
             {hid(s.id)}
             <label className="field"><span>Название ([Имя] подставится)</span><input className="input" name="title" defaultValue={s.title} /></label>
@@ -124,7 +138,8 @@ export default async function Page({ searchParams }: { searchParams: Promise<{ e
             <button className="btn btn--primary btn--sm">Сохранить сюжет</button>
           </form>
         </details>
-      ))}
+        );
+      })}
     </>
   );
 }

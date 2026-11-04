@@ -15,6 +15,13 @@ export interface SectionPlot {
 export type Relevance = "core" | "fits" | "generic";
 
 /**
+ * «Своя история» (книга по своей идее) — rev 20: решение владелицы 03.11.2026 — убрана из пути покупателя везде
+ * (шаг «Книга», каталог, главная, страницы поводов, SEO, демо); сервер не создаёт такие книги. Код оставлен спящим:
+ * включить — true (и проверить тексты поводов и тесты). Модуль безопасен для клиента.
+ */
+export const CUSTOM_STORY_ENABLED = false as boolean;
+
+/**
  * Поводы с сильной темой: в каталоге — только core, «Своя история» и fits («Тоже подойдут»);
  * чужие сюжеты скрыты (никакой подводной лодки на выпускной в детском саду).
  */
@@ -55,8 +62,8 @@ export interface Sections<T> {
   /** Показывать «Своя история» до core (без повода, свой повод, нет core-сюжетов). */
   customFirst: boolean;
   core: T[];
-  /** Карточка «Своя история» показывается всегда. */
-  custom: true;
+  /** Карточка «Своя история» (rev 20: выключена — CUSTOM_STORY_ENABLED). */
+  custom: boolean;
   fits: T[];
   fitsTitle: string;
   /** Остальные (для поводов без сильной темы и для «без повода»/«своего»). */
@@ -70,7 +77,7 @@ export interface Sections<T> {
 /** Разделы повода по уже отфильтрованному пулу (аудитория, сегмент, возраст). */
 export function sectionsOf<T extends SectionPlot>(pool: T[], occasionKey: string): Sections<T> {
   const key = occasionKey ?? "";
-  const base = { occasion: key, custom: true as const, fitsTitle: FITS_TITLE };
+  const base = { occasion: key, custom: CUSTOM_STORY_ENABLED, fitsTitle: FITS_TITLE };
   if ((OPEN_OCCASIONS as readonly string[]).includes(key)) {
     // «Без повода»: сюжеты с bez в occasions — первыми
     const others = key === "bez" ? [...pool.filter((p) => p.occasions.includes("bez")), ...pool.filter((p) => !p.occasions.includes("bez"))] : pool;
@@ -95,6 +102,7 @@ export function sectionsOf<T extends SectionPlot>(pool: T[], occasionKey: string
 }
 
 /** Порядок показа разделов: customFirst ? [custom, core, fits, others] : [core, custom, fits, others]. */
-export function sectionOrder(s: Pick<Sections<unknown>, "customFirst">): ("custom" | "core" | "fits" | "others")[] {
-  return s.customFirst ? ["custom", "core", "fits", "others"] : ["core", "custom", "fits", "others"];
+export function sectionOrder(s: Pick<Sections<unknown>, "customFirst"> & { custom?: boolean }): ("custom" | "core" | "fits" | "others")[] {
+  const order: ("custom" | "core" | "fits" | "others")[] = s.customFirst ? ["custom", "core", "fits", "others"] : ["core", "custom", "fits", "others"];
+  return s.custom === false || !CUSTOM_STORY_ENABLED ? order.filter((x) => x !== "custom") : order;
 }

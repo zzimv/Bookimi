@@ -127,6 +127,13 @@ export const z = {
   string: () => new Str(),
   number: () => new Num(),
   boolean: () => new Schema((v, p) => (typeof v === "boolean" ? v : fail("Ожидается да/нет", p))),
+  union: (opts: Schema[], _o?: any) =>
+    new Schema((v, p) => {
+      for (const o of opts) {
+        try { return o._parse(v, p); } catch { /* следующий вариант */ }
+      }
+      return fail("Некорректное значение", p);
+    }),
   literal: (x: any) => new Schema((v, p) => (v === x ? v : fail("Некорректное значение", p))),
   enum: (xs: readonly string[]) => new Schema((v, p) => (xs.includes(v) ? v : fail("Выберите вариант из списка", p))),
   array: (item: Schema) => new Arr(item),

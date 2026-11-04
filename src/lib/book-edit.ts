@@ -15,6 +15,8 @@ export const LayoutEdit = z.object({
   photoId: z.string().uuid().nullable().optional(),
   dedication: z.string().trim().max(300).optional(),
   name: z.string().trim().max(30).optional(),
+  /** rev 20: картонная книга 0–3 — 9 или 12 страниц. */
+  board: z.union([z.literal(9), z.literal(12)]).optional(),
 });
 export type LayoutEditT = z.infer<typeof LayoutEdit>;
 
@@ -46,6 +48,7 @@ export function applyLayoutEdit(a: AnswersV2T, e: LayoutEditT): { ok: true; answ
     if (author && checkText(author)) return { ok: false, error: "Уберите из строки автора ссылки или недопустимые слова" };
     layout.author = author;
   }
+  if (e.board !== undefined) layout.board = e.board;
   if (e.photoId !== undefined) {
     if (e.photoId) layout.photoId = e.photoId;
     else delete layout.photoId;

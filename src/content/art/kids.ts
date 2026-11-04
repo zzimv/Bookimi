@@ -7,7 +7,7 @@
 //  • KIDS_THEMES — демо-темы всех ключей с owner "kids" в DEMO_THEME_KEYS, у каждой свой фон (scene).
 //    Фон подстраивается под стиль: акварельные стили «размывают» цвета к бумаге, графические — обводка
 //    и штриховка тушью.
-//  • drawChild — ребёнок 2–10 лет: возраст меняет пропорции, причёски (короткая, ёжик, кудри, длинные,
+//  • drawChild — ребёнок 1–10 лет (малыш 0–3 — с нагрудничком): возраст меняет пропорции, причёски (короткая, ёжик, кудри, длинные,
 //    каре, хвост, косички, пучок), цвет волос, тон кожи, очки, веснушки, цвет одежды, платье/брюки по полу,
 //    5 поз по номеру разворота.
 //
@@ -683,21 +683,23 @@ const POSES: Pose[] = ["wave", "stand", "walk", "cheer", "point"];
  * малыши — крупная голова и короткие ножки. Общие для рисовальщика и кадра «крупно лицо» (render.ts).
  */
 export function childBody(ageIn: number | undefined, build?: string, bodyIn?: string) {
-  const age = Math.min(10, Math.max(2, Number.isFinite(ageIn) ? (ageIn as number) : 6));
+  // rev 20: группа 0–3 — рисуем и малыша (1 год): ещё крупнее голова, совсем короткие ножки, круглый животик
+  const age = Math.min(10, Math.max(1, Number.isFinite(ageIn) ? (ageIn as number) : 6));
+  const baby = age < 2.5;
   const bk = KID_BUILD_K[kidBuildKind(build)];
   // rev 17: сложение — ширина плеч, рук и ног (одежда рисуется по этим размерам и следует за фигурой)
   const wk = KID_BODY_K[kidBodyKind(bodyIn)];
   const footY = 184;
-  const legLen = (50 + age * 3) * bk.leg;
-  const torso = (58 + age * 1.8) * bk.torso;
-  const R = (47 - age * 0.75) * bk.head;
+  const legLen = (50 + age * 3) * bk.leg * (baby ? 0.72 : 1);
+  const torso = (58 + age * 1.8) * bk.torso * (baby ? 0.92 : 1);
+  const R = (47 - age * 0.75) * bk.head * (baby ? 1.08 : 1);
   const hipY = footY - legLen;
   const shY = hipY - torso;
   const hc = shY - R * 0.84;
-  return { age, footY, legLen, torso, R, hipY, shY, hc, sw: (22 + age * 0.9) * wk.sw, armW: (12 + age * 0.45) * wk.arm, legW: (14 + age * 0.6) * wk.leg, cheeks: wk.cheeks, belly: wk.belly };
+  return { age, footY, legLen, torso, R, hipY, shY, hc, sw: (22 + age * 0.9) * wk.sw * (baby ? 1.08 : 1), armW: (12 + age * 0.45) * wk.arm, legW: (14 + age * 0.6) * wk.leg * (baby ? 1.15 : 1), cheeks: baby ? Math.max(wk.cheeks, 1.25) : wk.cheeks, belly: baby ? Math.max(wk.belly, 1.2) : wk.belly };
 }
 
-/** Ребёнок 2–10 лет. Точка опоры (0, 190) — ступни; рост ~230 при 6 годах. */
+/** Ребёнок 1–10 лет (малыш до 2 — с нагрудничком). Точка опоры (0, 190) — ступни; рост ~230 при 6 годах. */
 export const drawChild: DemoHeroDrawer = (o) => {
   const h = o.look;
   const st = o.style;
@@ -1176,10 +1178,15 @@ export const drawChild: DemoHeroDrawer = (o) => {
   const breath = h.winter
     ? `<g data-breath="1" fill="#ffffff" opacity=".8">${[[0.32, 0.04, 0.09], [0.5, -0.04, 0.12], [0.72, -0.14, 0.15]].map(([x, y, rr]) => `<circle cx="${f(R * x + R * 0.12)}" cy="${f(my + R * y)}" r="${f(R * rr)}"/>`).join("")}</g>`
     : "";
+  // rev 20: малыш 0–3 — мягкий нагрудничек с сердечком (сразу видно, что это кроха, а не школьник)
+  const bib = age < 2.5
+    ? `<g data-bib="1"><path d="M${f(-sw * 0.5)} ${f(shY + 2)} Q0 ${f(shY + 8)} ${f(sw * 0.5)} ${f(shY + 2)} Q${f(sw * 0.56)} ${f(shY + torso * 0.5)} 0 ${f(shY + torso * 0.56)} Q${f(-sw * 0.56)} ${f(shY + torso * 0.5)} ${f(-sw * 0.5)} ${f(shY + 2)}Z" fill="#fffaf0"${s}/>` +
+      `<path d="M0 ${f(shY + torso * 0.36)} c${f(-R * 0.16)} ${f(-R * 0.12)} ${f(-R * 0.1)} ${f(-R * 0.3)} 0 ${f(-R * 0.2)} c${f(R * 0.1)} ${f(-R * 0.1)} ${f(R * 0.16)} ${f(R * 0.08)} 0 ${f(R * 0.2)}Z" fill="${mix(trim, "#e8606a", 0.5)}"/></g>`
+    : "";
   const head = `<g transform="${rot}">${ear}${headShape}${cheeks}${dimples}${freckles}${brows}${eyes}${nose}${toothGap || mouth}${front}${hat}${accSvg}${glasses}${breath}</g>`;
 
   return `<g data-figure="child" data-gender="${girl ? "f" : "m"}" data-haircut="${cut0}" data-outfit="${outfitKind}" data-outfit-color="${shirt}" data-build="${build}" data-body="${bodyKind}" data-sw="${f(sw)}"${hatKind ? ` data-hat="${hatKind}"` : ""}${accKind && !(accKind === "band" && hatKind) ? ` data-hair-acc="${accKind}"` : ""}${h.dimples ? ` data-dimples="1"` : ""}${h.toothGap ? ` data-tooth-gap="1"` : ""} data-age="${f(age)}" transform="translate(${f(o.x)} ${f(o.y)}) scale(${f(o.flip ? -o.scale : o.scale)} ${f(o.scale)})">
     <ellipse cx="0" cy="${footY + 6}" rx="${f(56 + age)}" ry="10" fill="rgba(0,0,0,.16)"/>
-    ${back ? `<g transform="${rot}">${back}</g>` : ""}${arm(armL)}${legs}${body}${neck}${collar}${scarf}${braids}${head}${arm(armR)}
+    ${back ? `<g transform="${rot}">${back}</g>` : ""}${arm(armL)}${legs}${body}${neck}${collar}${scarf}${bib}${braids}${head}${arm(armR)}
   </g>`;
 };

@@ -1,5 +1,5 @@
 // rev 12 (решения владелицы 02.11.2026):
-//  1) детские книги — строго одна возрастная группа 2–4 / 5–7 / 8–10 (текст фиксирован), подписи ровно «2–4 года», «5–7 лет», «8–10 лет»;
+//  1) детские книги — строго одна возрастная группа (rev 20: 0–3 / 4–6 / 7–9; до rev 20 — 2–4 / 5–7 / 8–10), подписи ровно «0–3 года», «4–6 лет», «7–9 лет»;
 //  2) демо и запуск — только дети: подростки, взрослые и питомцы «скоро», их книг покупатель не видит нигде.
 import { describe, expect, it } from "vitest";
 import { PLOTS, validateContent } from "../src/content/registry";
@@ -8,19 +8,19 @@ import { AnswersV2, AGE_GROUPS, heroAge, segmentFor } from "../src/lib/quiz";
 import { DEFAULTS } from "../src/lib/settings";
 import { occasionIsLive, soonAudiences, visiblePlots } from "../src/lib/shelf";
 import { ageLabel, getAgePage, getStories, getStory } from "../src/lib/catalog";
-import { AGE_PAGES } from "../src/lib/catalog-defaults";
+import { AGE_PAGES, AGE_REDIRECTS } from "../src/lib/catalog-defaults";
 import { buildHolidayCards } from "../src/lib/holidays";
 import { DEFAULT_HOLIDAYS, DEFAULT_LEAD, upcomingHolidays, type Holiday } from "../src/lib/holidays-core";
 
 const ASSIGNED: Record<string, string[]> = {
-  "kids-2-4": ["sonnaya-strana", "imya-i-morkovka-upryamica", "utro-kuvyrkom", "imya-i-lesnaya-yolochka", "imya-i-zvyozdnyj-drakonchik"],
-  "kids-5-7": ["novogodnee-puteshestvie-s-dedom-morozom", "den-rozhdeniya-v-skazochnom-korolevstve", "kapitan-podvodnoj-lodki", "imya-i-mesyac-yasnyj", "poslednij-den-v-nashej-gruppe", "my-vyrosli", "volshebnyj-shkafchik", "nash-pervyj-klass"],
-  "kids-8-10": ["imya-i-vesna-krasna", "delo-o-propavshem-kolokolchike", "lunnaya-oranzhereya", "odinnadcat-polunochej"],
+  "kids-0-3": ["sonnaya-strana", "imya-i-morkovka-upryamica", "utro-kuvyrkom", "imya-i-lesnaya-yolochka", "imya-i-zvyozdnyj-drakonchik"],
+  "kids-4-6": ["novogodnee-puteshestvie-s-dedom-morozom", "den-rozhdeniya-v-skazochnom-korolevstve", "kapitan-podvodnoj-lodki", "imya-i-mesyac-yasnyj", "poslednij-den-v-nashej-gruppe", "my-vyrosli", "volshebnyj-shkafchik", "nash-pervyj-klass"],
+  "kids-7-9": ["imya-i-vesna-krasna", "delo-o-propavshem-kolokolchike", "lunnaya-oranzhereya", "odinnadcat-polunochej"],
 };
 const kids = PLOTS.filter((p) => p.audience === "CHILD");
 const soonDefault = soonAudiences(DEFAULTS.storefront.soon);
 
-describe("возрастные группы детских книг: строго 2–4, 5–7, 8–10", () => {
+describe("возрастные группы детских книг: строго 0–3, 4–6, 7–9 (rev 20)", () => {
   it("каждая детская книга — ровно один сегмент kids-*, возраст = границы группы", () => {
     expect(kids.length).toBeGreaterThanOrEqual(17);
     for (const p of kids) {
@@ -37,45 +37,51 @@ describe("возрастные группы детских книг: строг�
   });
 
   it("в каждой группе есть новогодняя книга", () => {
-    expect(PLOTS.find((p) => p.slug === "imya-i-lesnaya-yolochka")?.segments).toEqual(["kids-2-4"]);
-    expect(PLOTS.find((p) => p.slug === "novogodnee-puteshestvie-s-dedom-morozom")?.segments).toEqual(["kids-5-7"]);
-    expect(PLOTS.find((p) => p.slug === "odinnadcat-polunochej")?.segments).toEqual(["kids-8-10"]);
+    expect(PLOTS.find((p) => p.slug === "imya-i-lesnaya-yolochka")?.segments).toEqual(["kids-0-3"]);
+    expect(PLOTS.find((p) => p.slug === "novogodnee-puteshestvie-s-dedom-morozom")?.segments).toEqual(["kids-4-6"]);
+    expect(PLOTS.find((p) => p.slug === "odinnadcat-polunochej")?.segments).toEqual(["kids-7-9"]);
     for (const g of KID_AGE_GROUPS) expect(kids.some((p) => p.segments[0] === g.segment && p.occasions.includes("novyj-god")), g.segment).toBe(true);
   });
 
   it("validateContent ловит детскую книгу с двумя группами или чужим возрастом", () => {
     const base = kids[0];
-    PLOTS.push({ ...base, slug: "test-two-groups", segments: ["kids-2-4", "kids-5-7"] }, { ...base, slug: "test-wrong-ages", segments: ["kids-5-7"], ageMin: 3, ageMax: 9 });
+    PLOTS.push({ ...base, slug: "test-two-groups", segments: ["kids-0-3", "kids-4-6"] }, { ...base, slug: "test-wrong-ages", segments: ["kids-4-6"], ageMin: 3, ageMax: 9 });
     try {
       const errs = validateContent().errors;
       expect(errs.some((e) => e.includes("test-two-groups") && e.includes("ровно один сегмент"))).toBe(true);
-      expect(errs.some((e) => e.includes("test-wrong-ages") && e.includes("5–7"))).toBe(true);
+      expect(errs.some((e) => e.includes("test-wrong-ages") && e.includes("4–6"))).toBe(true);
     } finally {
       PLOTS.splice(PLOTS.length - 2, 2);
     }
   });
 
-  it("подписи возраста — ровно «2–4 года», «5–7 лет», «8–10 лет»", () => {
-    expect(KID_AGE_GROUPS.map((g) => g.label)).toEqual(["2–4 года", "5–7 лет", "8–10 лет"]);
-    for (const p of kids) expect(["2–4 года", "5–7 лет", "8–10 лет"]).toContain(ageLabel(p.ageMin!, p.ageMax!, "CHILD", p.segments));
-    expect(bookAgeLabel({ audience: "CHILD", ageMin: 8, ageMax: 10 })).toBe("8–10 лет");
-    expect(AGE_PAGES.map((a) => a.slug)).toEqual(["2-4-goda", "5-7-let", "8-10-let"]);
-    expect(getAgePage("8-9-let")?.slug).toBe("8-10-let"); // старый адрес — та же страница
+  it("подписи возраста — ровно «0–3 года», «4–6 лет», «7–9 лет»", () => {
+    expect(KID_AGE_GROUPS.map((g) => g.label)).toEqual(["0–3 года", "4–6 лет", "7–9 лет"]);
+    for (const p of kids) expect(["0–3 года", "4–6 лет", "7–9 лет"]).toContain(ageLabel(p.ageMin!, p.ageMax!, "CHILD", p.segments));
+    expect(bookAgeLabel({ audience: "CHILD", ageMin: 7, ageMax: 9 })).toBe("7–9 лет");
+    expect(bookAgeLabel({ audience: "CHILD", ageMin: 0, ageMax: 3, segments: ["kids-2-4"] })).toBe("0–3 года"); // старый сегмент
+    expect(AGE_PAGES.map((a) => a.slug)).toEqual(["0-3-goda", "4-6-let", "7-9-let"]);
+    // старые адреса — 301 на новые (next.config.ts), страница находится и по старому
+    expect(getAgePage("8-9-let")?.slug).toBe("7-9-let");
+    expect(getAgePage("2-4-goda")?.slug).toBe("0-3-goda");
+    expect(AGE_REDIRECTS).toEqual(expect.arrayContaining([{ from: "/vozrast/2-4-goda", to: "/vozrast/0-3-goda" }, { from: "/vozrast/5-7-let", to: "/vozrast/4-6-let" }, { from: "/vozrast/8-10-let", to: "/vozrast/7-9-let" }]));
   });
 
-  it("анкета: группы 2-4 / 5-7 / 8-10, старые ответы переводятся, сегмент — 1:1", () => {
-    expect(AGE_GROUPS.map((g) => [g.key, g.label])).toEqual([["2-4", "2–4 года"], ["5-7", "5–7 лет"], ["8-10", "8–10 лет"]]);
-    expect(["2-3", "4-5", "6-7", "8-9"].map(normalizeAgeGroup)).toEqual(["2-4", "5-7", "5-7", "8-10"]);
-    for (const [old, now] of [["2-3", "2-4"], ["4-5", "5-7"], ["6-7", "5-7"], ["8-9", "8-10"], ["8-10", "8-10"]]) {
+  it("анкета: группы 0-3 / 4-6 / 7-9, старые ответы переводятся, сегмент — 1:1", () => {
+    expect(AGE_GROUPS.map((g) => [g.key, g.label])).toEqual([["0-3", "0–3 года"], ["4-6", "4–6 лет"], ["7-9", "7–9 лет"]]);
+    expect(["2-3", "2-4", "4-5", "5-7", "6-7", "8-9", "8-10"].map(normalizeAgeGroup)).toEqual(["0-3", "0-3", "4-6", "4-6", "4-6", "7-9", "7-9"]);
+    for (const [old, now] of [["2-3", "0-3"], ["2-4", "0-3"], ["4-5", "4-6"], ["5-7", "4-6"], ["6-7", "4-6"], ["8-9", "7-9"], ["8-10", "7-9"], ["7-9", "7-9"]]) {
       const a = AnswersV2.parse({ hero: { name: "Аня", gender: "girl", ageGroup: old } });
       expect(a.hero.ageGroup).toBe(now);
       expect(segmentFor(a).id).toBe(`kids-${now}`);
     }
     expect(() => AnswersV2.parse({ hero: { name: "Аня", gender: "girl", ageGroup: "11-12" } })).toThrow();
-    expect(heroAge(AnswersV2.parse({ hero: { name: "Аня", gender: "girl", ageGroup: "2-4" } }))).toBe(3);
+    expect(heroAge(AnswersV2.parse({ hero: { name: "Аня", gender: "girl", ageGroup: "0-3" } }))).toBe(2);
     // Книга выбрана — сегмент книги (у детской книги он один)
-    const a = AnswersV2.parse({ hero: { name: "Аня", gender: "girl", ageGroup: "2-4" } });
-    expect(segmentFor(a, ["kids-8-10"]).id).toBe("kids-8-10");
+    const a = AnswersV2.parse({ hero: { name: "Аня", gender: "girl", ageGroup: "0-3" } });
+    expect(segmentFor(a, ["kids-7-9"]).id).toBe("kids-7-9");
+    // старый сегмент в сохранённых ответах
+    expect(AnswersV2.parse({ segment: "kids-5-7", hero: { name: "Аня", gender: "girl" } }).segment).toBe("kids-4-6");
   });
 });
 
@@ -89,7 +95,7 @@ describe("«скоро»: подростки, взрослые, питомцы",
     const list = await getStories();
     expect(list.length).toBe(kids.length);
     expect(list.every((s) => s.audience === "CHILD")).toBe(true);
-    expect(list.every((s) => ["2–4 года", "5–7 лет", "8–10 лет"].includes(ageLabel(s.ageMin, s.ageMax, s.audience, s.segments)))).toBe(true);
+    expect(list.every((s) => ["0–3 года", "4–6 лет", "7–9 лет"].includes(ageLabel(s.ageMin, s.ageMax, s.audience, s.segments)))).toBe(true);
     const teen = PLOTS.find((p) => p.audience === "TEEN")!;
     expect(await getStory(teen.slug)).toBeNull();
     expect(await getStory(teen.slug, { includeSoon: true })).not.toBeNull();
